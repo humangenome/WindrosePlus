@@ -5,7 +5,7 @@
 [![Windrose](https://img.shields.io/badge/Windrose-Dedicated_Server-darkgreen.svg)](https://store.steampowered.com/app/3041230/)
 [![No Client Mods](https://img.shields.io/badge/Client_Mods-Not_Required-brightgreen.svg)](#)
 
-A server-side mod framework for [Windrose](https://store.steampowered.com/app/3041230/) dedicated servers. Adds game multipliers, an RCON console, a live map, CPU optimization, 2,400+ tuneable settings, and a mod API. Powered by [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS). No client mods required.
+Everything your Windrose dedicated server is missing — multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
 
 > **Official Hosting Partner** — Get a Windrose server with Windrose+ pre-installed at [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)
 
@@ -23,26 +23,26 @@ A server-side mod framework for [Windrose](https://store.steampowered.com/app/30
 
 ## Features
 
-### Server-side gameplay overrides
-XP, loot/harvest, stack size, craft cost, crop speed, carry weight, inventory size, and points-per-level can be changed without client mods. Applied as PAK overrides that load with the server.
+### Live Sea Chart
+A real-time map of your server showing player positions, creature locations, and island terrain — right in your browser. The map generates automatically when the first player connects.
 
-### Real config, not just multipliers
-INI overrides go into actual game data: player health/stamina/posture, talent values, weapon damage/crit/posture, food buffs, armor and jewelry stats, rest effects, swimming drain, and creature base stats.
+### Admin Console (RCON)
+Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 30 built-in commands out of the box.
 
-### RCON that works around Windrose's crashy console hooks
-Command IPC through JSON spool files instead of `HookProcessConsoleExec`, because the normal path crashes dedicated servers. Password auth, command history, autocomplete, and built-in commands like `wp.players`, `wp.creatures`, `wp.perf`, and `wp.status`.
+### Server Query
+Windrose dedicated servers don't respond to standard server queries — your server won't show player counts or status to external tools. Windrose+ adds a query responder so server browsers and monitoring tools can see your server.
 
-### Live status and map data
-The server writes `server_status.json` and `livemap_data.json` for dashboards and external tools. Player positions update on the fast loop; mobs and nodes on a slower pass with cache expiry so the map doesn't fill with ghosts.
+### Gameplay Multipliers
+Adjust XP, loot, stack sizes, crafting costs, crop speed, carry weight, inventory size, and points per level. Change one value in a config file and restart — no modding knowledge needed.
 
-### Idle-mode CPU reduction
-After ~30 seconds with zero players, polling backs off, entity scans stop, and the server can be pinned to a small core set until someone joins again.
+### 2,400+ Server Settings
+Go beyond multipliers. Tune player health, stamina, posture, armor, talent trees, weapon damage, food effects, creature stats, co-op scaling, swimming, rest bonuses, and more through simple INI files.
 
-### Web dashboard and HTTP API
-Login, console, command docs, audit history, status, and the live map in one panel. Same data exposed over REST at `/api/status`, `/api/livemap`, `/api/config`, `/api/commands`, `/api/mapinfo`.
+### Mod Support
+Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
 
-### Lua mod loader
-Drop a folder into `WindrosePlus/Mods/` with a `mod.json` and `init.lua`. Register `wp.*` commands, join/leave callbacks, and periodic tasks through `WindrosePlus.API`. File changes are watched and hot-reloaded.
+### CPU Optimization
+Automatically reduces CPU usage when no players are connected. Your server idles quietly and ramps back up instantly when someone joins.
 
 ---
 
