@@ -10,7 +10,7 @@ param(
 
 # Resolve full path
 $DllPath = [System.IO.Path]::GetFullPath($DllPath)
-if (-not (Test-Path $DllPath)) {
+if (-not (Test-Path -LiteralPath $DllPath)) {
     Write-Error "DLL not found: $DllPath"
     exit 1
 }

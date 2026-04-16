@@ -30,10 +30,10 @@ if (-not $OutputDir) {
 }
 
 $terrainJson = Join-Path $dataDir "terrain_v17.json"
-if (-not (Test-Path $terrainJson)) {
+if (-not (Test-Path -LiteralPath $terrainJson)) {
     $altDataDir = Join-Path $GameDir "R5\Binaries\Win64\windrose_plus_data"
     $terrainJson = Join-Path $altDataDir "terrain_v17.json"
-    if (-not (Test-Path $terrainJson)) {
+    if (-not (Test-Path -LiteralPath $terrainJson)) {
         Write-Host "ERROR: terrain_v17.json not found" -ForegroundColor Red
         exit 1
     }
@@ -41,7 +41,7 @@ if (-not (Test-Path $terrainJson)) {
 }
 
 $hfDir = Join-Path $dataDir "heightmaps"
-if (-not (Test-Path $hfDir)) {
+if (-not (Test-Path -LiteralPath $hfDir)) {
     Write-Host "ERROR: heightmaps/ directory not found" -ForegroundColor Red
     exit 1
 }
@@ -103,7 +103,7 @@ $hfData = @{}
 $loadedCount = 0
 foreach ($c in $withH) {
     $hfPath = Join-Path $hfDir $c.f
-    if (Test-Path $hfPath) {
+    if (Test-Path -LiteralPath $hfPath) {
         $hfData[$c.f] = [System.IO.File]::ReadAllBytes($hfPath)
         $loadedCount++
     }
@@ -292,7 +292,7 @@ for ($i = 0; $i -lt $compIndex.Count; $i++) {
 }
 
 # Clean output dir
-if (Test-Path $OutputDir) { Remove-Item $OutputDir -Recurse -Force }
+if (Test-Path -LiteralPath $OutputDir) { Remove-Item $OutputDir -Recurse -Force }
 
 # Generate tiles at each zoom level
 $totalTiles = 0

@@ -23,7 +23,7 @@ $gameDir = (Resolve-Path $gameDir).Path
 
 # Verify this is a Windrose server folder (check for R5/ directory)
 $r5Dir = Join-Path $gameDir "R5"
-if (-not (Test-Path $r5Dir)) {
+if (-not (Test-Path -LiteralPath $r5Dir)) {
     Write-Host "  ERROR: This doesn't look like a Windrose server folder." -ForegroundColor Red
     Write-Host "  Expected to find R5\ directory in: $gameDir" -ForegroundColor Red
     Write-Host ""
@@ -40,7 +40,7 @@ $ue4ssDir = Join-Path $win64Dir "ue4ss"
 $modsDir = Join-Path $ue4ssDir "Mods"
 
 # Validate R5\Binaries\Win64 exists
-if (-not (Test-Path $win64Dir)) {
+if (-not (Test-Path -LiteralPath $win64Dir)) {
     Write-Host "  ERROR: R5\Binaries\Win64 not found." -ForegroundColor Red
     Write-Host "  Make sure the Windrose Dedicated Server is fully installed." -ForegroundColor Yellow
     exit 1
@@ -51,7 +51,7 @@ Write-Host "  [1/3] Installing UE4SS mod loader..." -NoNewline
 $proxyDll = Join-Path $win64Dir "dwmapi.dll"
 $ue4ssDll = Join-Path $ue4ssDir "UE4SS.dll"
 
-if ((Test-Path $proxyDll) -and (Test-Path $ue4ssDll)) {
+if ((Test-Path -LiteralPath $proxyDll) -and (Test-Path -LiteralPath $ue4ssDll)) {
     Write-Host " already installed" -ForegroundColor DarkGray
 } else {
     Write-Host ""
@@ -73,11 +73,11 @@ if ((Test-Path $proxyDll) -and (Test-Path $ue4ssDll)) {
         Write-Host "    Downloading $($ue4ssAsset.name)..." -ForegroundColor DarkGray
         Invoke-WebRequest -Uri $ue4ssZipUrl -OutFile $ue4ssZipPath -UseBasicParsing
 
-        if (Test-Path $ue4ssExtractDir) { Remove-Item $ue4ssExtractDir -Recurse -Force }
+        if (Test-Path -LiteralPath $ue4ssExtractDir) { Remove-Item $ue4ssExtractDir -Recurse -Force }
         Expand-Archive -Path $ue4ssZipPath -DestinationPath $ue4ssExtractDir -Force
 
         $extractedProxy = Join-Path $ue4ssExtractDir "dwmapi.dll"
-        if (-not (Test-Path $extractedProxy)) {
+        if (-not (Test-Path -LiteralPath $extractedProxy)) {
             Write-Host "    ERROR: dwmapi.dll not found in UE4SS download." -ForegroundColor Red
             exit 1
         }
@@ -85,12 +85,12 @@ if ((Test-Path $proxyDll) -and (Test-Path $ue4ssDll)) {
         Copy-Item $extractedProxy $win64Dir -Force
 
         $extractedUe4ss = Join-Path $ue4ssExtractDir "ue4ss"
-        if (Test-Path $extractedUe4ss) {
-            if (-not (Test-Path $ue4ssDir)) { New-Item -ItemType Directory -Path $ue4ssDir -Force | Out-Null }
+        if (Test-Path -LiteralPath $extractedUe4ss) {
+            if (-not (Test-Path -LiteralPath $ue4ssDir)) { New-Item -ItemType Directory -Path $ue4ssDir -Force | Out-Null }
             Copy-Item "$extractedUe4ss\*" $ue4ssDir -Recurse -Force
         }
 
-        if (-not (Test-Path $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
 
         try { Remove-Item $ue4ssZipPath -Force -ErrorAction SilentlyContinue } catch {}
         try { Remove-Item $ue4ssExtractDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
@@ -105,7 +105,7 @@ if ((Test-Path $proxyDll) -and (Test-Path $ue4ssDll)) {
 
 # Copy UE4SS-settings.ini
 $settingsSource = Join-Path $scriptDir "UE4SS-settings.ini"
-if (Test-Path $settingsSource) {
+if (Test-Path -LiteralPath $settingsSource) {
     try { Copy-Item $settingsSource (Join-Path $ue4ssDir "UE4SS-settings.ini") -Force } catch {}
 }
 
@@ -114,16 +114,16 @@ Write-Host "  [2/3] Installing Windrose+ mod..." -NoNewline
 $modSource = Join-Path $scriptDir "WindrosePlus"
 $modDest = Join-Path $modsDir "WindrosePlus"
 
-if (-not (Test-Path $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
 
-if (Test-Path $modSource) {
+if (Test-Path -LiteralPath $modSource) {
     try {
-        if (-not (Test-Path $modDest)) {
+        if (-not (Test-Path -LiteralPath $modDest)) {
             Copy-Item $modSource $modDest -Recurse -Force
         } else {
             # Reinstall: overwrite Scripts/ but preserve user Mods/
             $scriptsDst = Join-Path $modDest "Scripts"
-            if (Test-Path $scriptsDst) { Remove-Item $scriptsDst -Recurse -Force }
+            if (Test-Path -LiteralPath $scriptsDst) { Remove-Item $scriptsDst -Recurse -Force }
             Copy-Item (Join-Path $modSource "Scripts") $scriptsDst -Recurse -Force
 
             Get-ChildItem $modSource -File | ForEach-Object {
@@ -132,12 +132,12 @@ if (Test-Path $modSource) {
         }
         # Install HeightmapExporter if included
         $hmeSrc = Join-Path $scriptDir "cpp-mods\HeightmapExporter\HeightmapExporter.dll"
-        if (Test-Path $hmeSrc) {
+        if (Test-Path -LiteralPath $hmeSrc) {
             $hmeDest = Join-Path $modsDir "HeightmapExporter\dlls"
-            if (-not (Test-Path $hmeDest)) { New-Item -ItemType Directory -Path $hmeDest -Force | Out-Null }
+            if (-not (Test-Path -LiteralPath $hmeDest)) { New-Item -ItemType Directory -Path $hmeDest -Force | Out-Null }
             Copy-Item $hmeSrc (Join-Path $hmeDest "main.dll") -Force
             $hmeEnabled = Join-Path $modsDir "HeightmapExporter\enabled.txt"
-            if (-not (Test-Path $hmeEnabled)) { Set-Content $hmeEnabled "1" }
+            if (-not (Test-Path -LiteralPath $hmeEnabled)) { Set-Content $hmeEnabled "1" }
         }
 
         Write-Host " done" -ForegroundColor Green
@@ -152,7 +152,7 @@ if (Test-Path $modSource) {
 
 # Add to mods.txt
 $modsTxt = Join-Path $modsDir "mods.txt"
-if (Test-Path $modsTxt) {
+if (Test-Path -LiteralPath $modsTxt) {
     $content = Get-Content $modsTxt -Raw
     if ($content -notmatch "WindrosePlus") {
         Add-Content $modsTxt "`nWindrosePlus : 1`n"
@@ -164,14 +164,14 @@ if (Test-Path $modsTxt) {
 # Step 3: Set up dashboard
 Write-Host "  [3/3] Setting up dashboard..." -NoNewline
 $wpDir = Join-Path $gameDir "windrose_plus"
-if (-not (Test-Path $wpDir)) { New-Item -ItemType Directory -Path $wpDir -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $wpDir)) { New-Item -ItemType Directory -Path $wpDir -Force | Out-Null }
 
 try {
     foreach ($folder in @("server", "tools", "docs")) {
         $src = Join-Path $scriptDir $folder
         $dst = Join-Path $wpDir $folder
-        if (Test-Path $src) {
-            if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+        if (Test-Path -LiteralPath $src) {
+            if (Test-Path -LiteralPath $dst) { Remove-Item $dst -Recurse -Force }
             Copy-Item $src $dst -Recurse -Force
         }
     }
@@ -179,8 +179,8 @@ try {
     # Config: only copy .default.ini files, preserve user overrides
     $configSrc = Join-Path $scriptDir "config"
     $configDst = Join-Path $wpDir "config"
-    if (Test-Path $configSrc) {
-        if (-not (Test-Path $configDst)) { New-Item -ItemType Directory -Path $configDst -Force | Out-Null }
+    if (Test-Path -LiteralPath $configSrc) {
+        if (-not (Test-Path -LiteralPath $configDst)) { New-Item -ItemType Directory -Path $configDst -Force | Out-Null }
         Get-ChildItem $configSrc -Filter "*.default.ini" | ForEach-Object {
             Copy-Item $_.FullName (Join-Path $configDst $_.Name) -Force
         }

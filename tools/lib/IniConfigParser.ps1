@@ -40,7 +40,7 @@ function Read-IniFile {
     #>
     param([string]$Path)
 
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return @{ Error = "File not found: $Path" }
     }
 
@@ -202,8 +202,8 @@ function Import-EntityConfig {
 
     $overrides = @{}
 
-    if (-not (Test-Path $ConfigPath)) { return $overrides }
-    if (-not (Test-Path $DefaultPath)) {
+    if (-not (Test-Path -LiteralPath $ConfigPath)) { return $overrides }
+    if (-not (Test-Path -LiteralPath $DefaultPath)) {
         Write-Warning "Default file not found for $(Split-Path $ConfigPath -Leaf) — skipping"
         return $overrides
     }
@@ -411,7 +411,7 @@ function Import-WindrosePlusConfig {
         [string]$DefaultPath = ""
     )
 
-    if (-not (Test-Path $ConfigPath)) {
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
         return @{ Error = "Config not found: $ConfigPath" }
     }
 
@@ -421,7 +421,7 @@ function Import-WindrosePlusConfig {
     if (-not $DefaultPath) {
         $DefaultPath = Join-Path $configDir "windrose_plus.default.ini"
     }
-    if (-not (Test-Path $DefaultPath)) {
+    if (-not (Test-Path -LiteralPath $DefaultPath)) {
         return @{ Error = "Default config not found: $DefaultPath. Needed for Raw name mapping." }
     }
 
@@ -475,7 +475,7 @@ function Import-WindrosePlusConfig {
         $userFile = Join-Path $configDir $opt.Config
         $defaultFile = Join-Path $defaultDir $opt.Default
 
-        if (-not (Test-Path $userFile)) { continue }
+        if (-not (Test-Path -LiteralPath $userFile)) { continue }
 
         Write-Host "  Loading overrides from $(Split-Path $userFile -Leaf)" -ForegroundColor DarkGray
 

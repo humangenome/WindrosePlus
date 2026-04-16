@@ -92,7 +92,7 @@ function Invoke-CurveTablePatch {
         Error = $null
     }
 
-    if (-not (Test-Path $UExpPath)) {
+    if (-not (Test-Path -LiteralPath $UExpPath)) {
         $result.Error = "Missing .uexp: $UExpPath"
         return $result
     }

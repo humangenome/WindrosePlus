@@ -15,7 +15,7 @@ function Find-GameDir {
     $candidates += Split-Path -Parent $PSScriptRoot
 
     foreach ($path in $candidates) {
-        if ($path -and (Test-Path (Join-Path $path "windrose_plus.json"))) {
+        if ($path -and (Test-Path -LiteralPath (Join-Path $path "windrose_plus.json"))) {
             return (Resolve-Path $path).Path
         }
     }
@@ -33,7 +33,7 @@ $config = Get-Content (Join-Path $gameDir "windrose_plus.json") -Raw | ConvertFr
 
 # Find data directory
 $dataDir = Join-Path $gameDir "windrose_plus_data"
-if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
 
 # Find web directory
 $webDir = Join-Path $PSScriptRoot "web"
@@ -49,7 +49,7 @@ $rconPassword = if ($config.rcon.password) { $config.rcon.password } else { "" }
 $sessionSecret = [System.Guid]::NewGuid().ToString()
 
 function New-SessionToken {
-    $timestamp = [int](Get-Date -UFormat %s)
+    $timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $payload = "wp_session:$timestamp"
     $hmac = New-Object System.Security.Cryptography.HMACSHA256
     $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
@@ -68,8 +68,8 @@ function Test-SessionToken($token) {
     $expectedHash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
     if ($providedHash -ne $expectedHash) { return $false }
     # Check expiry (24 hours)
-    $timestamp = [int]$parts[1]
-    $now = [int](Get-Date -UFormat %s)
+    $timestamp = [long]$parts[1]
+    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     return ($now - $timestamp) -lt 86400
 }
 
@@ -147,11 +147,11 @@ $tileGenTimer.Interval = 5000
 $tileGenTimer.AutoReset = $true
 $tileGenTrigger = Join-Path $dataDir "generate_tiles_trigger"
 $tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1"
-if (-not (Test-Path $tileGenScript)) { $tileGenScript = Join-Path $gameDir "tools\generateTiles.ps1" }
+if (-not (Test-Path -LiteralPath $tileGenScript)) { $tileGenScript = Join-Path $gameDir "tools\generateTiles.ps1" }
 Register-ObjectEvent $tileGenTimer Elapsed -Action {
-    if (Test-Path $tileGenTrigger) {
+    if (Test-Path -LiteralPath $tileGenTrigger) {
         Remove-Item $tileGenTrigger -Force -ErrorAction SilentlyContinue
-        if (Test-Path $tileGenScript) {
+        if (Test-Path -LiteralPath $tileGenScript) {
             Write-Host "Generating map tiles..."
             try {
                 & $tileGenScript -GameDir $gameDir
@@ -192,7 +192,7 @@ function Send-Redirect($context, $location) {
 }
 
 function Send-File($context, $filePath) {
-    if (-not (Test-Path $filePath)) {
+    if (-not (Test-Path -LiteralPath $filePath)) {
         $context.Response.StatusCode = 404
         $context.Response.Close()
         return
@@ -269,7 +269,7 @@ try {
 
             # API health endpoint — no auth (used for monitoring)
             if ($path -eq "/api/health") {
-                Send-Json $context @{ status = "ok"; version = $Version; timestamp = [int](Get-Date -UFormat %s) }
+                Send-Json $context @{ status = "ok"; version = $Version; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
                 continue
             }
 
@@ -296,7 +296,7 @@ try {
             switch ($path) {
                 "/api/status" {
                     $statusFile = Join-Path $dataDir "server_status.json"
-                    if (Test-Path $statusFile) {
+                    if (Test-Path -LiteralPath $statusFile) {
                         $data = Get-Content $statusFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
@@ -305,7 +305,7 @@ try {
                 }
                 "/api/livemap" {
                     $mapFile = Join-Path $dataDir "livemap_data.json"
-                    if (Test-Path $mapFile) {
+                    if (Test-Path -LiteralPath $mapFile) {
                         $data = Get-Content $mapFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
@@ -347,7 +347,7 @@ try {
                 }
                 "/api/mapinfo" {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
-                    if (Test-Path $mapCoordsFile) {
+                    if (Test-Path -LiteralPath $mapCoordsFile) {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
@@ -356,7 +356,7 @@ try {
                 }
                 "/api/rcon/log" {
                     $auditFile = Join-Path $dataDir "rcon_audit.json"
-                    if (Test-Path $auditFile) {
+                    if (Test-Path -LiteralPath $auditFile) {
                         try {
                             $raw = Get-Content $auditFile -Raw
                             if ($raw) {
@@ -393,9 +393,9 @@ try {
                     # (they already proved identity at login)
 
                     # Write command file
-                    $cmdId = "ps_" + [int](Get-Date -UFormat %s) + "_" + (Get-Random -Maximum 999999)
+                    $cmdId = "ps_" + [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + "_" + (Get-Random -Maximum 999999)
                     $spoolDir = Join-Path $dataDir "rcon"
-                    if (-not (Test-Path $spoolDir)) { New-Item -ItemType Directory -Path $spoolDir -Force | Out-Null }
+                    if (-not (Test-Path -LiteralPath $spoolDir)) { New-Item -ItemType Directory -Path $spoolDir -Force | Out-Null }
                     $cmdData = @{ id = $cmdId; command = $body.command; args = @($body.args); password = $rconPassword; admin_user = "Dashboard" }
                     $cmdData | ConvertTo-Json | Set-Content (Join-Path $spoolDir "cmd_$cmdId.json")
                     # Write index file so Lua mod can find the command without dir /b
@@ -407,7 +407,7 @@ try {
                     $result = $null
                     while ((Get-Date) -lt $deadline) {
                         Start-Sleep -Milliseconds 100
-                        if (Test-Path $resPath) {
+                        if (Test-Path -LiteralPath $resPath) {
                             $result = Get-Content $resPath -Raw | ConvertFrom-Json
                             Remove-Item $resPath -ErrorAction SilentlyContinue
                             break

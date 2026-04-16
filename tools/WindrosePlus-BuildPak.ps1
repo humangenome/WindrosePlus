@@ -47,7 +47,7 @@ $ErrorActionPreference = "Stop"
 if (-not $ConfigPath) {
     $ConfigPath = Join-Path (Split-Path $PSScriptRoot) "windrose_plus.ini"
 }
-if (-not (Test-Path $ConfigPath)) {
+if (-not (Test-Path -LiteralPath $ConfigPath)) {
     Write-Error "Config not found: $ConfigPath`nCopy windrose_plus.default.ini to windrose_plus.ini and edit it."
     exit 1
 }
@@ -71,7 +71,7 @@ if (-not $ServerDir -and $config.Server.server_dir) {
 if (-not $ServerDir) {
     # Check current directory and parent
     foreach ($c in @(".", "..")) {
-        if (Test-Path (Join-Path $c "R5\Content\Paks")) {
+        if (Test-Path -LiteralPath (Join-Path $c "R5\Content\Paks")) {
             $ServerDir = (Resolve-Path $c).Path
             break
         }
@@ -115,7 +115,7 @@ if ($hasMultipliers) {
     Write-Host "=== JSON Multiplier PAK ===" -ForegroundColor Yellow
     Write-Host "  Skipped (all multipliers are 1.0)" -ForegroundColor DarkGray
     $stalePak = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
-    if ((Test-Path $stalePak) -and -not $DryRun) {
+    if ((Test-Path -LiteralPath $stalePak) -and -not $DryRun) {
         Remove-Item $stalePak -Force
         Write-Host "  Removed stale $stalePak"
     }
@@ -136,7 +136,7 @@ if ($ctConfig.Count -gt 0) {
     $gamePak = Join-Path $paksDir "pakchunk0-WindowsServer.pak"
 
     # Cache invalidation: if game pak is newer than cache, force re-extract
-    if ((Test-Path $retocDir) -and (Test-Path $gamePak)) {
+    if ((Test-Path -LiteralPath $retocDir) -and (Test-Path -LiteralPath $gamePak)) {
         $cacheTime = (Get-Item $retocDir).LastWriteTime
         $pakTime = (Get-Item $gamePak).LastWriteTime
         if ($pakTime -gt $cacheTime) {
@@ -146,13 +146,13 @@ if ($ctConfig.Count -gt 0) {
     }
 
     # Force re-extract if requested
-    if ($ForceExtract -and (Test-Path $retocDir)) {
+    if ($ForceExtract -and (Test-Path -LiteralPath $retocDir)) {
         Write-Host "  Force extract requested — clearing cache..." -ForegroundColor Yellow
         Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
     }
 
     $extractionOk = $true
-    if (-not (Test-Path $retocDir)) {
+    if (-not (Test-Path -LiteralPath $retocDir)) {
         Write-Host "  Extracting CurveTable assets with retoc..."
 
         # Find retoc.exe — alongside repak, in tools dir, or in PATH
@@ -160,19 +160,19 @@ if ($ctConfig.Count -gt 0) {
         $repakPath = Find-Repak
         if ($repakPath) {
             $candidate = Join-Path (Split-Path $repakPath) "retoc.exe"
-            if (Test-Path $candidate) { $retocExe = $candidate }
+            if (Test-Path -LiteralPath $candidate) { $retocExe = $candidate }
         }
         if (-not $retocExe) {
             $retocExe = Get-Command "retoc.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
         }
 
-        if (-not $retocExe -or -not (Test-Path $retocExe)) {
+        if (-not $retocExe -or -not (Test-Path -LiteralPath $retocExe)) {
             Write-Error "retoc.exe not found. CurveTable patching requires retoc for initial extraction.`nDownload from: https://github.com/trumank/retoc`nPlace retoc.exe alongside repak.exe or in your PATH."
             exit 1
         }
 
         $utocPath = $gamePak -replace '\.pak$', '.utoc'
-        if (-not (Test-Path $utocPath)) {
+        if (-not (Test-Path -LiteralPath $utocPath)) {
             Write-Error "Game utoc not found: $utocPath`nIs the server installed correctly?"
             exit 1
         }
@@ -190,7 +190,7 @@ if ($ctConfig.Count -gt 0) {
         Write-Host "  Extracted $($extractedFiles.Count) CurveTable assets to cache"
     }
 
-    if (Test-Path $retocDir) {
+    if (Test-Path -LiteralPath $retocDir) {
         $ctFiles = Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset"
         $totalChanges = 0
         $tablesModified = 0
@@ -280,7 +280,7 @@ if ($ctConfig.Count -gt 0) {
                 $repak = Find-Repak
                 $outPak = Join-Path $paksDir "WindrosePlus_CurveTables_P.pak"
                 & $repak pack $stageDir $outPak 2>&1 | Out-Null
-                if (Test-Path $outPak) {
+                if (Test-Path -LiteralPath $outPak) {
                     $size = (Get-Item $outPak).Length
                     Write-Host "  OK: $tablesModified tables, $totalChanges values -> $outPak ($size bytes)" -ForegroundColor Green
                 } else {
@@ -289,7 +289,7 @@ if ($ctConfig.Count -gt 0) {
             } else {
                 Write-Host "  No CurveTable changes needed" -ForegroundColor DarkGray
                 $stalePak = Join-Path $paksDir "WindrosePlus_CurveTables_P.pak"
-                if (Test-Path $stalePak) {
+                if (Test-Path -LiteralPath $stalePak) {
                     Remove-Item $stalePak -Force
                     Write-Host "  Removed stale $stalePak"
                 }

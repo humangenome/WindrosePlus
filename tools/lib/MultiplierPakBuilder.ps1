@@ -10,7 +10,7 @@ function Find-Repak {
     #>
     param([string]$CustomPath = "")
 
-    if ($CustomPath -and (Test-Path $CustomPath)) { return $CustomPath }
+    if ($CustomPath -and (Test-Path -LiteralPath $CustomPath)) { return $CustomPath }
 
     $candidates = @(
         (Join-Path $PSScriptRoot "..\..\repak.exe"),
@@ -21,7 +21,7 @@ function Find-Repak {
     )
     foreach ($c in $candidates) {
         if (Get-Command $c -ErrorAction SilentlyContinue) { return $c }
-        if (Test-Path $c) { return (Resolve-Path $c).Path }
+        if (Test-Path -LiteralPath $c) { return (Resolve-Path $c).Path }
     }
     return $null
 }
@@ -35,18 +35,18 @@ function Find-GamePak {
 
     if ($ServerDir) {
         $pak = Join-Path $ServerDir "R5\Content\Paks\pakchunk0-WindowsServer.pak"
-        if (Test-Path $pak) { return $pak }
+        if (Test-Path -LiteralPath $pak) { return $pak }
         # Try client pak name
         $pak = Join-Path $ServerDir "R5\Content\Paks\pakchunk0-Windows.pak"
-        if (Test-Path $pak) { return $pak }
+        if (Test-Path -LiteralPath $pak) { return $pak }
     }
 
     # Check current and parent directory
     foreach ($dir in @(".", "..")) {
         $pak = Join-Path $dir "R5\Content\Paks\pakchunk0-WindowsServer.pak"
-        if (Test-Path $pak) { return (Resolve-Path $pak).Path }
+        if (Test-Path -LiteralPath $pak) { return (Resolve-Path $pak).Path }
         $pak = Join-Path $dir "R5\Content\Paks\pakchunk0-Windows.pak"
-        if (Test-Path $pak) { return (Resolve-Path $pak).Path }
+        if (Test-Path -LiteralPath $pak) { return (Resolve-Path $pak).Path }
     }
     return $null
 }
@@ -294,7 +294,7 @@ function Build-MultiplierPak {
         }
 
         & $repak pack $tmpDir $outPakPath 2>&1 | Out-Null
-        if (-not (Test-Path $outPakPath)) {
+        if (-not (Test-Path -LiteralPath $outPakPath)) {
             $result.Error = "repak failed to create $outPakPath"
             return $result
         }
