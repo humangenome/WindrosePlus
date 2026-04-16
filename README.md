@@ -36,17 +36,98 @@ Run commands from a web dashboard with autocomplete. Check who's online, view se
 ### Server Query
 Windrose dedicated servers don't respond to standard server queries — your server won't show player counts or status to external tools. Windrose+ adds a query responder so server browsers and monitoring tools can see your server.
 
-### Gameplay Multipliers
-Adjust XP, loot, stack sizes, crafting costs, crop speed, carry weight, inventory size, and points per level. Change one value in a config file and restart — no modding knowledge needed.
+```json
+{
+  "server": {
+    "name": "My Windrose Server",
+    "version": "1.0.0",
+    "windrose_plus": "1.0.0",
+    "password_protected": false,
+    "max_players": 10,
+    "player_count": 3
+  },
+  "players": [
+    { "name": "HumanGenome", "alive": true, "x": 14520, "y": -8340 },
+    { "name": "CaptainMorgan", "alive": true, "x": 6200, "y": 1100 }
+  ],
+  "multipliers": {
+    "xp": 3.0, "loot": 2.0, "stack_size": 5.0,
+    "craft_cost": 0.5, "crop_speed": 2.0, "weight": 5.0
+  }
+}
+```
 
-### 2,400+ Server Settings
-Go beyond multipliers. Tune player health, stamina, posture, armor, talent trees, weapon damage, food effects, creature stats, co-op scaling, swimming, rest bonuses, and more through simple INI files.
+### 2,400+ Server Settings & Multipliers
+Adjust XP, loot, stack sizes, crafting costs, crop speed, carry weight, and more through a simple JSON file. Go deeper with 2,400+ individual INI settings for player stats, weapons, food effects, creature stats, co-op scaling, swimming, and rest bonuses.
+
+**Multipliers** (`windrose_plus.json`):
+```json
+{
+  "xp": 3.0,
+  "loot": 2.0,
+  "stack_size": 5.0,
+  "craft_cost": 0.5,
+  "crop_speed": 2.0,
+  "weight": 5.0
+}
+```
+
+**Player Stats** (`windrose_plus.ini`):
+```ini
+[PlayerStats]
+MaxHealth = 320
+MaxStamina = 150
+StaminaRegRate = 40
+MaxPosture = 40
+Armor = 0
+MaxWeight = 99999
+```
+
+**Food Effects** (`windrose_plus.food.ini`):
+```ini
+[Food_Drink]
+Food_Drink_Coffee_T03_Duration = 1800
+Food_Drink_Coffee_T03_Endurance = 20
+Food_Drink_Coffee_T03_MaxHealth = 160
+Food_Drink_Coffee_T03_Mobility = 20
+
+[Alchemy_Potions]
+Alchemy_Potion_Healing_Base_HealthRestoreRatio = 0.35
+Alchemy_Potion_Healing_Great_HealthRestoreRatio = 0.8
+```
 
 ### Mod Support
 Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
 
+Ships with an example mod:
+
+```lua
+-- example-welcome/init.lua
+local API = WindrosePlus.API
+
+API.onPlayerJoin(function(player)
+    API.log("info", "Welcome", player.name .. " joined the server")
+end)
+
+API.onPlayerLeave(function(player)
+    API.log("info", "Welcome", player.name .. " left the server")
+end)
+
+API.registerCommand("wp.greet", function(args)
+    local players = API.getPlayers()
+    local names = {}
+    for _, p in ipairs(players) do table.insert(names, p.name) end
+    return "Ahoy, " .. table.concat(names, ", ") .. "!"
+end, "Greet all online players")
+```
+
 ### CPU Optimization
-Automatically reduces CPU usage when no players are connected. Your server idles quietly and ramps back up instantly when someone joins.
+Automatically reduces CPU usage when no players are connected. Restricts the server to 2 CPU cores when idle and restores full CPU access instantly when a player joins. On a 12-core machine this dropped idle CPU from 185% to 28%.
+
+```
+Mode: boot -> idle (0 players, 2 cores)
+Mode: idle -> active (player joined, all cores restored)
+```
 
 ---
 
