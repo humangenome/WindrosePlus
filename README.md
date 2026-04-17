@@ -149,9 +149,18 @@ This downloads UE4SS, installs the mod, and sets up the dashboard. Reinstalling 
 
 ### Step 2: Start Your Server
 
-Start via `StartWindrosePlusServer.bat` (installed in your server folder). This rebuilds any config overrides into a game PAK, then launches `WindroseServer.exe`. Use this whenever you've changed config.
+**Which launcher do I use?** Depends on what you changed in config.
 
-If you haven't edited config, `WindroseServer.exe` or `StartServerForeground.bat` also work and skip the rebuild.
+| You edited... | Use |
+|---|---|
+| Any `multipliers` value in `windrose_plus.json` (loot, xp, stack_size, craft_cost, crop_speed, weight, inventory_size, points_per_level) | `StartWindrosePlusServer.bat` |
+| Any `.ini` file (`windrose_plus.ini`, `.weapons.ini`, `.food.ini`, `.gear.ini`, `.entities.ini`) | `StartWindrosePlusServer.bat` |
+| Only `rcon`, `admin`, `features`, or `debug` sections in `windrose_plus.json` | Either — `WindroseServer.exe` is fine |
+| Nothing (restarting after a crash or update) | Either — `WindroseServer.exe` is fine |
+
+**Rule of thumb:** if it changes what the game *does* (drop rates, stats, damage, recipes), run the wrapper — it rebuilds the PAK the game loads at startup. If it only changes who can log in or how Windrose+ behaves at runtime, a plain restart picks it up without a PAK rebuild.
+
+The wrapper also prints `Config unchanged since last build — skipping` and exits in a fraction of a second when inputs haven't changed, so there's no penalty to using it every time if you'd rather not think about it.
 
 Windrose+ loads automatically either way.
 
