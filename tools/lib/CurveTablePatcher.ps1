@@ -1,4 +1,4 @@
-# CurveTablePatcher.ps1 — Safe in-place CurveTable value patcher
+﻿# CurveTablePatcher.ps1 — Safe in-place CurveTable value patcher
 # Uses the manifest from CurveTableParser to patch float values with full verification.
 
 function Resolve-ConfigMatch {

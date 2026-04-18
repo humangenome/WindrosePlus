@@ -1,4 +1,4 @@
-# inject-ue4ss.ps1 - Inject UE4SS.dll into a running process via CreateRemoteThread + LoadLibraryW
+﻿# inject-ue4ss.ps1 - Inject UE4SS.dll into a running process via CreateRemoteThread + LoadLibraryW
 # This bypasses the QueueUserAPC issue where dedicated servers never enter an alertable wait
 param(
     [Parameter(Mandatory=$true)]

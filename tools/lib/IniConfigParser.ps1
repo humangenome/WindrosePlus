@@ -1,4 +1,4 @@
-# IniConfigParser.ps1 — Parses WindrosePlus INI config into structured config object
+﻿# IniConfigParser.ps1 — Parses WindrosePlus INI config into structured config object
 #
 # Reads windrose_plus.ini (and optional weapons/food/gear/entities configs) and
 # returns a structured object that the build pipeline can consume. Maps friendly

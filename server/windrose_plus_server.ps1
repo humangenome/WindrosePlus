@@ -1,4 +1,4 @@
-# Windrose+ web dashboard and REST API server (PowerShell)
+﻿# Windrose+ web dashboard and REST API server (PowerShell)
 
 param(
     [string]$GameDir = "",

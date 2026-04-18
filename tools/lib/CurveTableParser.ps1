@@ -1,4 +1,4 @@
-# CurveTableParser.ps1 — Structural CurveTable .uasset/.uexp parser
+﻿# CurveTableParser.ps1 — Structural CurveTable .uasset/.uexp parser
 # Parses retoc-converted CurveTable assets and emits a manifest of row names,
 # key offsets, and values. Used by the patcher to safely modify values.
 
@@ -369,7 +369,7 @@ function Export-CurveTableManifest {
     }
 
     if ($OutputPath) {
-        $manifest | ConvertTo-Json -Depth 5 | Set-Content -Path $OutputPath -Encoding UTF8
+        [System.IO.File]::WriteAllText($OutputPath, ($manifest | ConvertTo-Json -Depth 5), [System.Text.UTF8Encoding]::new($false))
     }
 
     return $manifest

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     WindrosePlus PAK Builder — generates server-side override PAK files from config.
 

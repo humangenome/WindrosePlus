@@ -1,4 +1,4 @@
-# MultiplierPakBuilder.ps1 — JSON-based multiplier PAK builder
+﻿# MultiplierPakBuilder.ps1 — JSON-based multiplier PAK builder
 # Modifies loot tables, XP progression, stack sizes, crafting costs,
 # crop growth speed, and item weight by extracting JSON from the game pak,
 # applying multipliers, and repacking.
@@ -167,7 +167,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $lf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                 }
             }
@@ -196,7 +196,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $xf
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     Write-Host "    Modified $xf"
                 }
@@ -226,7 +226,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $item.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $itemMod++
                 }
@@ -254,7 +254,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $rf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $recipeMod++
                 }
@@ -289,7 +289,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $fname
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $invMod++
                 }
@@ -331,7 +331,7 @@ function Build-MultiplierPak {
                         New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                         $modifiedCount++
                     }
-                    $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                     $pointsMod++
                 }
             }
@@ -352,7 +352,7 @@ function Build-MultiplierPak {
                 $data.GrowthDuration = [Math]::Max(1, [int]($data.GrowthDuration / $cropSpeed))
                 $outPath = Join-Path $tmpDir $cf.Trim()
                 New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                $data | ConvertTo-Json -Depth 10 | Set-Content -Path $outPath -Encoding UTF8
+                [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
                 $modifiedCount++
                 $cropMod++
             }

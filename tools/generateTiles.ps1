@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     WindrosePlus Tile Generator — renders map tiles from exported heightfield data.
 .DESCRIPTION

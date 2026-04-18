@@ -1,4 +1,4 @@
-# Windrose+ Installer
+﻿# Windrose+ Installer
 # Run this from inside your Windrose server folder after extracting the release zip.
 
 param(
@@ -226,10 +226,18 @@ if not exist "%WP_BUILD%" (
 )
 
 echo [WindrosePlus] Checking config overrides...
-powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass ^
-  -File "%WP_BUILD%" ^
-  -ServerDir "%GAMEDIR%" ^
-  -RemoveStalePak
+where pwsh >nul 2>&1
+if %ERRORLEVEL%==0 (
+    pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass ^
+      -File "%WP_BUILD%" ^
+      -ServerDir "%GAMEDIR%" ^
+      -RemoveStalePak
+) else (
+    powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass ^
+      -File "%WP_BUILD%" ^
+      -ServerDir "%GAMEDIR%" ^
+      -RemoveStalePak
+)
 set "BUILD_EXIT=%ERRORLEVEL%"
 
 if not "%BUILD_EXIT%"=="0" (
