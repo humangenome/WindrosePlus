@@ -7,7 +7,9 @@
 
 Everything your Windrose dedicated server is missing. Multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
 
-> **Official Hosting Partner** - Get a Windrose server with Windrose+ pre-installed at [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)
+> **Recommended Hosting** - Get a Windrose server with Windrose+ pre-installed at [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)
+>
+> _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
 ---
 
