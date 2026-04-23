@@ -113,8 +113,16 @@ if (Test-Path -LiteralPath $settingsSource) {
 Write-Host "  [2/3] Installing Windrose+ mod..." -NoNewline
 $modSource = Join-Path $scriptDir "WindrosePlus"
 $modDest = Join-Path $modsDir "WindrosePlus"
+$dataDir = Join-Path $gameDir "windrose_plus_data"
+$idleLimiterDisabledPath = Join-Path $dataDir "idle_cpu_limiter_disabled"
+$idleLimiterRatePath = Join-Path $dataDir "idle_cpu_limiter_cpu_rate.txt"
 
 if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
+if (-not (Test-Path -LiteralPath $idleLimiterDisabledPath) -and -not (Test-Path -LiteralPath $idleLimiterRatePath)) {
+    Set-Content $idleLimiterDisabledPath "IdleCpuLimiter is disabled by default. Delete this file to opt in."
+}
+$idleLimiterDisabled = Test-Path -LiteralPath $idleLimiterDisabledPath
 
 if (Test-Path -LiteralPath $modSource) {
     try {
@@ -142,7 +150,11 @@ if (Test-Path -LiteralPath $modSource) {
                 if (-not (Test-Path -LiteralPath $dllDest)) { New-Item -ItemType Directory -Path $dllDest -Force | Out-Null }
                 Copy-Item $dllSrc (Join-Path $dllDest "main.dll") -Force
                 $enabledPath = Join-Path $modsDir "$($cppMod.Name)\enabled.txt"
-                if (-not (Test-Path -LiteralPath $enabledPath)) { Set-Content $enabledPath "1" }
+                if ($cppMod.Name -eq "IdleCpuLimiter" -and $idleLimiterDisabled) {
+                    if (Test-Path -LiteralPath $enabledPath) { Remove-Item $enabledPath -Force }
+                } elseif (-not (Test-Path -LiteralPath $enabledPath)) {
+                    Set-Content $enabledPath "1"
+                }
             }
         }
 
@@ -162,12 +174,20 @@ if (Test-Path -LiteralPath $modsTxt) {
     $content = Get-Content $modsTxt -Raw
     if ($content -notmatch "WindrosePlus") {
         Add-Content $modsTxt "`nWindrosePlus : 1`n"
+        $content += "`nWindrosePlus : 1`n"
     }
     foreach ($cppModName in @("HeightmapExporter", "IdleCpuLimiter")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
-        if ((Test-Path -LiteralPath $cppMainDll) -and $content -notmatch $cppModName) {
-            Add-Content $modsTxt "$cppModName : 1`n"
-            $content += "`n$cppModName : 1`n"
+        if (Test-Path -LiteralPath $cppMainDll) {
+            $state = "1"
+            if ($cppModName -eq "IdleCpuLimiter" -and $idleLimiterDisabled) { $state = "0" }
+            if ($content -match "(?m)^\s*$cppModName\s*:") {
+                $content = [regex]::Replace($content, "(?m)^\s*$cppModName\s*:\s*\d+\s*$", "$cppModName : $state")
+                Set-Content $modsTxt $content
+            } else {
+                Add-Content $modsTxt "$cppModName : $state`n"
+                $content += "`n$cppModName : $state`n"
+            }
         }
     }
 } else {
@@ -175,7 +195,9 @@ if (Test-Path -LiteralPath $modsTxt) {
     foreach ($cppModName in @("HeightmapExporter", "IdleCpuLimiter")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
         if (Test-Path -LiteralPath $cppMainDll) {
-            $modsContent += "$cppModName : 1`n"
+            $state = "1"
+            if ($cppModName -eq "IdleCpuLimiter" -and $idleLimiterDisabled) { $state = "0" }
+            $modsContent += "$cppModName : $state`n"
         }
     }
     Set-Content $modsTxt $modsContent

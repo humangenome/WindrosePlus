@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.9] - 2026-04-23
+
+### Fixed
+
+- **Made the idle CPU limiter opt-in after slow-load/time-out reports ([#23](https://github.com/HumanGenome/WindrosePlus/issues/23)).** The limiter used Windrose+'s `player_count` status to decide when the server was idle, but Windrose can still report zero players while someone is connecting, loading a character, or finishing the tutorial. That meant the server could stay under the low idle CPU cap during the join path and time out before the player became visible. Installs and upgrades now create `windrose_plus_data\idle_cpu_limiter_disabled` by default unless the host already has a custom `idle_cpu_limiter_cpu_rate.txt`, and hosts can opt in by deleting the disabled marker.
+
+### Changed
+
+- **Documented manual limiter controls.** `windrose_plus_data\idle_cpu_limiter_disabled` disables the limiter, and `windrose_plus_data\idle_cpu_limiter_cpu_rate.txt` can raise or lower the cap for hosts that explicitly opt in.
+
 ## [1.0.8] - 2026-04-23
 
 ### Fixed
@@ -116,6 +126,7 @@ Initial public release.
 - **Lua mod API** — custom commands, player events, tick callbacks, hot-reload
 - **Automated installer** — auto-detects game folder, downloads UE4SS, preserves configs on update
 
+[1.0.9]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.9
 [1.0.8]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.8
 [1.0.7]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.7
 [1.0.4]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.4

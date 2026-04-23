@@ -134,7 +134,17 @@ end, "Greet all online players")
 External tools that don't run inside Lua can tail `windrose_plus_data/events.log` (line-delimited JSON, written on every player join/leave) for join/leave detection without polling.
 
 ### CPU Optimization
-Automatically reduces CPU usage when no players are connected. The bundled `IdleCpuLimiter` C++ mod applies an idle-only Windows CPU cap after the server has finished booting, then restores the full CPU budget instantly when a player joins. Process affinity is left unchanged.
+Optional idle CPU limiting for hosts that want to reduce CPU use when nobody is connected. The bundled `IdleCpuLimiter` C++ mod applies an idle-only Windows CPU cap after the server has finished booting, then restores the full CPU budget when Windrose+ sees an active player. Process affinity is left unchanged.
+
+The limiter is disabled by default because Windrose can still report `player_count: 0` while a player is connecting, loading a character, or finishing the tutorial. Under a very low idle cap, that join path can time out before the player becomes visible to the status poller.
+
+To opt in, delete:
+
+```text
+windrose_plus_data\idle_cpu_limiter_disabled
+```
+
+To disable it again, recreate that file. You can also set a custom cap by writing a number to `windrose_plus_data\idle_cpu_limiter_cpu_rate.txt`; for example `1000` means 10% total CPU and `10000` effectively removes the cap.
 
 ```
 [IdleCpuLimiter] applied idle CPU rate 200

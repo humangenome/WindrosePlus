@@ -3,7 +3,7 @@
 
 -- Global namespace — shared with all modules and third-party mods
 WindrosePlus = {
-    VERSION = "1.0.8",
+    VERSION = "1.0.9",
     state = {
         playerCount = 0,
         mode = "boot",           -- starts as "boot", transitions to "idle" or "active"
