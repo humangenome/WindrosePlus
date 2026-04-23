@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.13] - 2026-04-23
+
+### Fixed
+
+- **Added dashboard Bind IP support ([#26](https://github.com/HumanGenome/WindrosePlus/issues/26)).** Multi-IP hosts can now pass `-BindIp` to `start_dashboard.bat` or set `server.bind_ip` in `windrose_plus.json`.
+- **Fixed type-specific INI rebuild detection ([#15](https://github.com/HumanGenome/WindrosePlus/issues/15)).** `windrose_plus.food.ini`, `windrose_plus.weapons.ini`, `windrose_plus.gear.ini`, and `windrose_plus.entities.ini` are now honored even when no root `windrose_plus.ini` exists.
+- **Made empty CurveTable extraction caches fail loudly ([#22](https://github.com/HumanGenome/WindrosePlus/issues/22)).** Failed or incompatible `retoc` extraction no longer degrades into "No CurveTable changes needed"; the builder clears empty caches, retries extraction, and surfaces the retoc output.
+
+### Changed
+
+- **Documented save-safety and full-disable recovery steps ([#25](https://github.com/HumanGenome/WindrosePlus/issues/25)).** README and config reference now warn about inventory-affecting PAK edits, conflicting PAK mods, and how to fully disable Windrose+ for recovery testing.
+- **Added Windrose Server Manager to integrations ([#8](https://github.com/HumanGenome/WindrosePlus/issues/8)).**
+
 ## [1.0.12] - 2026-04-23
 
 ### Changed
@@ -151,6 +164,7 @@ Initial public release.
 - **Lua mod API** — custom commands, player events, tick callbacks, hot-reload
 - **Automated installer** — auto-detects game folder, downloads UE4SS, preserves configs on update
 
+[1.0.13]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.13
 [1.0.12]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.12
 [1.0.11]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.11
 [1.0.10]: https://github.com/HumanGenome/WindrosePlus/releases/tag/v1.0.10

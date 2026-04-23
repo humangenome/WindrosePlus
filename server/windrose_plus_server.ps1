@@ -2,10 +2,11 @@
 
 param(
     [string]$GameDir = "",
-    [int]$Port = 0
+    [int]$Port = 0,
+    [string]$BindIp = ""
 )
 
-$Version = "1.0.12"
+$Version = "1.0.13"
 
 # Find game directory
 function Find-GameDir {
@@ -56,6 +57,18 @@ $webDir = Join-Path $PSScriptRoot "web"
 if ($Port -eq 0) {
     $Port = if ($config.server.http_port) { [int]$config.server.http_port } else { 8780 }
 }
+
+if (-not $BindIp -and $config.server -and $config.server.bind_ip) {
+    $BindIp = [string]$config.server.bind_ip
+}
+$BindIp = $BindIp.Trim()
+
+$listenHost = "+"
+if ($BindIp -and $BindIp -ne "0.0.0.0" -and $BindIp -ne "*" -and $BindIp -ne "+") {
+    $listenHost = $BindIp
+}
+$displayListenHost = if ($listenHost -eq "+") { "0.0.0.0" } else { $listenHost }
+$dashboardHost = if ($listenHost -eq "+") { "localhost" } else { $listenHost }
 
 # Load the INI parser used by /api/pak-status. Failure is non-fatal; the endpoint
 # degrades to a "parser unavailable" response instead of crashing the dashboard.
@@ -172,22 +185,33 @@ Write-Host "WindrosePlus Server v$Version (PowerShell)"
 Write-Host "Game directory: $gameDir"
 Write-Host "Data directory: $dataDir"
 Write-Host ""
-Write-Host "Dashboard:  http://localhost:$Port/"
-Write-Host "API:        http://localhost:$Port/api/status"
+Write-Host ("Dashboard:  http://{0}:{1}/" -f $dashboardHost, $Port)
+Write-Host ("API:        http://{0}:{1}/api/status" -f $dashboardHost, $Port)
 Write-Host ""
 
 # Start HTTP listener
 $listener = New-Object System.Net.HttpListener
-try {
-    $listener.Prefixes.Add("http://+:$Port/")
-    $listener.Start()
-    Write-Host "Listening on 0.0.0.0:$Port"
-} catch {
-    Write-Host "Cannot bind to all interfaces (needs admin), trying localhost only..."
-    $listener = New-Object System.Net.HttpListener
-    $listener.Prefixes.Add("http://localhost:$Port/")
-    $listener.Start()
-    Write-Host "Listening on localhost:$Port (localhost only)"
+if ($listenHost -eq "+") {
+    try {
+        $listener.Prefixes.Add(("http://{0}:{1}/" -f $listenHost, $Port))
+        $listener.Start()
+        Write-Host ("Listening on {0}:{1}" -f $displayListenHost, $Port)
+    } catch {
+        Write-Host "Cannot bind to all interfaces (needs admin), trying localhost only..."
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add(("http://localhost:{0}/" -f $Port))
+        $listener.Start()
+        Write-Host ("Listening on localhost:{0} (localhost only)" -f $Port)
+    }
+} else {
+    try {
+        $listener.Prefixes.Add(("http://{0}:{1}/" -f $listenHost, $Port))
+        $listener.Start()
+        Write-Host ("Listening on {0}:{1}" -f $displayListenHost, $Port)
+    } catch {
+        Write-Error ("Cannot bind dashboard to {0}:{1}: {2}" -f $displayListenHost, $Port, $_.Exception.Message)
+        exit 1
+    }
 }
 
 # Background tile generation watcher
@@ -387,6 +411,20 @@ try {
                     $wrapper = Join-Path $gameDir "StartWindrosePlusServer.bat"
                     $jsonPath = Join-Path $gameDir "windrose_plus.json"
                     $iniPath  = Join-Path $gameDir "windrose_plus.ini"
+                    $iniPaths = @(
+                        $iniPath,
+                        (Join-Path $gameDir "windrose_plus.weapons.ini"),
+                        (Join-Path $gameDir "windrose_plus.food.ini"),
+                        (Join-Path $gameDir "windrose_plus.gear.ini"),
+                        (Join-Path $gameDir "windrose_plus.entities.ini")
+                    )
+                    $ctConfigPresent = $false
+                    foreach ($p in $iniPaths) {
+                        if (Test-Path -LiteralPath $p) {
+                            $ctConfigPresent = $true
+                            break
+                        }
+                    }
 
                     $status = @{
                         wrapper_present         = (Test-Path -LiteralPath $wrapper)
@@ -394,19 +432,14 @@ try {
                         curvetables_pak_present = (Test-Path -LiteralPath $ctPak)
                         json_present            = (Test-Path -LiteralPath $jsonPath)
                         ini_present             = (Test-Path -LiteralPath $iniPath)
+                        ct_config_present       = $ctConfigPresent
                         stale                   = $false
                         stale_reason            = $null
                     }
 
                     if ($status.wrapper_present) {
                         $configMtime = 0
-                        $configFiles = @(
-                            $jsonPath, $iniPath,
-                            (Join-Path $gameDir "windrose_plus.weapons.ini"),
-                            (Join-Path $gameDir "windrose_plus.food.ini"),
-                            (Join-Path $gameDir "windrose_plus.gear.ini"),
-                            (Join-Path $gameDir "windrose_plus.entities.ini")
-                        )
+                        $configFiles = @($jsonPath) + $iniPaths
                         foreach ($f in $configFiles) {
                             if (Test-Path -LiteralPath $f) {
                                 $t = (Get-Item -LiteralPath $f).LastWriteTimeUtc.Ticks
@@ -432,23 +465,27 @@ try {
                             # Can't authoritatively answer CT question — return what we know
                             # and surface the parser error. Early-out so the composite
                             # stale/reason calculation below doesn't overwrite this.
-                            $status.stale = $false
+                            $status.stale = $true
                             $status.stale_reason = "Parser unavailable: $script:IniParserLoadError"
                         } else {
                             # Does the current config *require* a CurveTables PAK?
                             $expectCtPak = $false
-                            if ($status.ini_present) {
+                            $ctStatusError = $null
+                            if ($status.ct_config_present) {
                                 $defaultIniPath = Join-Path $gameDir "windrose_plus\config\windrose_plus.default.ini"
                                 if (Test-Path -LiteralPath $defaultIniPath) {
                                     try {
                                         $parsed = Import-WindrosePlusConfig -ConfigPath $iniPath -DefaultPath $defaultIniPath
-                                        if (-not $parsed.Error -and $parsed.CurveTables -and $parsed.CurveTables.Count -gt 0) {
+                                        if ($parsed.Error) {
+                                            $ctStatusError = "INI parse failed: $($parsed.Error)"
+                                        } elseif ($parsed.CurveTables -and $parsed.CurveTables.Count -gt 0) {
                                             $expectCtPak = $true
                                         }
                                     } catch {
-                                        # Parse failure — surface as stale so the user notices
-                                        $expectCtPak = $true
+                                        $ctStatusError = "INI parse failed: $_"
                                     }
+                                } else {
+                                    $ctStatusError = "Default INI missing; cannot evaluate CurveTable config"
                                 }
                             }
 
@@ -456,7 +493,11 @@ try {
                             $stale = $false
                             $reason = $null
 
-                            if ($expectMultPak) {
+                            if ($ctStatusError) {
+                                $stale = $true
+                                $reason = $ctStatusError
+                            }
+                            if ($expectMultPak -and -not $stale) {
                                 if ($status.multipliers_pak_present) {
                                     $t = (Get-Item $multPak).LastWriteTimeUtc.Ticks
                                     if ($t -lt $pakMtime) { $pakMtime = $t }

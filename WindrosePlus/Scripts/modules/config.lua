@@ -159,6 +159,7 @@ end
 
 function Config._defaults()
     return {
+        server = { http_port = 8780, bind_ip = "" },
         rcon = { enabled = false, port = 27320, password = "" },
         query = { enabled = true, interval_ms = 5000 },
         admin = { steam_ids = {} },

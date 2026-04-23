@@ -17,6 +17,26 @@ Windrose+ uses `windrose_plus.json` for everyday settings and optional `.ini` fi
 
 This file is created automatically on first start. Edit it for common server-owner changes.
 
+### server
+
+Dashboard listener settings.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `http_port` | `8780` | Dashboard/API HTTP port. You can also pass `-Port` to `start_dashboard.bat`. |
+| `bind_ip` | `""` | Optional IP address to bind the dashboard to on multi-IP hosts. Empty means all interfaces when elevated, with localhost fallback. You can also pass `-BindIp` to `start_dashboard.bat`. |
+
+Example:
+
+```json
+{
+    "server": {
+        "http_port": 8780,
+        "bind_ip": "192.0.2.10"
+    }
+}
+```
+
 ### performance
 
 Idle CPU limiting is optional for self-hosted servers. It lowers CPU only when nobody is connected, then restores full CPU when activity is detected.
@@ -72,6 +92,12 @@ Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half.
 | `weight` | `1` | Per-item weight (`2.0` makes items heavier, `0.5` lighter) |
 | `inventory_size` | `1` | Player / chest / ship / building inventory slot counts |
 | `points_per_level` | `1` | Talent / stat / skill points granted per level-up |
+
+Save-safety notes:
+
+- `inventory_size`, `stack_size`, `weight`, and similar inventory-affecting changes can become part of player save state after login/save. Back up saves before enabling them.
+- Do not combine Windrose+ PAK overrides with other PAK mods that edit the same assets unless you have tested the exact combination and can restore from backup.
+- To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `R5\Content\Paks\.windroseplus_build.hash`.
 
 ### [PlayerStats]
 
@@ -252,6 +278,8 @@ Hearth/campfire proximity effects. CurveTable: `CT_OtherGEValues`.
 ---
 
 ## windrose_plus.weapons.ini
+
+Type-specific `.ini` files can be used without creating a root `windrose_plus.ini`. The PAK builder reads `windrose_plus.weapons.ini`, `windrose_plus.food.ini`, `windrose_plus.gear.ini`, and `windrose_plus.entities.ini` independently and includes them in the rebuild hash.
 
 Per-weapon damage, crit, posture, and special effect values. CurveTable: `CT_Weapon_GE_Values`.
 

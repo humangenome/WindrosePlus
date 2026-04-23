@@ -18,6 +18,7 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 - [Features](#features)
 - [Installation](#installation)
 - [Using Windrose+](#using-windrose)
+- [Integrations](#integrations)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -43,7 +44,7 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
   "server": {
     "name": "My Windrose Server",
     "version": "0.10.0.1.6",
-    "windrose_plus": "1.0.0",
+    "windrose_plus": "1.0.13",
     "password_protected": false,
     "max_players": 10,
     "player_count": 3
@@ -63,6 +64,8 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
 Adjust XP, loot, crafting costs, crop speed, cooking/smelting speed, harvest yield, inventory size, carry weight, and more through a simple JSON file. Go deeper with 2,400+ individual INI settings for player stats, weapons, food effects, creature stats, co-op scaling, swimming, and rest bonuses.
 
 > **Note on `stack_size` and `points_per_level`:** `stack_size` patches the server PAK but has no effect on vanilla clients — `MaxCountInSlot` is enforced client-side, so the knob only works if every connected client loads a matching PAK ([#17](https://github.com/HumanGenome/WindrosePlus/issues/17)). `points_per_level` is disabled as of v1.0.8 because it crashes the server on character login ([#20](https://github.com/HumanGenome/WindrosePlus/issues/20)); use `wp.givestats` instead to grant extra points.
+
+> **Save-safety warning:** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in and saves. Take an out-of-band save backup before enabling them, and do not combine Windrose+ PAK overrides with other PAK mods that edit the same inventory/stack assets unless you are ready to restore from backup.
 
 **Multipliers** (`windrose_plus.json`):
 ```json
@@ -204,6 +207,14 @@ windrose_plus\start_dashboard.bat
 
 The dashboard URL and RCON password are shown in the console. On first run, a `windrose_plus.json` config file is created with defaults.
 
+By default the dashboard listens on all interfaces when PowerShell is elevated, then falls back to localhost if Windows blocks the wildcard listener. Multi-IP hosts can bind it to one address:
+
+```powershell
+windrose_plus\start_dashboard.bat -BindIp 192.0.2.10
+```
+
+You can also set `"server": { "bind_ip": "192.0.2.10" }` in `windrose_plus.json`.
+
 ---
 
 ## Using Windrose+
@@ -227,6 +238,10 @@ Example `windrose_plus.json`:
     "rcon": {
         "enabled": true,
         "password": "your-password-here"
+    },
+    "server": {
+        "http_port": 8780,
+        "bind_ip": ""
     },
     "performance": {
         "idle_cpu_limiter_enabled": false,
@@ -263,6 +278,8 @@ For fine-grained control beyond multipliers, Windrose+ supports 2,400+ individua
 
 Copy any `.default.ini` from the `config/` folder, rename it (drop `.default`), and edit only the values you want to change. Full reference: [docs/config-reference.md](docs/config-reference.md)
 
+Type-specific files such as `windrose_plus.food.ini` and `windrose_plus.weapons.ini` can be used without creating a root `windrose_plus.ini`. `StartWindrosePlusServer.bat` includes those files in the rebuild hash, so edits trigger a new PAK build on the next launch.
+
 ### Mods
 
 Windrose+ supports custom Lua mods. Drop a folder into `WindrosePlus/Mods/` with a `mod.json` and your script. It hot-reloads automatically.
@@ -276,9 +293,18 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 
 - **Server crashes on startup** - Check `UE4SS-settings.ini`. Only `HookProcessInternal` and `HookEngineTick` should be enabled.
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
+- **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - A player needs to connect at least once to trigger terrain export.
+- **Fully disable Windrose+ for recovery testing** - Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `R5\Content\Paks\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` is not enough because UE4SS and existing PAK overrides can still load.
+- **Recovering from inventory/stack save issues** - Restore a save backup from before the inventory-affecting PAK change, fully disable Windrose+ as above, then confirm the character can join before re-enabling any PAK overrides.
 
 </details>
+
+---
+
+## Integrations
+
+- [Windrose Server Manager](https://github.com/ManuelStaggl/WindroseServerManager) can install and manage Windrose+ from its Windows desktop UI. It fetches the latest Windrose+ release instead of bundling a stale copy.
 
 ---
 

@@ -65,7 +65,8 @@ $ErrorActionPreference = "Stop"
 # --- Resolve server directory ---
 if (-not $ServerDir) {
     if ($ConfigPath -and (Test-Path -LiteralPath $ConfigPath)) {
-        $ServerDir = Split-Path -Parent $ConfigPath
+        $configParent = Split-Path -Parent $ConfigPath
+        $ServerDir = if ($configParent) { (Resolve-Path $configParent).Path } else { (Resolve-Path ".").Path }
     } else {
         foreach ($c in @(".", "..", "..\..")) {
             if (Test-Path -LiteralPath (Join-Path $c "R5\Content\Paks")) {
@@ -84,7 +85,20 @@ $paksDir = Join-Path $ServerDir "R5\Content\Paks"
 $binDir  = Join-Path $PSScriptRoot "bin"
 
 $jsonPath = Join-Path $ServerDir "windrose_plus.json"
-$iniPath  = if ($ConfigPath) { $ConfigPath } else { Join-Path $ServerDir "windrose_plus.ini" }
+if ($ConfigPath) {
+    $iniPath = if (Split-Path -Parent $ConfigPath) { $ConfigPath } else { Join-Path $ServerDir $ConfigPath }
+} else {
+    $iniPath = Join-Path $ServerDir "windrose_plus.ini"
+}
+$iniDir = Split-Path -Parent $iniPath
+if (-not $iniDir) { $iniDir = $ServerDir }
+$iniConfigPaths = @(
+    $iniPath,
+    (Join-Path $iniDir "windrose_plus.weapons.ini"),
+    (Join-Path $iniDir "windrose_plus.food.ini"),
+    (Join-Path $iniDir "windrose_plus.gear.ini"),
+    (Join-Path $iniDir "windrose_plus.entities.ini")
+)
 if (-not $DefaultPath) {
     $DefaultPath = Join-Path $ServerDir "windrose_plus\config\windrose_plus.default.ini"
 }
@@ -110,7 +124,14 @@ if (Test-Path -LiteralPath $jsonPath) {
 
 # --- Read INI (CurveTables only) ---
 $iniConfig = $null
-if (Test-Path -LiteralPath $iniPath) {
+$hasIniConfig = $false
+foreach ($path in $iniConfigPaths) {
+    if (Test-Path -LiteralPath $path) {
+        $hasIniConfig = $true
+        break
+    }
+}
+if ($hasIniConfig) {
     if (-not (Test-Path -LiteralPath $DefaultPath)) {
         Write-Error "Default INI not found at $DefaultPath. Reinstall WindrosePlus."
         exit 2
@@ -153,21 +174,17 @@ if (-not $hasMultipliers -and -not $hasCT) {
 
 # --- Hash-skip ---
 function Get-BuildInputHash {
-    param([string]$ServerDir, [string]$ScriptRoot)
+    param([string]$ServerDir, [string]$ScriptRoot, [string[]]$IniConfigPaths)
 
     $chunks = [System.Collections.Generic.List[byte[]]]::new()
 
-    $files = @(
-        "windrose_plus.json",
-        "windrose_plus.ini",
-        "windrose_plus.weapons.ini",
-        "windrose_plus.food.ini",
-        "windrose_plus.gear.ini",
-        "windrose_plus.entities.ini"
-    )
+    $files = @(@{ Label = "windrose_plus.json"; Path = (Join-Path $ServerDir "windrose_plus.json") })
+    foreach ($path in $IniConfigPaths) {
+        $files += @{ Label = $path; Path = $path }
+    }
     foreach ($f in $files) {
-        $path = Join-Path $ServerDir $f
-        $chunks.Add([System.Text.Encoding]::UTF8.GetBytes("$f`n"))
+        $path = $f.Path
+        $chunks.Add([System.Text.Encoding]::UTF8.GetBytes("$($f.Label)`n"))
         if (Test-Path -LiteralPath $path) {
             $lines = [System.IO.File]::ReadAllLines($path)
             $kept = @()
@@ -217,7 +234,7 @@ function Get-BuildInputHash {
 }
 
 $hashFile = Join-Path $paksDir ".windroseplus_build.hash"
-$currentHash = Get-BuildInputHash -ServerDir $ServerDir -ScriptRoot $PSScriptRoot
+$currentHash = Get-BuildInputHash -ServerDir $ServerDir -ScriptRoot $PSScriptRoot -IniConfigPaths $iniConfigPaths
 
 $expectedPaks = @()
 if ($hasMultipliers) { $expectedPaks += "WindrosePlus_Multipliers_P.pak" }
@@ -302,6 +319,13 @@ if ($hasCT) {
         Write-Host "  Force extract requested — clearing cache..." -ForegroundColor Yellow
         Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
     }
+    if (Test-Path -LiteralPath $retocDir) {
+        $cachedCtFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
+        if ($cachedCtFiles.Count -eq 0) {
+            Write-Host "  CurveTable cache is empty — re-extracting..." -ForegroundColor Yellow
+            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+        }
+    }
 
     if (-not (Test-Path -LiteralPath $retocDir)) {
         if (-not $retocExe) {
@@ -315,21 +339,34 @@ if ($hasCT) {
         }
         Write-Host "  Extracting CurveTable assets with retoc..."
         New-Item -ItemType Directory -Force -Path $retocDir | Out-Null
-        & $retocExe -a $aesKey to-legacy $utocPath $retocDir 2>&1 | Out-Null
+        $retocOutput = @(& $retocExe -a $aesKey to-legacy $utocPath $retocDir 2>&1)
         $retocExit = $LASTEXITCODE
 
-        $extractedFiles = Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue
+        $extractedFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
         if ($retocExit -ne 0 -or -not $extractedFiles -or $extractedFiles.Count -eq 0) {
-            Write-Error "retoc extraction failed (exit $retocExit, $($extractedFiles.Count) CT assets found). Check AES key and game files."
+            $retocDetails = ($retocOutput | Select-Object -Last 8 | ForEach-Object { $_.ToString() }) -join "`n"
+            $errorMessage = "retoc extraction failed (exit $retocExit, $($extractedFiles.Count) CT assets found). Check AES key, game files, and retoc compatibility with this Windrose build."
+            if ($retocDetails) { $errorMessage += "`nretoc output:`n$retocDetails" }
+            Write-Error $errorMessage
             Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
             exit 3
         }
         Write-Host "  Extracted $($extractedFiles.Count) CurveTable assets to cache"
     }
 
-    $ctFiles = Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset"
+    $ctFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
+    if ($ctFiles.Count -eq 0) {
+        Write-Error "CurveTable cache contains no CT_*.uasset files. Rerun with -ForceExtract; if it repeats, retoc is not compatible with this Windrose build."
+        exit 3
+    }
     $totalChanges = 0
     $tablesModified = 0
+    $pendingCtTables = @{}
+    foreach ($tableName in $ctConfig.Keys) {
+        if ($ctConfig[$tableName].overrides -and $ctConfig[$tableName].overrides.Count -gt 0) {
+            $pendingCtTables[$tableName] = $true
+        }
+    }
 
     $stageDir = Join-Path ([System.IO.Path]::GetTempPath()) "WindrosePlus_ct_$(Get-Random)"
     New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
@@ -339,15 +376,33 @@ if ($hasCT) {
             $basename = $ctFile.BaseName
             $tableOverrides = if ($ctConfig.Contains($basename)) { $ctConfig[$basename] } else { $null }
             if (-not $tableOverrides -or $tableOverrides.overrides.Count -eq 0) { continue }
+            $null = $pendingCtTables.Remove($basename)
 
             Write-Host "  Parsing $basename..."
             $manifest = Parse-CurveTable -UAssetPath $ctFile.FullName
             if ($manifest.Error) {
-                Write-Warning "    Parse error: $($manifest.Error)"
-                continue
+                Write-Error "CurveTable parse failed for ${basename}: $($manifest.Error)"
+                exit 3
             }
             $rowsWithKeys = ($manifest.Rows | Where-Object { $_.Keys.Count -gt 0 }).Count
             Write-Host "    $($manifest.RowCount) rows, $rowsWithKeys with patchable values"
+
+            $rowNames = @($manifest.Rows | Where-Object { $_.Keys.Count -gt 0 } | ForEach-Object { $_.Name })
+            $unmatchedPatterns = @()
+            foreach ($pattern in $tableOverrides.overrides.Keys) {
+                $matched = $false
+                foreach ($rowName in $rowNames) {
+                    if ($rowName -like $pattern) {
+                        $matched = $true
+                        break
+                    }
+                }
+                if (-not $matched) { $unmatchedPatterns += $pattern }
+            }
+            if ($unmatchedPatterns.Count -gt 0) {
+                Write-Error "CurveTable config for $basename has row patterns that did not match this Windrose build: $($unmatchedPatterns -join ', ')"
+                exit 3
+            }
 
             $configHT = @{ overrides = $tableOverrides.overrides }
 
@@ -377,8 +432,8 @@ if ($hasCT) {
 
             $patchResult = Invoke-CurveTablePatch -Manifest $manifest -Config $configHT -UExpPath $stageUexp
             if ($patchResult.Error) {
-                Write-Warning "    Patch error: $($patchResult.Error)"
-                continue
+                Write-Error "CurveTable patch failed for ${basename}: $($patchResult.Error)"
+                exit 3
             }
             if ($patchResult.ChangesApplied -eq 0) {
                 Remove-Item $stageUasset -Force -ErrorAction SilentlyContinue
@@ -387,15 +442,20 @@ if ($hasCT) {
                 continue
             }
             if (-not $patchResult.VerificationPassed) {
-                Write-Warning "    VERIFICATION FAILED — skipping this table"
+                Write-Error "CurveTable verification failed for $basename"
                 Remove-Item $stageUasset -Force -ErrorAction SilentlyContinue
                 Remove-Item $stageUexp -Force -ErrorAction SilentlyContinue
-                continue
+                exit 3
             }
 
             Write-Host "    Patched $($patchResult.ChangesApplied) values (verified)" -ForegroundColor Green
             $totalChanges += $patchResult.ChangesApplied
             $tablesModified++
+        }
+
+        if ($pendingCtTables.Count -gt 0) {
+            Write-Error "Configured CurveTables were not found in this Windrose build: $($pendingCtTables.Keys -join ', ')"
+            exit 3
         }
 
         if ($DryRun) {

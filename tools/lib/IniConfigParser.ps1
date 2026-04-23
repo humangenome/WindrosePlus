@@ -13,6 +13,16 @@
 
 # AES key is hardcoded — this is the Windrose game encryption key, not a secret
 $script:WindroseAesKey = "0x5F430BF9FEF2B0B91B7C79C313BDAF291BA076A1DAB5045974186333AA16CFAE"
+$script:WindrosePlusParserErrors = $null
+
+function Add-WindrosePlusParserError {
+    param([string]$Message)
+
+    Write-Warning $Message
+    if ($null -ne $script:WindrosePlusParserErrors) {
+        $null = $script:WindrosePlusParserErrors.Add($Message)
+    }
+}
 
 # Section-to-CurveTable mapping for the MAIN config file
 $script:SectionToCurveTable = @{
@@ -154,7 +164,7 @@ function ConvertTo-SafeDouble {
     if ([double]::TryParse($Value, [ref]$result)) {
         return $result
     }
-    Write-Warning "Cannot parse '$Value' as a number${Context}. Skipping."
+    Add-WindrosePlusParserError "Cannot parse '$Value' as a number${Context}."
     return $null
 }
 
@@ -206,13 +216,13 @@ function Import-EntityConfig {
 
     if (-not (Test-Path -LiteralPath $ConfigPath)) { return $overrides }
     if (-not (Test-Path -LiteralPath $DefaultPath)) {
-        Write-Warning "Default file not found for $(Split-Path $ConfigPath -Leaf) — skipping"
+        Add-WindrosePlusParserError "Default file not found for $(Split-Path $ConfigPath -Leaf): $DefaultPath"
         return $overrides
     }
 
     $iniData = Read-IniFile -Path $ConfigPath
     if ($iniData.Error) {
-        Write-Warning $iniData.Error
+        Add-WindrosePlusParserError $iniData.Error
         return $overrides
     }
 
@@ -230,7 +240,7 @@ function Import-EntityConfig {
     foreach ($sectionName in $iniData.Keys) {
         # Warn if section doesn't exist in default file (possible typo or misroute)
         if (-not $defaultSections.Contains($sectionName)) {
-            Write-Warning "Section [$sectionName] not found in $(Split-Path $DefaultPath -Leaf) — possible typo or wrong config file"
+            Add-WindrosePlusParserError "Section [$sectionName] not found in $(Split-Path $DefaultPath -Leaf) — possible typo or wrong config file"
         }
 
         # Determine target CurveTable for this section
@@ -242,7 +252,7 @@ function Import-EntityConfig {
         if (-not $targetTable) { $targetTable = $CurveTableName }
 
         if (-not $targetTable) {
-            Write-Warning "No CurveTable mapping for section [$sectionName] — skipping"
+            Add-WindrosePlusParserError "No CurveTable mapping for section [$sectionName]"
             continue
         }
 
@@ -314,8 +324,8 @@ function Convert-IniToConfig {
     $knownSections = @($script:SectionToCurveTable.Keys) + $script:NonCtSections
     foreach ($sectionName in $IniData.Keys) {
         if ($knownSections -notcontains $sectionName) {
-            $msg = "Unknown section [$sectionName] in config — will be ignored"
-            Write-Warning $msg
+            $msg = "Unknown section [$sectionName] in config"
+            Add-WindrosePlusParserError $msg
             $result.Warnings += $msg
         }
     }
@@ -413,93 +423,109 @@ function Import-WindrosePlusConfig {
         [string]$DefaultPath = ""
     )
 
-    if (-not (Test-Path -LiteralPath $ConfigPath)) {
-        return @{ Error = "Config not found: $ConfigPath" }
+    if (-not $ConfigPath) {
+        return @{ Error = "Config path was not provided" }
     }
 
     $configDir = Split-Path $ConfigPath
+    if (-not $configDir) { $configDir = (Get-Location).Path }
+    $previousParserErrors = $script:WindrosePlusParserErrors
+    $script:WindrosePlusParserErrors = [System.Collections.ArrayList]::new()
 
-    # Find the default config for mapping
-    if (-not $DefaultPath) {
-        $DefaultPath = Join-Path $configDir "windrose_plus.default.ini"
-    }
-    if (-not (Test-Path -LiteralPath $DefaultPath)) {
-        return @{ Error = "Default config not found: $DefaultPath. Needed for Raw name mapping." }
-    }
+    try {
+        # Find the default config for mapping
+        if (-not $DefaultPath) {
+            $DefaultPath = Join-Path $configDir "windrose_plus.default.ini"
+        }
+        if (-not (Test-Path -LiteralPath $DefaultPath)) {
+            return @{ Error = "Default config not found: $DefaultPath. Needed for Raw name mapping." }
+        }
 
-    # Parse main config
-    $iniData = Read-IniFile -Path $ConfigPath
-    if ($iniData.Error) { return $iniData }
+        # Parse main config when present. Optional type-specific configs can be used
+        # without a root windrose_plus.ini file.
+        if (Test-Path -LiteralPath $ConfigPath) {
+            $iniData = Read-IniFile -Path $ConfigPath
+            if ($iniData.Error) { return $iniData }
+        } else {
+            $iniData = [ordered]@{}
+        }
 
-    $defaultInfo = Read-IniDefaults -Path $DefaultPath
-    $config = Convert-IniToConfig -IniData $iniData -RawMapping $defaultInfo.Mapping -DefaultValues $defaultInfo.Defaults
+        $defaultInfo = Read-IniDefaults -Path $DefaultPath
+        $config = Convert-IniToConfig -IniData $iniData -RawMapping $defaultInfo.Mapping -DefaultValues $defaultInfo.Defaults
 
-    # --- Merge optional config files ---
-    # The .default.ini version provides the Raw: mapping comments
-    $defaultDir = Split-Path $DefaultPath
+        # --- Merge optional config files ---
+        # The .default.ini version provides the Raw: mapping comments
+        $defaultDir = Split-Path $DefaultPath
 
-    $optionalConfigs = @(
-        @{
-            Config  = "windrose_plus.weapons.ini"
-            Default = "windrose_plus.weapons.default.ini"
-            Table   = "CT_Weapon_GE_Values"
-        },
-        @{
-            Config        = "windrose_plus.food.ini"
-            Default       = "windrose_plus.food.default.ini"
-            Table         = "CT_Food_GE_Values"
-            PrefixRouting = @{
-                'Consumables_'  = 'CT_Consumables_GE_Values'
-                'Alchemy_'      = 'CT_Alchemy_GE_Values'
+        $optionalConfigs = @(
+            @{
+                Config  = "windrose_plus.weapons.ini"
+                Default = "windrose_plus.weapons.default.ini"
+                Table   = "CT_Weapon_GE_Values"
+            },
+            @{
+                Config        = "windrose_plus.food.ini"
+                Default       = "windrose_plus.food.default.ini"
+                Table         = "CT_Food_GE_Values"
+                PrefixRouting = @{
+                    'Consumables_'  = 'CT_Consumables_GE_Values'
+                    'Alchemy_'      = 'CT_Alchemy_GE_Values'
+                }
+            },
+            @{
+                Config        = "windrose_plus.gear.ini"
+                Default       = "windrose_plus.gear.default.ini"
+                Table         = "CT_Armor_GE_Values"
+                PrefixRouting = @{
+                    'Necklaces' = 'CT_JewelryGEValues'
+                    'Rings'     = 'CT_JewelryGEValues'
+                }
+            },
+            @{
+                Config            = "windrose_plus.entities.ini"
+                Default           = "windrose_plus.entities.default.ini"
+                Table             = "CT_CharactersAttributes"
+                EntityKeyFallback = $true
+                PrefixRouting     = @{
+                    'Naval_' = 'CT_ShipAttributes'
+                }
             }
-        },
-        @{
-            Config        = "windrose_plus.gear.ini"
-            Default       = "windrose_plus.gear.default.ini"
-            Table         = "CT_Armor_GE_Values"
-            PrefixRouting = @{
-                'Necklaces' = 'CT_JewelryGEValues'
-                'Rings'     = 'CT_JewelryGEValues'
+        )
+
+        foreach ($opt in $optionalConfigs) {
+            $userFile = Join-Path $configDir $opt.Config
+            $defaultFile = Join-Path $defaultDir $opt.Default
+
+            if (-not (Test-Path -LiteralPath $userFile)) { continue }
+
+            Write-Host "  Loading overrides from $(Split-Path $userFile -Leaf)" -ForegroundColor DarkGray
+
+            $params = @{
+                ConfigPath  = $userFile
+                DefaultPath = $defaultFile
             }
-        },
-        @{
-            Config            = "windrose_plus.entities.ini"
-            Default           = "windrose_plus.entities.default.ini"
-            Table             = "CT_CharactersAttributes"
-            EntityKeyFallback = $true
-            PrefixRouting     = @{
-                'Naval_' = 'CT_ShipAttributes'
+            if ($opt.Table) { $params.CurveTableName = $opt.Table }
+            if ($opt.PrefixRouting) { $params.PrefixRouting = $opt.PrefixRouting }
+            if ($opt.EntityKeyFallback) { $params.EntityKeyFallback = $true }
+
+            $overrides = Import-EntityConfig @params
+
+            foreach ($tableName in $overrides.Keys) {
+                if (-not $config.CurveTables.Contains($tableName)) {
+                    $config.CurveTables[$tableName] = @{ overrides = @{} }
+                }
+                foreach ($kv in $overrides[$tableName].overrides.GetEnumerator()) {
+                    $config.CurveTables[$tableName].overrides[$kv.Key] = $kv.Value
+                }
             }
         }
-    )
 
-    foreach ($opt in $optionalConfigs) {
-        $userFile = Join-Path $configDir $opt.Config
-        $defaultFile = Join-Path $defaultDir $opt.Default
-
-        if (-not (Test-Path -LiteralPath $userFile)) { continue }
-
-        Write-Host "  Loading overrides from $(Split-Path $userFile -Leaf)" -ForegroundColor DarkGray
-
-        $params = @{
-            ConfigPath  = $userFile
-            DefaultPath = $defaultFile
+        if ($script:WindrosePlusParserErrors.Count -gt 0) {
+            $config["Error"] = ($script:WindrosePlusParserErrors -join "; ")
         }
-        if ($opt.Table) { $params.CurveTableName = $opt.Table }
-        if ($opt.PrefixRouting) { $params.PrefixRouting = $opt.PrefixRouting }
-        if ($opt.EntityKeyFallback) { $params.EntityKeyFallback = $true }
 
-        $overrides = Import-EntityConfig @params
-
-        foreach ($tableName in $overrides.Keys) {
-            if (-not $config.CurveTables.Contains($tableName)) {
-                $config.CurveTables[$tableName] = @{ overrides = @{} }
-            }
-            foreach ($kv in $overrides[$tableName].overrides.GetEnumerator()) {
-                $config.CurveTables[$tableName].overrides[$kv.Key] = $kv.Value
-            }
-        }
+        return $config
+    } finally {
+        $script:WindrosePlusParserErrors = $previousParserErrors
     }
-
-    return $config
 }
