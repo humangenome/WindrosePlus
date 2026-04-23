@@ -114,6 +114,12 @@ function Build-MultiplierPak {
         Error = $null
     }
 
+    $effectiveNonDefaultMultipliers = 0
+    foreach ($entry in $Config.GetEnumerator()) {
+        if ($entry.Key -eq "points_per_level") { continue }
+        if ([double]$entry.Value -ne 1.0) { $effectiveNonDefaultMultipliers++ }
+    }
+
     $repak = Find-Repak -CustomPath $RepakPath
     if (-not $repak) {
         $result.Error = "repak not found. Install with: cargo install --git https://github.com/trumank/repak.git repak_cli"
@@ -415,16 +421,23 @@ function Build-MultiplierPak {
             Write-Host "    Modified $harvMod resource spawners"
         }
 
-        if ($modifiedCount -eq 0) {
-            $result.Error = "No files were modified"
-            return $result
-        }
-
-        # Pack into PAK
         $outPakPath = if ($ServerDir) {
             Join-Path $ServerDir "R5\Content\Paks\$OutputPak"
         } else {
             $OutputPak
+        }
+
+        if ($modifiedCount -eq 0) {
+            if ($effectiveNonDefaultMultipliers -eq 0) {
+                Write-Host "  No active multiplier files were modified; removing stale $outPakPath if present"
+                if (Test-Path -LiteralPath $outPakPath) {
+                    Remove-Item -LiteralPath $outPakPath -Force
+                }
+                $result.OutputPath = $outPakPath
+                return $result
+            }
+            $result.Error = "No files were modified"
+            return $result
         }
 
         & $repak pack $tmpDir $outPakPath 2>&1 | Out-Null

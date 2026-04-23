@@ -115,14 +115,15 @@ $modSource = Join-Path $scriptDir "WindrosePlus"
 $modDest = Join-Path $modsDir "WindrosePlus"
 $dataDir = Join-Path $gameDir "windrose_plus_data"
 $idleLimiterDisabledPath = Join-Path $dataDir "idle_cpu_limiter_disabled"
+$idleLimiterEnabledPath = Join-Path $dataDir "idle_cpu_limiter_enabled"
 $idleLimiterRatePath = Join-Path $dataDir "idle_cpu_limiter_cpu_rate.txt"
 
 if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
 if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
-if (-not (Test-Path -LiteralPath $idleLimiterDisabledPath) -and -not (Test-Path -LiteralPath $idleLimiterRatePath)) {
-    Set-Content $idleLimiterDisabledPath "IdleCpuLimiter is disabled by default. Delete this file, rerun install.ps1, and restart the server to opt in."
+if (-not (Test-Path -LiteralPath $idleLimiterDisabledPath) -and -not (Test-Path -LiteralPath $idleLimiterEnabledPath) -and -not (Test-Path -LiteralPath $idleLimiterRatePath)) {
+    Set-Content $idleLimiterDisabledPath "IdleCpuLimiter is disabled by default. Delete this file, create idle_cpu_limiter_enabled, rerun install.ps1, and restart the server to opt in."
 }
-$idleLimiterDisabled = Test-Path -LiteralPath $idleLimiterDisabledPath
+$idleLimiterDisabled = (Test-Path -LiteralPath $idleLimiterDisabledPath) -or (-not (Test-Path -LiteralPath $idleLimiterEnabledPath) -and -not (Test-Path -LiteralPath $idleLimiterRatePath))
 
 if (Test-Path -LiteralPath $modSource) {
     try {

@@ -236,6 +236,10 @@ function Rcon._processFile(filePath, filename)
         end
     end
 
+    if Rcon._config and Rcon._config.reload then
+        Rcon._config.reload()
+    end
+
     if password ~= Rcon._config.getRconPassword() then
         Rcon._writeResponse(id, "error", "Authentication failed")
         Log.warn("RCON", "Auth failed: " .. command)

@@ -19,6 +19,9 @@ jobs:
       # Pinned tool versions. Bump here (and rerun the release tag) to upgrade.
       REPAK_VERSION: "0.2.3"
       RETOC_VERSION: "0.1.5"
+      CPP_MOD_ASSET_TAG: "v1.0.10"
+      HEIGHTMAP_EXPORTER_SHA256: "238fc6e44955d1467cf03d91897135a2bb17a6cfff7231ca3c14232357f77d54"
+      IDLE_CPU_LIMITER_SHA256: "7133ccc3881e1393e44f337b4bf32ac753141f3ebbd5f084b4f77ad8060c9d5b"
 
     steps:
       - name: Checkout
@@ -68,16 +71,16 @@ jobs:
         # private fork of Unreal Engine source gated behind Epic's licensed
         # GitHub org — a public CI runner can't clone it. Prebuilt DLLs are
         # attached to GitHub releases as standalone assets and fetched here.
-        # The workflow pulls from releases/latest so the next tagged build
-        # automatically packages the most recently published DLLs.
+        # Asset tag and hashes are pinned so release ZIP contents cannot change
+        # because "latest" moved or a release asset was replaced.
         run: |
           mkdir -p cpp-mods/HeightmapExporter cpp-mods/IdleCpuLimiter
-          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/latest/download/HeightmapExporter.dll" \
+          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/HeightmapExporter.dll" \
             -o cpp-mods/HeightmapExporter/HeightmapExporter.dll
-          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/latest/download/IdleCpuLimiter.dll" \
+          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/IdleCpuLimiter.dll" \
             -o cpp-mods/IdleCpuLimiter/IdleCpuLimiter.dll
-          test -s cpp-mods/HeightmapExporter/HeightmapExporter.dll
-          test -s cpp-mods/IdleCpuLimiter/IdleCpuLimiter.dll
+          echo "${HEIGHTMAP_EXPORTER_SHA256}  cpp-mods/HeightmapExporter/HeightmapExporter.dll" | sha256sum -c -
+          echo "${IDLE_CPU_LIMITER_SHA256}  cpp-mods/IdleCpuLimiter/IdleCpuLimiter.dll" | sha256sum -c -
 
       - name: Extract release notes from CHANGELOG
         id: notes

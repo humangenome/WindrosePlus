@@ -130,7 +130,10 @@ $ctConfig = if ($iniConfig -and $iniConfig.CurveTables) { $iniConfig.CurveTables
 
 # Expected PAK set (derived from actual config state)
 $hasMultipliers = $false
-foreach ($v in $multipliers.Values) { if ($v -ne 1.0) { $hasMultipliers = $true; break } }
+foreach ($prop in $multipliers.GetEnumerator()) {
+    if ($prop.Key -eq "points_per_level") { continue }
+    if ($prop.Value -ne 1.0) { $hasMultipliers = $true; break }
+}
 $hasCT = ($ctConfig.Count -gt 0)
 
 # --- No-op path ---
