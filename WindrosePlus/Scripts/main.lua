@@ -75,8 +75,11 @@ function WindrosePlus.updatePlayerCount(count)
             local wasIdle = WindrosePlus.isIdle()
             WindrosePlus.setMode("idle")
             -- Force immediate status write so dashboards see 0 players right away
-            -- (otherwise the 30s idle interval delays the update)
-            if not wasIdle and Query and Query.forceWrite then pcall(Query.forceWrite) end
+            -- (otherwise the 30s idle interval delays the update). Resolve Query
+            -- via _modules so it's looked up at call time — the top-level `local
+            -- Query` is declared later in this file and isn't visible here.
+            local Q = WindrosePlus._modules and WindrosePlus._modules.Query
+            if not wasIdle and Q and Q.forceWrite then pcall(Q.forceWrite) end
         end
     end
 end
@@ -433,35 +436,68 @@ WindrosePlus.API.onPlayerLeave(function(p) pcall(_appendEvent, "leave", p) end)
 -- Update drivers
 -- ------------
 
--- RegisterHook on player movement — fires on game thread, sets mode to active
+-- RegisterHook on player movement — fires on game thread, flips mode to active.
+-- Writers used to run here at 1 Hz; removed — they were redoing disk I/O +
+-- FindAllOf walks that the periodic driver already covers at its own cadence.
 local lastHookTime = 0
 RegisterHook("/Script/R5.R5MovementComponent:ServerSaveMoveInput", function()
     local now = os.time()
     if now - lastHookTime < 1 then return end
     lastHookTime = now
-    -- Hook firing means players are moving — ensure active mode
     if WindrosePlus.isIdle() then
         WindrosePlus.setMode("active")
     end
-    if Query then pcall(Query.forceWrite) end
-    if LiveMap then pcall(LiveMap.writeIfDue) end
-    if POIScan then pcall(POIScan.writeIfDue) end
 end)
 
--- Drive Query/LiveMap via RCON's LoopAsync when RCON is enabled
+-- Writers touch UObjects (FindAllOf, property reads). UE4SS's LoopAsync runs on
+-- a dedicated async thread, which races with game-thread GC / spawn / destroy.
+-- We dispatch each writer tick to the game thread via ExecuteInGameThread.
+-- JSON encode + disk writes run on the game thread too — payloads are small
+-- (~5-50 KB), so the tick cost is negligible compared to the cost of racing
+-- UObject iteration.
+local _hasExecuteInGameThread = type(ExecuteInGameThread) == "function"
+if not _hasExecuteInGameThread then
+    Log.warn("Core", "ExecuteInGameThread not available — writers will run on async thread (UObject races possible)")
+end
+
+-- Per-writer coalescing: if a dispatch is already pending (not yet drained by
+-- the game thread), skip queuing another one. Prevents unbounded action-vector
+-- growth when the game thread is momentarily slow.
+local _pendingTicks = {}
+
+local function dispatchTick(fn)
+    if not _hasExecuteInGameThread then
+        pcall(fn)
+        return
+    end
+    if _pendingTicks[fn] then return end
+    _pendingTicks[fn] = true
+    -- ExecuteInGameThread can throw if neither EngineTick nor ProcessEvent
+    -- hooks are available; guard the schedule call itself.
+    local ok, err = pcall(ExecuteInGameThread, function()
+        _pendingTicks[fn] = nil
+        pcall(fn)
+    end)
+    if not ok then
+        _pendingTicks[fn] = nil
+        Log.warn("Core", "ExecuteInGameThread dispatch failed: " .. tostring(err))
+        pcall(fn)
+    end
+end
+
 if Rcon and Config.isRconEnabled() then
-    if Query then Rcon.registerTickCallback(Query.writeIfDue) end
-    if LiveMap then Rcon.registerTickCallback(LiveMap.writeIfDue) end
-    if POIScan then Rcon.registerTickCallback(POIScan.writeIfDue) end
-    Rcon.registerTickCallback(runModTicks)
+    if Query   then Rcon.registerTickCallback(function() dispatchTick(Query.writeIfDue) end) end
+    if LiveMap then Rcon.registerTickCallback(function() dispatchTick(LiveMap.writeIfDue) end) end
+    if POIScan then Rcon.registerTickCallback(function() dispatchTick(POIScan.writeIfDue) end) end
+    Rcon.registerTickCallback(function() dispatchTick(runModTicks) end)
 else
     -- RCON disabled — standalone heartbeat
     if Query or LiveMap or POIScan then
         LoopAsync(5000, function()
-            if Query then pcall(Query.writeIfDue) end
-            if LiveMap then pcall(LiveMap.writeIfDue) end
-            if POIScan then pcall(POIScan.writeIfDue) end
-            runModTicks()
+            if Query   then dispatchTick(Query.writeIfDue) end
+            if LiveMap then dispatchTick(LiveMap.writeIfDue) end
+            if POIScan then dispatchTick(POIScan.writeIfDue) end
+            dispatchTick(runModTicks)
             return false
         end)
     end

@@ -1,6 +1,6 @@
 -- WindrosePlus Query Module
 -- Writes server status to server_status.json
--- All UObject access via game thread (RegisterHook callback)
+-- UObject access dispatched to game thread via ExecuteInGameThread
 
 local json = require("modules.json")
 local Log = require("modules.log")
@@ -10,7 +10,7 @@ Query._statusPath = nil
 Query._tmpPath = nil
 Query._config = nil
 Query._interval = 5
-Query._idleInterval = 2
+Query._idleInterval = 30
 Query._lastWrite = 0
 Query._serverInfo = nil
 

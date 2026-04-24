@@ -19,6 +19,9 @@ POIScan._triggerPath = nil
 POIScan._refreshInterval = 4 * 60 * 60   -- POIs are static; refresh every 4h
 POIScan._lastWrite = 0
 POIScan._wroteOnce = false
+POIScan._scanning = false                 -- in-flight guard (async + game thread can both fire)
+POIScan._scanFailedAt = 0                 -- timestamp of last encode/write failure
+POIScan._retryBackoff = 60                -- min seconds before retrying a failed scan
 POIScan._discovered = {}                  -- class -> count (for refining patterns)
 POIScan._discoveredCap = 500
 
@@ -149,26 +152,51 @@ end
 
 function POIScan.writeIfDue()
     if not POIScan._path then return end
+    if POIScan._scanning then return end   -- in-flight; skip overlapping dispatch
 
-    -- Manual refresh trigger (drop a file at <dataDir>\poiscan_refresh)
+    -- Detect manual refresh trigger (drop a file at <dataDir>\poiscan_refresh).
+    -- Don't consume it yet — if we early-return below (readiness / backoff),
+    -- leave the trigger in place so the next tick still honors it.
     local triggered = false
-    local f = io.open(POIScan._triggerPath, "r")
-    if f then
-        f:close()
-        os.remove(POIScan._triggerPath)
-        triggered = true
-    end
+    local probe = io.open(POIScan._triggerPath, "r")
+    if probe then probe:close(); triggered = true end
 
-    -- First scan only happens after a player has connected (the world isn't
-    -- streamed in until then). Subsequent scans run on the long interval.
+    local now = os.time()
+
+    -- Backoff after any failure (including stuck trigger-file removal) applies
+    -- to manual triggers too — otherwise a persistent FS error would log and
+    -- re-attempt every tick. Manual triggers still bypass the 4h scheduled
+    -- interval so operators can force a refresh on demand.
+    if (now - POIScan._scanFailedAt) < POIScan._retryBackoff then return end
+
+    -- Scheduled refresh interval (only enforced after first successful scan,
+    -- and only when this wasn't a manual trigger)
+    if not triggered and POIScan._wroteOnce and (now - POIScan._lastWrite) < POIScan._refreshInterval then return end
+
+    -- First scan requires the world to be streamed in (needs at least one player)
     if not POIScan._wroteOnce then
         if not (WindrosePlus and WindrosePlus.state.playerCount > 0) then return end
-    elseif not triggered then
-        local now = os.time()
-        if (now - POIScan._lastWrite) < POIScan._refreshInterval then return end
     end
 
-    POIScan._scanAndWrite()
+    -- Committed to scanning — consume the trigger file if present.
+    -- If removal fails (AV, FS lock), bail out now so we don't re-scan every
+    -- tick against a stuck trigger file.
+    if triggered then
+        local removed, removeErr = os.remove(POIScan._triggerPath)
+        if not removed then
+            Log.warn("POIScan", "could not remove trigger file: " .. tostring(removeErr))
+            POIScan._scanFailedAt = os.time()
+            return
+        end
+    end
+
+    POIScan._scanning = true
+    local ok, err = pcall(POIScan._scanAndWrite)
+    POIScan._scanning = false
+    if not ok then
+        POIScan._scanFailedAt = os.time()
+        Log.warn("POIScan", "scan pcall failed: " .. tostring(err))
+    end
 end
 
 function POIScan._scanAndWrite()
@@ -189,6 +217,7 @@ function POIScan._scanAndWrite()
     local ok = pcall(function() actors = FindAllOf("Actor") end)
     if not ok or not actors then
         Log.warn("POIScan", "FindAllOf(Actor) failed or returned nil")
+        POIScan._scanFailedAt = os.time()
         return
     end
 
@@ -264,6 +293,7 @@ function POIScan._scanAndWrite()
     if not encOk then
         Log.warn("POIScan", "json.encode failed: " .. tostring(encErr))
         print("[POIScan] json.encode failed: " .. tostring(encErr))
+        POIScan._scanFailedAt = os.time()
         return
     end
     print(string.format("[POIScan] payload encoded, %d bytes", payload and #payload or 0))
@@ -272,19 +302,23 @@ function POIScan._scanAndWrite()
         local f = io.open(POIScan._tmpPath, "w")
         if not f then error("io.open returned nil for " .. tostring(POIScan._tmpPath)) end
         f:write(payload)
-        f:close()
+        local closed, closeErr = f:close()
+        if not closed then error("f:close failed: " .. tostring(closeErr)) end
         os.remove(POIScan._path)
-        os.rename(POIScan._tmpPath, POIScan._path)
+        local renamed, renameErr = os.rename(POIScan._tmpPath, POIScan._path)
+        if not renamed then error("os.rename failed: " .. tostring(renameErr)) end
     end)
     if not writeOk then
         Log.warn("POIScan", "file write failed: " .. tostring(writeErr))
         print("[POIScan] file write failed: " .. tostring(writeErr))
+        POIScan._scanFailedAt = os.time()
         return
     end
     print("[POIScan] file written")
 
     POIScan._wroteOnce = true
     POIScan._lastWrite = os.time()
+    POIScan._scanFailedAt = 0
 
     if newDiscoveries then
         local sorted = {}

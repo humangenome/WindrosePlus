@@ -1,6 +1,6 @@
 -- WindrosePlus Live Map Module
 -- Writes player/mob positions to livemap_data.json
--- All UObject access via game thread (RegisterHook callback)
+-- UObject access dispatched to game thread via ExecuteInGameThread
 
 local json = require("modules.json")
 local Log = require("modules.log")
