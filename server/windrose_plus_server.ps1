@@ -711,6 +711,8 @@ try {
                         @{name="wp.pos"; usage="wp.pos [player]"; description="Get player positions"; category="players"},
                         @{name="wp.stamina"; usage="wp.stamina [player]"; description="Read stamina/hunger/thirst"; category="players"},
                         @{name="wp.speed"; usage="wp.speed [player] <mult>"; description="Set movement speed"; category="admin"},
+                        @{name="wp.jump"; usage="wp.jump [player] <mult>"; description="Set jump height (1.0=normal, 2.0=double)"; category="admin"},
+                        @{name="wp.gravity"; usage="wp.gravity [player] <mult>"; description="Set gravity (1.0=normal, 0.3=moon)"; category="admin"},
                         @{name="wp.time"; usage="wp.time"; description="Read current time of day"; category="world"},
                         @{name="wp.creatures"; usage="wp.creatures"; description="Count spawned creatures by type"; category="world"},
                         @{name="wp.entities"; usage="wp.entities"; description="Count entities by type"; category="world"},

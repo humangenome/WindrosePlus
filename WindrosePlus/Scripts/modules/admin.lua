@@ -225,87 +225,241 @@ function Admin._registerCommands()
     -- Admin Actions
     -- =========================================
 
+    -- =================================================================
+    -- Movement cheats: wp.speed, wp.jump, wp.gravity
+    --
+    -- All three modify a per-player UCharacterMovementComponent float
+    -- (plus the engine-level CheatMovementSpeedModifer for wp.speed —
+    -- see Issue HumanGenome/WindrosePlus#5).
+    --
+    -- On respawn UE destroys the current pawn and spawns a fresh one
+    -- with blueprint defaults — our one-shot writes to the old pawn are
+    -- lost. A lightweight self-terminating ticker (`ensureMovementTicker`)
+    -- dirty-checks each active multiplier every ~2s and re-applies when
+    -- the live value diverges (respawn, or anything else that resets it).
+    -- When no multipliers are active the ticker stops on its next wake
+    -- and consumes zero CPU until the next set.
+    -- =================================================================
+
+    -- Per-cheat writers. `prop` is the primary field used for dirty-check.
+    -- `apply` handles the actual write (wp.speed writes two fields so it
+    -- keeps its dual-write behavior — cheat modifier + replicated max).
+    Admin._movementCheats = {
+        speed = {
+            label = "Speed", prop = "MaxWalkSpeed", minMult = 0, maxMult = 20,
+            apply = function(mc, mult, base)
+                mc.CheatMovementSpeedModifer = mult
+                if base then mc.MaxWalkSpeed = base * mult end
+            end,
+        },
+        jump = {
+            label = "JumpZVelocity", prop = "JumpZVelocity", minMult = 0.1, maxMult = 20,
+            apply = function(mc, mult, base)
+                if base then mc.JumpZVelocity = base * mult end
+            end,
+        },
+        gravity = {
+            label = "GravityScale", prop = "GravityScale", minMult = 0, maxMult = 10,
+            apply = function(mc, mult, base)
+                if base then mc.GravityScale = base * mult end
+            end,
+        },
+    }
+
+    -- Per-player baseline cache: {propName: {playerName: origValue}}.
+    -- Blueprint defaults don't change across respawn, so the cache stays valid.
+    Admin._origMovementProp = Admin._origMovementProp or {}
+
+    -- Active multipliers for respawn re-application: {playerNameLower: {cheatName: mult}}.
+    -- Populated when mult != 1.0, cleared when mult == 1.0.
+    Admin._activeMovementMults = Admin._activeMovementMults or {}
+
+    -- Last-applied pawn identity per (player, cheat). Used by the ticker to detect
+    -- respawn (pawn object differs) without re-writing when values merely fluctuate.
+    -- Value-based dirty-check caused client rubber-banding because UE transiently
+    -- adjusts MaxWalkSpeed during state transitions (sprint/crouch/etc) and any
+    -- re-write triggers ClientAdjustPosition corrections.
+    Admin._lastAppliedPawn = Admin._lastAppliedPawn or {}
+
+    local function getPlayerName(pc)
+        local pName = nil
+        pcall(function()
+            local ps = pc.PlayerState
+            if ps and ps:IsValid() then
+                local val = ps.PlayerNamePrivate
+                if val then
+                    local ok, str = pcall(function() return val:ToString() end)
+                    if ok and str then pName = str end
+                end
+            end
+        end)
+        return pName
+    end
+
+    local function captureBaseline(cheat, mc, key)
+        local store = Admin._origMovementProp[cheat.prop]
+        if not store then
+            store = {}
+            Admin._origMovementProp[cheat.prop] = store
+        end
+        if not store[key] then
+            local ok, orig = pcall(function() return mc[cheat.prop] end)
+            if ok and orig and orig > 0 then store[key] = orig end
+        end
+        return store[key]
+    end
+
+    -- Self-terminating 2s ticker: re-applies diverged multipliers, stops
+    -- once the active map is empty. Only writes when dirty-check fails.
+    local function ensureMovementTicker()
+        if Admin._movementTickActive then return end
+        Admin._movementTickActive = true
+        LoopAsync(2000, function()
+            if not next(Admin._activeMovementMults) then
+                Admin._movementTickActive = false
+                return true  -- stop the loop
+            end
+            local pcs = FindAllOf("PlayerController")
+            if not pcs then return false end
+            for _, pc in ipairs(pcs) do
+                if pc:IsValid() then
+                    pcall(function()
+                        local pName = getPlayerName(pc)
+                        if not pName then return end
+                        local mults = Admin._activeMovementMults[pName:lower()]
+                        if not mults or not next(mults) then return end
+                        local pawn = pc.Pawn
+                        if not (pawn and pawn:IsValid()) then return end
+                        local mc = pawn.CharacterMovement or pawn.MovementComponent
+                        if not (mc and mc:IsValid()) then return end
+                        -- Pawn-identity dirty check: respawn produces a genuinely
+                        -- different pawn instance (different GetFullName). Same pawn =
+                        -- same identity = no re-apply, no rubber-banding.
+                        local pawnId = nil
+                        pcall(function() pawnId = pawn:GetFullName() end)
+                        if pawnId then
+                            local pKey = pName:lower()
+                            for cheatName, mult in pairs(mults) do
+                                local cheat = Admin._movementCheats[cheatName]
+                                if cheat then
+                                    local stateKey = pKey .. ":" .. cheatName
+                                    if Admin._lastAppliedPawn[stateKey] ~= pawnId then
+                                        local base = captureBaseline(cheat, mc, pName)
+                                        if base then
+                                            cheat.apply(mc, mult, base)
+                                            Admin._lastAppliedPawn[stateKey] = pawnId
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
+            return false  -- keep looping
+        end)
+    end
+
+    -- Shared implementation for wp.speed / wp.jump / wp.gravity.
+    local function setMovementCheat(args, cheatName)
+        local cheat = Admin._movementCheats[cheatName]
+        if not cheat then return "Unknown cheat: " .. tostring(cheatName) end
+        local n = #args
+        if n < 1 then
+            return "Usage: wp." .. cheatName .. " <multiplier> or wp." .. cheatName .. " <player> <multiplier>"
+        end
+        -- RCON splits on whitespace and player names can contain spaces.
+        -- Treat the last arg as the multiplier; everything before joins as the name.
+        -- Issue: HumanGenome/WindrosePlus#5
+        local mult = tonumber(args[n])
+        if not mult then
+            return "Multiplier must be a number between " .. cheat.minMult .. " and " .. cheat.maxMult
+        end
+        if mult < cheat.minMult or mult > cheat.maxMult then
+            return "Multiplier must be between " .. cheat.minMult .. " and " .. cheat.maxMult
+        end
+        local targetName = nil
+        if n >= 2 then targetName = table.concat(args, " ", 1, n - 1):lower() end
+
+        local pcs = FindAllOf("PlayerController")
+        if not pcs then return "No players found" end
+
+        local count = 0
+        for _, pc in ipairs(pcs) do
+            if pc:IsValid() then
+                local pName = getPlayerName(pc)
+                local nameMatch = not targetName or (pName and pName:lower() == targetName)
+                if nameMatch then
+                    pcall(function()
+                        local pawn = pc.Pawn
+                        if pawn and pawn:IsValid() then
+                            local mc = pawn.CharacterMovement or pawn.MovementComponent
+                            if mc and mc:IsValid() then
+                                local key = pName or tostring(pc)
+                                local base = captureBaseline(cheat, mc, key)
+                                cheat.apply(mc, mult, base)
+                                count = count + 1
+                                -- Register for respawn re-application (keyed by player
+                                -- name so it survives pc-object turnover). mult == 1.0
+                                -- means "reset" — drop from the active map instead.
+                                if pName then
+                                    local pKey = pName:lower()
+                                    local stateKey = pKey .. ":" .. cheatName
+                                    if mult == 1.0 then
+                                        if Admin._activeMovementMults[pKey] then
+                                            Admin._activeMovementMults[pKey][cheatName] = nil
+                                            if not next(Admin._activeMovementMults[pKey]) then
+                                                Admin._activeMovementMults[pKey] = nil
+                                            end
+                                        end
+                                        Admin._lastAppliedPawn[stateKey] = nil
+                                    else
+                                        Admin._activeMovementMults[pKey] = Admin._activeMovementMults[pKey] or {}
+                                        Admin._activeMovementMults[pKey][cheatName] = mult
+                                        -- Record the pawn we just wrote to so the ticker
+                                        -- won't re-apply until the pawn identity changes.
+                                        pcall(function() Admin._lastAppliedPawn[stateKey] = pawn:GetFullName() end)
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+        if next(Admin._activeMovementMults) then ensureMovementTicker() end
+        if targetName then
+            return count > 0 and (cheat.label .. " set to " .. mult .. "x for " .. targetName)
+                                or ("Player '" .. targetName .. "' not found")
+        end
+        return cheat.label .. " set to " .. mult .. "x for " .. count .. " player(s)"
+    end
+
     Admin._commands["wp.speed"] = {
         description = "Set player movement speed multiplier",
         usage = "wp.speed [player] <multiplier>",
         category = "admin",
         examples = {"wp.speed 2.0", "wp.speed HumanGenome 1.5", "wp.speed John Smith 1.5"},
         playerArg = true,
-        handler = function(args)
-            if #args < 1 then return "Usage: wp.speed <multiplier> or wp.speed <player> <multiplier>\n  1.0 = normal, 2.0 = double speed" end
+        handler = function(args) return setMovementCheat(args, "speed") end,
+    }
 
-            -- RCON splits on whitespace and player names can contain spaces.
-            -- Treat the last arg as the multiplier; everything before joins as the name.
-            -- Issue: HumanGenome/WindrosePlus#5
-            local n = #args
-            local mult = tonumber(args[n])
-            if not mult then
-                return "Multiplier must be a number between 0 and 20"
-            end
-            if mult < 0 or mult > 20 then
-                return "Multiplier must be between 0 and 20"
-            end
-            local targetName = nil
-            if n >= 2 then
-                targetName = table.concat(args, " ", 1, n - 1):lower()
-            end
+    Admin._commands["wp.jump"] = {
+        description = "Set player jump height multiplier (JumpZVelocity; 1.0=normal, 2.0=double)",
+        usage = "wp.jump [player] <multiplier>",
+        category = "admin",
+        examples = {"wp.jump 2.0", "wp.jump HumanGenome 3"},
+        playerArg = true,
+        handler = function(args) return setMovementCheat(args, "jump") end,
+    }
 
-            local pcs = FindAllOf("PlayerController")
-            if not pcs then return "No players found" end
-
-            -- Cache baseline MaxWalkSpeed per-player on first touch so setting the
-            -- multiplier back to 1.0 cleanly restores the client-replicated speed
-            -- (CheatMovementSpeedModifer alone is server-side and doesn't replicate).
-            -- Issue: HumanGenome/WindrosePlus#5
-            Admin._origMaxWalkSpeed = Admin._origMaxWalkSpeed or {}
-
-            local count = 0
-            for _, pc in ipairs(pcs) do
-                if pc:IsValid() then
-                    local pName = nil
-                    pcall(function()
-                        local ps = pc.PlayerState
-                        if ps and ps:IsValid() then
-                            local val = ps.PlayerNamePrivate
-                            if val then
-                                local ok, str = pcall(function() return val:ToString() end)
-                                if ok and str then pName = str end
-                            end
-                        end
-                    end)
-
-                    local nameMatch = not targetName or (pName and pName:lower() == targetName)
-                    if nameMatch then
-                        pcall(function()
-                            local pawn = pc.Pawn
-                            if pawn and pawn:IsValid() then
-                                local mc = pawn.CharacterMovement or pawn.MovementComponent
-                                if mc and mc:IsValid() then
-                                    local key = pName or tostring(pc)
-                                    if not Admin._origMaxWalkSpeed[key] then
-                                        local ok, orig = pcall(function() return mc.MaxWalkSpeed end)
-                                        if ok and orig and orig > 0 then
-                                            Admin._origMaxWalkSpeed[key] = orig
-                                        end
-                                    end
-                                    local base = Admin._origMaxWalkSpeed[key]
-                                    mc.CheatMovementSpeedModifer = mult
-                                    if base then
-                                        mc.MaxWalkSpeed = base * mult
-                                    end
-                                    count = count + 1
-                                end
-                            end
-                        end)
-                    end
-                end
-            end
-
-            if targetName then
-                return count > 0 and ("Speed set to " .. mult .. "x for " .. targetName) or ("Player '" .. targetName .. "' not found")
-            end
-            return "Speed set to " .. mult .. "x for " .. count .. " player(s)"
-        end
+    Admin._commands["wp.gravity"] = {
+        description = "Set player gravity multiplier (CharacterMovement.GravityScale; 1.0=normal, 0.3=moon)",
+        usage = "wp.gravity [player] <multiplier>",
+        category = "admin",
+        examples = {"wp.gravity 0.3", "wp.gravity HumanGenome 2"},
+        playerArg = true,
+        handler = function(args) return setMovementCheat(args, "gravity") end,
     }
 
     Admin._commands["wp.health"] = {
