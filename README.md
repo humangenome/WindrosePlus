@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/windroseplus-landscape-dark.png">
+    <img src="docs/brand/windroseplus-landscape.png" alt="Windrose+" width="550">
+  </picture>
+</p>
+
 # Windrose+
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
