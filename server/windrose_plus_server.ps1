@@ -6,7 +6,7 @@ param(
     [string]$BindIp = ""
 )
 
-$Version = "1.0.14"
+$Version = "1.0.16"
 
 # Find game directory
 function Find-GameDir {
