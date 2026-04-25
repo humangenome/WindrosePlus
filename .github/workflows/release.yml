@@ -107,6 +107,28 @@ jobs:
           name: windrose-heal-windows
           path: tools/windrose-heal
 
+      - name: Stamp release version into source
+        # The Lua VERSION constant (reported by `wp.version` and stamped into
+        # RCON status) and the start-script $Version banner are rewritten
+        # here from the git tag so they cannot drift between releases. Any
+        # literal in these two files is treated as a development placeholder.
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "Stamping version $TAG"
+          # Lua main.lua: VERSION = "X.Y.Z",
+          sed -i -E 's/^(\s*VERSION\s*=\s*)"[^"]*"(,)$/\1"'"$TAG"'"\2/' WindrosePlus/Scripts/main.lua
+          # PowerShell start script: $Version = "X.Y.Z"
+          sed -i -E 's/^\$Version\s*=\s*"[^"]*"$/$Version = "'"$TAG"'"/' server/windrose_plus_server.ps1
+          echo "--- main.lua VERSION line ---"
+          grep -n 'VERSION = ' WindrosePlus/Scripts/main.lua | head -1
+          echo "--- windrose_plus_server.ps1 \$Version line ---"
+          grep -n '^\$Version = ' server/windrose_plus_server.ps1 | head -1
+          # Hard-fail if either file did not end up with the expected tag,
+          # so a future refactor that renames the constant is caught here
+          # rather than shipping an incorrectly-stamped zip.
+          grep -q "VERSION = \"$TAG\"" WindrosePlus/Scripts/main.lua
+          grep -q "^\$Version = \"$TAG\"$" server/windrose_plus_server.ps1
+
       - name: Extract release notes from CHANGELOG
         id: notes
         run: |

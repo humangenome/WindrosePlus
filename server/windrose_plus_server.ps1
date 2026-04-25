@@ -6,6 +6,8 @@ param(
     [string]$BindIp = ""
 )
 
+# $Version is rewritten from the git tag by .github/workflows/release.yml at
+# release time. The literal here is the development default.
 $Version = "1.0.16"
 
 # Find game directory
