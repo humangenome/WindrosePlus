@@ -858,6 +858,178 @@
         .tab-content.active { display: flex; }
         #seachart-pane { position: relative; }
         #seachart-map { width: 100%; height: 100%; min-height: 300px; background: #141820; border-radius: 8px; }
+
+        .player-card-footer {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(212, 160, 74, 0.1);
+            display: flex;
+            justify-content: flex-end;
+        }
+        .repair-link {
+            background: transparent;
+            border: 0;
+            color: var(--text-muted);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.74rem;
+            cursor: pointer;
+            padding: 2px 4px;
+            letter-spacing: 0.04em;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.18s;
+        }
+        .repair-link:hover { color: var(--accent); }
+        .repair-link svg { opacity: 0.7; }
+        .repair-link:hover svg { opacity: 1; }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.66);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-shell {
+            width: min(620px, calc(100% - 32px));
+            max-height: 88vh;
+            overflow-y: auto;
+            background: linear-gradient(180deg, rgba(50, 36, 25, 0.98), rgba(28, 19, 13, 0.98));
+            border: 1px solid rgba(212, 160, 74, 0.45);
+            border-radius: 14px;
+            padding: 20px 22px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+            position: relative;
+            color: var(--text);
+            font-family: 'Cormorant Garamond', Georgia, serif;
+        }
+        .modal-titlebar {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin: -2px -2px 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            gap: 14px;
+        }
+        .modal-title {
+            margin: 0;
+            font-family: 'Cinzel', Georgia, serif;
+            font-size: 1.05rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+        .modal-title .accent { color: var(--accent); }
+        .modal-close {
+            background: transparent;
+            border: 0;
+            color: var(--text-muted);
+            font-size: 1.6rem;
+            cursor: pointer;
+            line-height: 0.8;
+            padding: 0 6px;
+            font-family: 'Cormorant Garamond', serif;
+        }
+        .modal-close:hover { color: var(--accent); }
+        .modal-body {
+            font-size: 1rem;
+            line-height: 1.45;
+            color: var(--text-dim);
+        }
+        .modal-body p { margin: 0 0 12px; }
+        .modal-body ol {
+            margin: 0 0 14px;
+            padding-left: 22px;
+        }
+        .modal-body li { margin: 4px 0; }
+        .modal-body code {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.84em;
+            color: var(--accent);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1px 5px;
+            border-radius: 4px;
+            border: 1px solid rgba(212, 160, 74, 0.18);
+        }
+        .modal-upload {
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            margin: 12px 0 4px;
+            background: rgba(0, 0, 0, 0.22);
+        }
+        .modal-upload input[type="file"] {
+            width: 100%;
+            color: var(--text-dim);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+        }
+        .modal-btn {
+            background: linear-gradient(180deg, rgba(212, 160, 74, 0.28), rgba(128, 83, 35, 0.32));
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-family: 'Cinzel', Georgia, serif;
+            font-weight: 700;
+            font-size: 0.74rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+        .modal-btn:hover:not(:disabled) {
+            background: linear-gradient(180deg, rgba(212, 160, 74, 0.42), rgba(128, 83, 35, 0.46));
+            border-color: var(--accent);
+        }
+        .modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-status {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.92rem;
+            line-height: 1.4;
+            display: none;
+            white-space: pre-wrap;
+        }
+        .modal-status.busy {
+            display: block;
+            background: rgba(212, 160, 74, 0.12);
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .modal-status.ok {
+            display: block;
+            background: rgba(184, 212, 122, 0.12);
+            border: 1px solid rgba(184, 212, 122, 0.34);
+            color: #c8de8a;
+        }
+        .modal-status.err {
+            display: block;
+            background: rgba(211, 125, 102, 0.14);
+            border: 1px solid rgba(211, 125, 102, 0.36);
+            color: #f0b8a8;
+        }
+        .modal-warning {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.86rem;
+            line-height: 1.4;
+            font-style: italic;
+        }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -898,7 +1070,6 @@
                 <div class="dashboard-tabs">
                     <button class="dashboard-tab active" data-tab="console">CONSOLE</button>
                     <button class="dashboard-tab" data-tab="seachart">SEA CHART</button>
-                    <a class="dashboard-link" href="/repair">REPAIR</a>
                 </div>
                 <span id="status-badge">CONNECTING</span>
             </div>
@@ -929,6 +1100,12 @@
                 <div class="card player-card">
                     <div class="player-list" id="player-list">
                         <div class="empty-state-slim">No crew aboard</div>
+                    </div>
+                    <div class="player-card-footer">
+                        <button type="button" class="repair-link" id="open-repair-modal" title="Repair a stuck character save (RewardLevel &lt; CurrentLevel drift)">
+                            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 4.5L13 6L9 10L7.5 8.5L11.5 4.5Z"/><path d="M7.5 8.5L3.5 12.5L4.5 13.5L8.5 9.5"/><path d="M11.5 4.5C12.5 3.5 13.5 4 14 4.5C14.5 5 15 6 14 7"/></svg>
+                            Repair character save
+                        </button>
                     </div>
                 </div>
                 <!-- Hidden elements for test compat -->
@@ -1638,6 +1815,117 @@
                 document.getElementById('seachart-map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:Cormorant Garamond,serif;font-size:1.2rem;">Map not ready yet. Join the server once — the map generates automatically on first player connection.</div>';
             });
         }
+    </script>
+
+    <div class="modal-overlay" id="repair-modal" role="dialog" aria-modal="true" aria-labelledby="repair-modal-title">
+        <div class="modal-shell">
+            <div class="modal-titlebar">
+                <h2 class="modal-title" id="repair-modal-title">Character <span class="accent">Repair</span></h2>
+                <button type="button" class="modal-close" id="repair-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Fixes the known Windrose progression drift where a character crashes the server on join with <code>RewardLevel &lt; CurrentLevel</code>. Runs against a copy of your uploaded save and returns a repaired zip.</p>
+                <ol>
+                    <li>Close Windrose. Check Task Manager if needed.</li>
+                    <li>Open <code>%LOCALAPPDATA%\R5\Saved\SaveProfiles\</code>.</li>
+                    <li>Right-click your long-number SteamID folder and create a zip.</li>
+                    <li>Choose that zip below. Do not upload the server world save.</li>
+                    <li>After download, extract the repaired zip back into <code>SaveProfiles</code> and replace the existing files.</li>
+                </ol>
+                <div class="modal-upload">
+                    <input id="repair-file" type="file" accept=".zip,application/zip">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="modal-btn" id="repair-submit">Repair Save Zip</button>
+                </div>
+                <div id="repair-status" class="modal-status"></div>
+                <p class="modal-warning">Max upload 200 MB. Safe mode only fixes no-spend progression drift. Anything else, the tool refuses instead of guessing.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var openBtn = document.getElementById('open-repair-modal');
+            var modal = document.getElementById('repair-modal');
+            var closeBtn = document.getElementById('repair-modal-close');
+            var fileInput = document.getElementById('repair-file');
+            var submitBtn = document.getElementById('repair-submit');
+            var statusBox = document.getElementById('repair-status');
+            var lastUrl = null;
+
+            function setStatus(kind, text) {
+                statusBox.className = 'modal-status ' + (kind || '');
+                statusBox.textContent = text || '';
+            }
+            function clearDownload() {
+                if (lastUrl) { URL.revokeObjectURL(lastUrl); lastUrl = null; }
+            }
+            function openModal() {
+                modal.classList.add('active');
+                setTimeout(function() { fileInput.focus(); }, 30);
+            }
+            function closeModal() {
+                modal.classList.remove('active');
+                clearDownload();
+                setStatus('', '');
+                if (fileInput) fileInput.value = '';
+                submitBtn.disabled = false;
+            }
+
+            if (openBtn) openBtn.addEventListener('click', openModal);
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
+            });
+
+            submitBtn.addEventListener('click', async function(e) {
+                e.preventDefault();
+                clearDownload();
+
+                var file = fileInput.files && fileInput.files[0];
+                if (!file) { setStatus('err', 'Choose a SaveProfiles zip first.'); return; }
+                if (!file.name.toLowerCase().endsWith('.zip')) { setStatus('err', 'Upload a .zip file.'); return; }
+                if (file.size > 200 * 1024 * 1024) { setStatus('err', 'That zip is larger than 200 MB.'); return; }
+
+                submitBtn.disabled = true;
+                setStatus('busy', 'Repairing uploaded save. Do not close this dialog…');
+
+                try {
+                    var res = await fetch('/api/character-repair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/zip' },
+                        body: file,
+                        credentials: 'same-origin'
+                    });
+
+                    if (!res.ok) {
+                        var detail = '';
+                        try { var data = await res.json(); detail = data.detail || data.error || ''; }
+                        catch (parseErr) { try { detail = await res.text(); } catch (textErr) { detail = ''; } }
+                        setStatus('err', detail || 'No safe automatic repair was made.');
+                        return;
+                    }
+
+                    var blob = await res.blob();
+                    lastUrl = URL.createObjectURL(blob);
+
+                    var a = document.createElement('a');
+                    a.href = lastUrl;
+                    a.download = 'windrose-save-repaired.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    setStatus('ok', 'Repair complete. Your browser downloaded windrose-save-repaired.zip. Extract it into %LOCALAPPDATA%\\R5\\Saved\\SaveProfiles\\ and replace the old files before joining again.');
+                } catch (e) {
+                    setStatus('err', 'Repair request failed: ' + e.message);
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            });
+        })();
     </script>
 </body>
 </html>
