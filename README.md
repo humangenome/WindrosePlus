@@ -140,7 +140,32 @@ API.registerCommand("wp.greet", function(args)
 end, "Greet all online players")
 ```
 
-External tools that don't run inside Lua can tail `windrose_plus_data/events.log` (line-delimited JSON, written on every player join/leave) for join/leave detection without polling.
+### Server Activity Log
+Windrose+ records server-side activity to `windrose_plus_data\logs\YYYY-MM-DD.log` for review and external tooling. Files are line-delimited JSON, append-only, and rolled daily — they survive server restarts and crashes.
+
+Recorded events:
+
+| `ev`                | Fires on                                              |
+|---------------------|--------------------------------------------------------|
+| `mod.boot`          | Windrose+ initializes (version, game dir, hook avail.) |
+| `config.load`       | `windrose_plus.json` is loaded or reloaded             |
+| `config.load.fail`  | Config parse fails — defaults are used                 |
+| `player.join`       | A player connects                                      |
+| `player.leave`      | A player disconnects                                   |
+| `admin.command`     | Any `wp.*` command runs (caller, args, result, ms)     |
+| `heartbeat`         | Every 5 minutes — uptime, mode, player count, config   |
+
+Each line carries a fixed envelope: `ts` (UTC ISO-8601), `ts_unix`, `sid` (per-boot session id), `ev`, and `payload`. External tools (and mods, via `WindrosePlus.API.logEvent(ev, payload)`) can tail the current day's file or read past days for replay.
+
+Quick queries with `jq`:
+
+```bash
+# What multipliers were active during the corruption window?
+jq 'select(.ev=="heartbeat") | {ts, mult: .payload.multipliers}' logs/2026-04-27.log
+
+# Who ran which admin commands?
+jq 'select(.ev=="admin.command") | {ts, admin_user, command, status}' logs/2026-04-27.log
+```
 
 ### Character Repair
 The dashboard includes a Character Repair page at `/repair` for the known progression drift crash where the server log shows `RewardLevel < CurrentLevel` during `R5BLPlayer_ValidateData`.

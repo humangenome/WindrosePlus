@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.1] - 2026-04-27
+
+### Added
+
+- **Server Activity Log.** Windrose+ now writes a structured server-side activity record to `windrose_plus_data\logs\YYYY-MM-DD.log` (line-delimited JSON, append-only, daily roll). Captures `mod.boot`, `config.load` / `config.load.fail`, `player.join`, `player.leave`, `admin.command` (with caller, args, status, and duration), and a 5-minute `heartbeat` snapshotting active multipliers, mode, and player count. Each entry carries a per-boot `sid` (session id) so a single restart cycle can be isolated. Mods can append their own entries with `WindrosePlus.API.logEvent(name, payload)`.
+
+### Removed
+
+- **`windrose_plus_data\events.log`** is no longer written. Player join/leave records that previously landed there are now part of the Server Activity Log under `windrose_plus_data\logs\YYYY-MM-DD.log`. External tooling that tailed the old single-file path needs to point at the new dated files instead.
+
 ## [1.1.0] - 2026-04-26
 
 ### Changed

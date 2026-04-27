@@ -3,6 +3,7 @@
 
 local json = require("modules.json")
 local Log = require("modules.log")
+local Events = require("modules.events")
 
 local Config = {}
 Config._data = nil
@@ -36,10 +37,24 @@ function Config.reload()
         -- Merge with defaults so missing keys don't cause nil errors
         Config._data = Config._mergeDefaults(data, Config._defaults())
         Log.info("Config", "Config loaded successfully")
+        Events.record("config.load", {
+            path = Config._path,
+            multipliers = Config._data.multipliers,
+            features = Config._data.features,
+            rcon_enabled = Config._data.rcon and Config._data.rcon.enabled or false,
+            query_enabled = Config._data.query and Config._data.query.enabled,
+            log_level = Config._data.debug and Config._data.debug.log_level,
+            byte_size = #content,
+        })
     else
         Log.error("Config", "Failed to parse config: " .. tostring(data))
         Log.warn("Config", "Using defaults")
         Config._data = Config._defaults()
+        Events.record("config.load.fail", {
+            path = Config._path,
+            reason = tostring(data),
+            byte_size = #content,
+        })
     end
 end
 

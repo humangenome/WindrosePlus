@@ -8,6 +8,7 @@
 
 local json = require("modules.json")
 local Log = require("modules.log")
+local Events = require("modules.events")
 
 local Rcon = {}
 Rcon._spoolDir = nil
@@ -397,7 +398,30 @@ function Rcon._processFile(filePath, filename)
             for i = 2, #parts do table.insert(args, parts[i]) end
         end
     end
+    local startMs = (os.clock() * 1000)
     local ok, status, message = pcall(Rcon._admin.execute, command, args)
+    local durationMs = math.floor((os.clock() * 1000) - startMs + 0.5)
+
+    -- Truncate response message in the activity log to keep entries small.
+    -- Full message still goes back to the caller; this is just the record.
+    local recordedMessage = nil
+    if message ~= nil then
+        local s = tostring(message)
+        if #s > 512 then s = s:sub(1, 512) .. "...(truncated)" end
+        recordedMessage = s
+    end
+    Events.record("admin.command", {
+        id = id,
+        command = originalCommand,
+        resolved_command = command,
+        args = args,
+        admin_user = adminUser,
+        ok = ok,
+        status = ok and status or "error",
+        message = ok and recordedMessage or tostring(status),
+        duration_ms = durationMs,
+    })
+
     if ok then
         finish(status, message, originalCommand, adminUser)
     else

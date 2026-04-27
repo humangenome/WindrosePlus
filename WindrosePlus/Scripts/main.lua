@@ -21,6 +21,7 @@ WindrosePlus = {
 }
 
 local Log = require("modules.log")
+local Events = require("modules.events")
 
 print("[Windrose+] v" .. WindrosePlus.VERSION .. " loaded\n")
 
@@ -124,6 +125,20 @@ end
 local gameDir = detectGameDir()
 WindrosePlus._gameDir = gameDir
 Log.info("Core", "Game dir: " .. gameDir)
+
+-- Bring up the server activity log before any module init. From this point
+-- forward, server-state changes (boot, config, admin commands, joins/leaves,
+-- heartbeats) are appended to windrose_plus_data\logs\YYYY-MM-DD.log.
+Events.init(gameDir)
+Events.record("mod.boot", {
+    version = WindrosePlus.VERSION,
+    game_dir = gameDir,
+    lua_version = _VERSION,
+    has_execute_in_game_thread = type(ExecuteInGameThread) == "function",
+    has_register_hook = type(RegisterHook) == "function",
+})
+WindrosePlus._modules.Events = Events
+WindrosePlus.API.logEvent = function(ev, payload) Events.record(ev, payload) end
 
 -- ------------
 -- Module loading
@@ -398,44 +413,37 @@ if Admin then
     end)
 end
 
--- Append-only structured event log (windrose_plus_data\events.log).
--- Line-delimited JSON, best-effort coordinates (pawn location only available
--- when the join/leave poll resolved a position). External managers tail the
--- file; in-process callers should still use WindrosePlus.API.onPlayerJoin/Leave.
-local _eventsLogPath = gameDir .. "windrose_plus_data\\events.log"
-local _eventsJson = require("modules.json")
-local _eventsLogOk = false
-do
-    local probe = io.open(_eventsLogPath, "a")
-    if probe then
-        probe:close()
-        _eventsLogOk = true
-        Log.info("Events", "Logging to " .. _eventsLogPath)
-    else
-        Log.warn("Events", "Cannot open " .. _eventsLogPath .. " — events.log disabled (check windrose_plus_data is writable)")
-    end
+-- Player join/leave events (server activity log).
+WindrosePlus.API.onPlayerJoin(function(p)
+    Events.record("player.join", { name = p.name, x = p.x, y = p.y, z = p.z })
+end)
+WindrosePlus.API.onPlayerLeave(function(p)
+    Events.record("player.leave", { name = p.name, x = p.x, y = p.y, z = p.z })
+end)
+
+-- Heartbeat: every 5 minutes, snapshot server state so a later investigator
+-- can reconstruct what multipliers / config were active during any window
+-- without needing to find the last config.load entry.
+local _bootTime = os.time()
+local _lastHeartbeat = 0
+local function _writeHeartbeat()
+    local now = os.time()
+    if now - _lastHeartbeat < 300 then return end
+    _lastHeartbeat = now
+    local cfg = Config and Config._data or {}
+    Events.record("heartbeat", {
+        uptime_sec = now - _bootTime,
+        mode = WindrosePlus.state.mode,
+        player_count = WindrosePlus.state.playerCount,
+        last_player_seen = WindrosePlus.state.lastPlayerSeen,
+        multipliers = cfg.multipliers,
+        rcon_enabled = cfg.rcon and cfg.rcon.enabled or false,
+    })
 end
-local function _appendEvent(eventType, player)
-    if not _eventsLogOk then return end
-    local entry = {
-        ts = os.time(),
-        type = eventType,
-        player = player.name or "Player",
-        x = player.x, y = player.y, z = player.z
-    }
-    local ok, line = pcall(_eventsJson.encode, entry)
-    if not ok then return end
-    local f = io.open(_eventsLogPath, "a")
-    if not f then
-        _eventsLogOk = false
-        Log.warn("Events", "Lost write access to " .. _eventsLogPath .. " — disabling")
-        return
-    end
-    f:write(line .. "\n")
-    f:close()
-end
-WindrosePlus.API.onPlayerJoin(function(p) pcall(_appendEvent, "join", p) end)
-WindrosePlus.API.onPlayerLeave(function(p) pcall(_appendEvent, "leave", p) end)
+LoopAsync(60000, function() pcall(_writeHeartbeat); return false end)
+-- Fire one immediate heartbeat on boot so the first line after mod.boot
+-- already carries the active config snapshot.
+pcall(_writeHeartbeat)
 
 -- ------------
 -- Update drivers
