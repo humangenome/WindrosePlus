@@ -1156,6 +1156,225 @@ function Admin._registerCommands()
         end
     }
 
+    -- =========================================
+    -- Admin Powers
+    -- =========================================
+
+    Admin._commands["wp.heal"] = {
+        description = "Restore player health to maximum",
+        usage = "wp.heal [player]",
+        category = "admin",
+        playerArg = true,
+        examples = {"wp.heal", "wp.heal HumanGenome"},
+        handler = function(args)
+            local targetName = #args > 0 and table.concat(args, " "):lower() or nil
+            local chars = FindAllOf("R5Character")
+            if not chars then return "No players found" end
+            local count = 0
+            for _, char in ipairs(chars) do
+                if char:IsValid() then
+                    local hasController = false
+                    pcall(function()
+                        local ctrl = char.Controller
+                        if ctrl and ctrl:IsValid() then hasController = true end
+                    end)
+                    if hasController then
+                        local charName = nil
+                        pcall(function() charName = char:GetFullName():match("([^%.]+)$") end)
+                        local nameMatch = not targetName or (charName and charName:lower() == targetName)
+                        if nameMatch then
+                            pcall(function()
+                                local hc = char.HealthComponent
+                                if hc and hc:IsValid() then
+                                    local maxHp = hc.MaxHealth
+                                    if maxHp then
+                                        hc.CurrentHealth = maxHp
+                                        count = count + 1
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            if targetName then
+                return count > 0 and ("Healed " .. targetName .. " to full") or ("Player '" .. targetName .. "' not found")
+            end
+            return count > 0 and ("Healed " .. count .. " player(s) to full") or "No players to heal"
+        end
+    }
+
+    Admin._commands["wp.god"] = {
+        description = "Toggle invulnerability for a player",
+        usage = "wp.god [player]",
+        category = "admin",
+        playerArg = true,
+        examples = {"wp.god", "wp.god HumanGenome"},
+        handler = function(args)
+            local targetName = #args > 0 and table.concat(args, " "):lower() or nil
+            local chars = FindAllOf("R5Character")
+            if not chars then return "No players found" end
+            local results = {}
+            for _, char in ipairs(chars) do
+                if char:IsValid() then
+                    local hasController = false
+                    pcall(function()
+                        local ctrl = char.Controller
+                        if ctrl and ctrl:IsValid() then hasController = true end
+                    end)
+                    if hasController then
+                        local charName = nil
+                        pcall(function() charName = char:GetFullName():match("([^%.]+)$") end)
+                        local nameMatch = not targetName or (charName and charName:lower() == targetName)
+                        if nameMatch then
+                            local toggled = false
+                            -- Try R5-specific bIsInvulnerable first
+                            pcall(function()
+                                local current = char.bIsInvulnerable
+                                if current ~= nil then
+                                    char.bIsInvulnerable = not current
+                                    toggled = true
+                                    table.insert(results, (charName or "Player") .. ": god " .. (char.bIsInvulnerable and "ON" or "OFF"))
+                                end
+                            end)
+                            -- Fallback: standard UE4 bCanBeDamaged (inverted logic)
+                            if not toggled then
+                                pcall(function()
+                                    local current = char.bCanBeDamaged
+                                    if current ~= nil then
+                                        char.bCanBeDamaged = not current
+                                        toggled = true
+                                        table.insert(results, (charName or "Player") .. ": god " .. (not char.bCanBeDamaged and "ON" or "OFF"))
+                                    end
+                                end)
+                            end
+                            if not toggled then
+                                table.insert(results, (charName or "Player") .. ": not supported on this build")
+                            end
+                        end
+                    end
+                end
+            end
+            return #results > 0 and table.concat(results, "\n") or (targetName and ("Player '" .. targetName .. "' not found") or "No players found")
+        end
+    }
+
+    Admin._commands["wp.fly"] = {
+        description = "Toggle fly mode for a player",
+        usage = "wp.fly [player]",
+        category = "admin",
+        playerArg = true,
+        examples = {"wp.fly", "wp.fly HumanGenome"},
+        handler = function(args)
+            local targetName = #args > 0 and table.concat(args, " "):lower() or nil
+            local pcs = FindAllOf("PlayerController")
+            if not pcs then return "No players found" end
+            local results = {}
+            for _, pc in ipairs(pcs) do
+                if pc:IsValid() then
+                    local pcName = nil
+                    pcall(function()
+                        local ps = pc.PlayerState
+                        if ps and ps:IsValid() then
+                            local val = ps.PlayerNamePrivate
+                            if val then
+                                local ok, str = pcall(function() return val:ToString() end)
+                                if ok and str then pcName = str end
+                            end
+                        end
+                    end)
+                    local nameMatch = not targetName or (pcName and pcName:lower() == targetName)
+                    if nameMatch then
+                        pcall(function()
+                            local pawn = pc.Pawn
+                            if pawn and pawn:IsValid() then
+                                local mc = pawn.CharacterMovement or pawn.MovementComponent
+                                if mc and mc:IsValid() then
+                                    local current = mc.bCheatFlying
+                                    if current ~= nil then
+                                        local enable = not current
+                                        mc.bCheatFlying = enable
+                                        mc.bCanFly = enable
+                                        table.insert(results, (pcName or "Player") .. ": fly " .. (enable and "ON" or "OFF"))
+                                    else
+                                        table.insert(results, (pcName or "Player") .. ": fly not available")
+                                    end
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+            return #results > 0 and table.concat(results, "\n") or (targetName and ("Player '" .. targetName .. "' not found") or "No players found")
+        end
+    }
+
+    Admin._commands["wp.kick"] = {
+        description = "Disconnect a player from the server",
+        usage = "wp.kick <player>",
+        category = "admin",
+        examples = {"wp.kick HumanGenome", "wp.kick John Smith"},
+        handler = function(args)
+            if #args == 0 then return "Usage: wp.kick <player>" end
+            local targetName = table.concat(args, " "):lower()
+            local pcs = FindAllOf("PlayerController")
+            if not pcs then return "No players found" end
+            local found = false
+            for _, pc in ipairs(pcs) do
+                if pc:IsValid() then
+                    local pcName = nil
+                    pcall(function()
+                        local ps = pc.PlayerState
+                        if ps and ps:IsValid() then
+                            local val = ps.PlayerNamePrivate
+                            if val then
+                                local ok, str = pcall(function() return val:ToString() end)
+                                if ok and str then pcName = str end
+                            end
+                        end
+                    end)
+                    if pcName and pcName:lower() == targetName then
+                        found = true
+                        -- Try GameMode KickPlayer first (clean disconnect with reason)
+                        local done = false
+                        pcall(function()
+                            local gm = Admin._findFirstValid("R5GameMode") or Admin._findFirstValid("GameMode")
+                            if gm and gm:IsValid() then
+                                gm:KickPlayer(pc, "")
+                                done = true
+                            end
+                        end)
+                        -- Fallback: destroy the controller
+                        if not done then
+                            pcall(function() pc:Destroy() end)
+                        end
+                        break
+                    end
+                end
+            end
+            return found and ("Kicked " .. targetName) or ("Player '" .. targetName .. "' not found")
+        end
+    }
+
+    Admin._commands["wp.mods"] = {
+        description = "List loaded third-party mods",
+        usage = "wp.mods",
+        category = "server",
+        handler = function(args)
+            local mods = WindrosePlus._modules.Mods
+            if not mods then return "Mod loader not initialized" end
+            local loaded = mods.getLoadedMods and mods.getLoadedMods() or {}
+            if #loaded == 0 then return "No mods loaded" end
+            local lines = {"Loaded mods (" .. #loaded .. "):"}
+            for _, m in ipairs(loaded) do
+                local line = "  " .. (m.name or m.dir or "?") .. " v" .. (m.version or "?")
+                if m.author and m.author ~= "?" then line = line .. " by " .. m.author end
+                table.insert(lines, line)
+            end
+            return table.concat(lines, "\n")
+        end
+    }
+
 end
 
 -- Delegate to shared helper in WindrosePlus global
