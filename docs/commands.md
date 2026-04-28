@@ -110,6 +110,21 @@ Usage: wp.uptime
 Uptime: 2d 14h 32m
 ```
 
+### wp.mods
+
+List all loaded third-party mods with version and author.
+
+```
+Usage: wp.mods
+```
+
+```
+> wp.mods
+Loaded mods (2):
+  example-welcome v1.0 by HumanGenome
+  discord-relay v0.3 by CaptainMorgan
+```
+
 ### wp.reload
 
 Reload config from disk. Changes to `windrose_plus.json` take effect immediately without a server restart.
@@ -360,6 +375,70 @@ Connections:
 ---
 
 ## Admin
+
+### wp.heal
+
+Restore one or all players to full health. Accepts `[player]` argument.
+
+```
+Usage: wp.heal [player]
+```
+
+```
+> wp.heal
+Healed 3 player(s) to full
+
+> wp.heal HumanGenome
+Healed humangenome to full
+```
+
+### wp.god
+
+Toggle invulnerability for one or all players. Accepts `[player]` argument.
+
+```
+Usage: wp.god [player]
+```
+
+```
+> wp.god HumanGenome
+HumanGenome: god ON
+
+> wp.god HumanGenome
+HumanGenome: god OFF
+```
+
+### wp.fly
+
+Toggle fly mode for one or all players. Accepts `[player]` argument.
+
+```
+Usage: wp.fly [player]
+```
+
+```
+> wp.fly HumanGenome
+HumanGenome: fly ON
+
+> wp.fly HumanGenome
+HumanGenome: fly OFF
+```
+
+### wp.kick
+
+Disconnect a player from the server.
+
+```
+Usage: wp.kick <player>
+```
+
+```
+> wp.kick HumanGenome
+Kicked humangenome
+
+> wp.kick John Smith
+Kicked john smith
+```
 
 ### wp.speed
 

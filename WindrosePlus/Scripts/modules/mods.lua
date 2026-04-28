@@ -11,6 +11,7 @@ Mods._loaded = {}
 Mods._fileSnapshots = {} -- filename -> mtime string for change detection
 
 function Mods.init(gameDir)
+    Mods._gameDir = gameDir
     -- Mods live alongside Scripts in the WindrosePlus mod folder
     -- UE4SS CWD is R5/Binaries/Win64, build path relative to known structure
     -- __SCRIPT_DIRECTORY__ or similar UE4SS globals may not exist, so use relative path
@@ -47,6 +48,9 @@ function Mods.init(gameDir)
 
     -- Scan and load mods
     Mods._scanAndLoad()
+
+    -- Write mods list so the dashboard /api/mods endpoint can serve it
+    Mods._writeModsList()
 
     -- Take initial file snapshot for change detection
     Mods._takeSnapshot()
@@ -206,6 +210,19 @@ end
 
 function Mods.getLoadedMods()
     return Mods._loaded
+end
+
+function Mods._writeModsList()
+    if not Mods._gameDir then return end
+    local list = {}
+    for _, m in ipairs(Mods._loaded) do
+        table.insert(list, { name = m.name, version = m.version, author = m.author, dir = m.dir })
+    end
+    local ok, content = pcall(json.encode, list)
+    if not ok then return end
+    local path = Mods._gameDir .. "windrose_plus_data\\mods_list.json"
+    local f = io.open(path, "w")
+    if f then f:write(content); f:close() end
 end
 
 return Mods

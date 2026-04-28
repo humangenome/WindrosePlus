@@ -149,6 +149,29 @@ function Get-SessionFromCookies($request) {
     return $null
 }
 
+# RCON rate limiting — max 10 commands per 10-second window per source IP
+$script:rconRateLimit = @{}
+
+function Test-RconRateLimit($clientIp) {
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if (-not $script:rconRateLimit.ContainsKey($clientIp)) {
+        $script:rconRateLimit[$clientIp] = [System.Collections.Generic.List[long]]::new()
+    }
+    $timestamps = $script:rconRateLimit[$clientIp]
+    $cutoff = $now - 10
+    while ($timestamps.Count -gt 0 -and $timestamps[0] -le $cutoff) { $timestamps.RemoveAt(0) }
+    if ($timestamps.Count -ge 10) { return $false }
+    $timestamps.Add($now)
+    # Prune stale IPs to prevent unbounded growth
+    if ($script:rconRateLimit.Count -gt 500) {
+        $stale = @($script:rconRateLimit.GetEnumerator() |
+            Where-Object { $_.Value.Count -eq 0 -or $_.Value[$_.Value.Count - 1] -lt ($now - 60) } |
+            Select-Object -ExpandProperty Key)
+        foreach ($k in $stale) { $script:rconRateLimit.Remove($k) }
+    }
+    return $true
+}
+
 # Login page HTML
 $loginPageHtml = @"
 <!DOCTYPE html>
@@ -266,6 +289,34 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
     }
 } | Out-Null
 $tileGenTimer.Start()
+
+# CPU affinity signal handler — reads affinity_request.txt written by the Lua mod
+# and applies the requested CPU mask to the game server process.
+# Requires the dashboard to run with sufficient permissions to SetInformation on the
+# game process (both typically run as admin per the installation guide).
+$affinityTimer = New-Object System.Timers.Timer
+$affinityTimer.Interval = 3000
+$affinityTimer.AutoReset = $true
+$affinitySignalPath = Join-Path $dataDir "affinity_request.txt"
+Register-ObjectEvent $affinityTimer Elapsed -MessageData $affinitySignalPath -Action {
+    $sigFile = $Event.MessageData
+    if (Test-Path -LiteralPath $sigFile) {
+        try {
+            $content = Get-Content -LiteralPath $sigFile -Raw -ErrorAction Stop
+            Remove-Item $sigFile -Force -ErrorAction SilentlyContinue
+            $mask = [long](($content -split "`n" | Select-Object -First 1).Trim())
+            $proc = Get-Process -Name "WindroseServer-Win64-Shipping" -ErrorAction SilentlyContinue
+            if (-not $proc) { $proc = Get-Process -Name "WindroseServer" -ErrorAction SilentlyContinue }
+            if ($proc) {
+                $proc.ProcessorAffinity = [System.IntPtr]$mask
+                Write-Host "CPU affinity -> 0x$([string]::Format('{0:X}', $mask))"
+            }
+        } catch {
+            Write-Host "CPU affinity handler: $_"
+        }
+    }
+} | Out-Null
+$affinityTimer.Start()
 
 function Send-Json($context, $data, $statusCode = 200) {
     $json = if ($null -eq $data) { '{}' } else { $data | ConvertTo-Json -Depth 10 -Compress }
@@ -713,6 +764,10 @@ try {
                         @{name="wp.pos"; usage="wp.pos [player]"; description="Get player positions"; category="players"},
                         @{name="wp.stamina"; usage="wp.stamina [player]"; description="Read stamina/hunger/thirst"; category="players"},
                         @{name="wp.speed"; usage="wp.speed [player] <mult>"; description="Set movement speed"; category="admin"},
+                        @{name="wp.heal"; usage="wp.heal [player]"; description="Restore player health to maximum"; category="admin"},
+                        @{name="wp.god"; usage="wp.god [player]"; description="Toggle invulnerability"; category="admin"},
+                        @{name="wp.fly"; usage="wp.fly [player]"; description="Toggle fly mode"; category="admin"},
+                        @{name="wp.kick"; usage="wp.kick <player>"; description="Disconnect a player"; category="admin"},
                         @{name="wp.jump"; usage="wp.jump [player] <mult>"; description="Set jump height (1.0=normal, 2.0=double)"; category="admin"},
                         @{name="wp.gravity"; usage="wp.gravity [player] <mult>"; description="Set gravity (1.0=normal, 0.3=moon)"; category="admin"},
                         @{name="wp.time"; usage="wp.time"; description="Read current time of day"; category="world"},
@@ -722,6 +777,7 @@ try {
                         @{name="wp.perf"; usage="wp.perf"; description="Show server performance metrics"; category="diagnostics"},
                         @{name="wp.memory"; usage="wp.memory"; description="Detailed memory usage"; category="diagnostics"},
                         @{name="wp.connections"; usage="wp.connections"; description="Network connection info"; category="diagnostics"},
+                        @{name="wp.mods"; usage="wp.mods"; description="List loaded mods"; category="server"},
                         @{name="wp.mapgen"; usage="wp.mapgen"; description="Generate heightmap for live map"; category="server"},
                         @{name="wp.mapexport"; usage="wp.mapexport"; description="Trigger terrain heightmap export"; category="server"}
                     )
@@ -769,6 +825,11 @@ try {
                 "/api/rcon" {
                     if ($method -ne "POST") {
                         Send-Json $context @{ error = "POST required" } 405
+                        continue
+                    }
+                    $clientIp = $context.Request.RemoteEndPoint.Address.ToString()
+                    if (-not (Test-RconRateLimit $clientIp)) {
+                        Send-Json $context @{ error = "Rate limit exceeded — max 10 commands per 10 seconds" } 429
                         continue
                     }
                     $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
@@ -888,6 +949,25 @@ try {
                     } finally {
                         Remove-Item -LiteralPath $uploadPath -Force -ErrorAction SilentlyContinue
                         Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                "/api/mods" {
+                    $modsFile = Join-Path $dataDir "mods_list.json"
+                    if (Test-Path -LiteralPath $modsFile) {
+                        try {
+                            $raw = Get-Content $modsFile -Raw -ErrorAction Stop
+                            $buffer = [System.Text.Encoding]::UTF8.GetBytes($raw)
+                            $context.Response.StatusCode = 200
+                            $context.Response.ContentType = "application/json"
+                            $context.Response.Headers.Add("Access-Control-Allow-Origin", "*")
+                            $context.Response.ContentLength64 = $buffer.Length
+                            $context.Response.OutputStream.Write($buffer, 0, $buffer.Length)
+                            $context.Response.Close()
+                        } catch {
+                            Send-Json $context @{ mods = @(); error = $_.Exception.Message }
+                        }
+                    } else {
+                        Send-Json $context @{ mods = @() }
                     }
                 }
                 default {
