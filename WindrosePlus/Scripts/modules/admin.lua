@@ -1400,86 +1400,13 @@ function Admin._registerCommands()
         end
     }
 
-    Admin._commands["wp.kick"] = {
-        description = "Forcibly disconnect a player by destroying their PlayerController",
-        usage = "wp.kick <playername>",
-        category = "admin",
-        examples = {"wp.kick HumanGenome"},
-        playerArg = true,
-        handler = function(args)
-            if #args < 1 then return "Usage: wp.kick <playername>" end
-            local target = table.concat(args, " ")
-            local matches = Admin._findPlayerByDisplayName(target)
-            if #matches == 0 then return "No player found with name '" .. target .. "'" end
-            if #matches > 1 then
-                return "Multiple players match '" .. target .. "' (" .. #matches ..
-                    " matches) - refusing to kick. Use exact unique name."
-            end
-            local m = matches[1]
-            if not m.pc or not m.pc:IsValid() then
-                return "Player '" .. m.name .. "' has no valid PlayerController - cannot kick"
-            end
-            local pcName = "?"
-            pcall(function() pcName = m.pc:GetFullName() end)
-            local ok, err = pcall(function() m.pc:K2_DestroyActor() end)
-            if not ok then return "Kick failed: " .. tostring(err) end
-            return "Kicked '" .. m.name .. "' (destroyed PC: " .. pcName .. ")"
-        end
-    }
-
-    Admin._commands["wp.kick_dryrun"] = {
-        hidden = true, category = "debug",
-        description = "Resolve a player's PlayerController and print without kicking. Use to verify wp.kick will work.",
-        usage = "wp.kick_dryrun <playername>",
-        handler = function(args)
-            if #args < 1 then return "Usage: wp.kick_dryrun <playername>" end
-            local target = table.concat(args, " ")
-            local matches = Admin._findPlayerByDisplayName(target)
-            if #matches == 0 then return "No player found with name '" .. target .. "'" end
-            local lines = {}
-            for _, m in ipairs(matches) do
-                local pcInfo = "(no controller)"
-                local pcValid = false
-                if m.pc and m.pc:IsValid() then
-                    pcValid = true
-                    pcall(function() pcInfo = m.pc:GetFullName() end)
-                end
-                table.insert(lines, "  " .. m.name .. " => valid=" .. tostring(pcValid) .. "  PC=" .. pcInfo)
-            end
-            return "Kick dry-run (no destruction):\n" .. table.concat(lines, "\n")
-        end
-    }
-
-    -- Diagnostic stub. UE4SS Lua cannot deref FUniqueNetIdRepl by-value (the property
-    -- access returns the UScriptStruct type, not the live struct instance). Real Steam64
-    -- export needs a C++ UE4SS mod, scheduled with the v1.3 chat-broadcast mod work.
-    Admin._commands["wp.netid"] = {
-        hidden = true, category = "debug",
-        description = "Diagnostic stub for player network ID lookup. UE4SS Lua cannot deref FUniqueNetIdRepl; needs C++ helper (v1.3).",
-        usage = "wp.netid [playername]",
-        handler = function(args)
-            local target = args[1] and table.concat(args, " ") or nil
-            local matches = Admin._findPlayerByDisplayName(target)
-            if #matches == 0 then
-                return target and ("No player found with name '" .. target .. "'")
-                    or "No R5PlayerState instances with PlayerNamePrivate found"
-            end
-            local lines = {"Network ID lookup (diagnostic; Lua cannot deref UniqueID):"}
-            for _, m in ipairs(matches) do
-                local pcName = "(no controller)"
-                if m.pc and m.pc:IsValid() then
-                    pcall(function() pcName = m.pc:GetFullName() end)
-                end
-                local pid = nil
-                pcall(function() pid = m.state.PlayerId end)
-                table.insert(lines, "  " .. m.name ..
-                    "  PlayerId=" .. tostring(pid or "?") ..
-                    "  PC=" .. pcName)
-            end
-            table.insert(lines, "(Real Steam64 export pending v1.3 C++ UE4SS mod)")
-            return table.concat(lines, "\n")
-        end
-    }
+    -- wp.kick / wp.netid / wp.say are deferred to v1.3.0. UE4SS Lua only binds
+    -- UFunctions and a tiny set of native helpers (GetClass / IsValid / ToString /
+    -- GetFName / GetFullName). It cannot call the C++ virtual methods needed for
+    -- player disconnect (UNetConnection::Close, AActor::Destroy on remotely-owned
+    -- PCs, UWorld::Exec, APlayerController::ConsoleCommand) and cannot deref
+    -- USTRUCT-by-value properties like FUniqueNetIdRepl. All three features need a
+    -- native UE4SS C++ mod (DLL) in the same release.
 
 end
 

@@ -1,19 +1,5 @@
 # Changelog
 
-## [1.2.0] - 2026-04-28
-
-### Added
-
-- **`wp.kick <playername>`** admin command. Forcibly disconnects a player by destroying their `R5PlayerController` actor (`K2_DestroyActor`), since R5BL exposes no native `Kick` UFunction in its reflection surface. The destroyed PC closes the netconnection cleanly, mirroring the behavior of the engine's standard `Kick` console command. Refuses to act when multiple connected players share the same display name; lookup is exact-match on `R5PlayerState.PlayerNamePrivate` (case-insensitive).
-
-### Internal
-
-- Reflection-based probe tooling for class introspection: `wp.fields <Type>` walks a `UClass`'s `FProperty` chain through every superclass, `wp.methods <Type>` enumerates `UFunction`s, `wp.peek <Type> <Property>` deref-tests a single field, `wp.modreload` triggers UE4SS `RestartMod` to hot-reload `Scripts/` changes without bouncing the server. Filters on `wp.fields` and `wp.methods` now support pipe-delimited alternation, e.g. `wp.fields R5PlayerState Steam|Unique|Net`. All probe commands are hidden from `wp.help` by default and listed only under `wp.help all`.
-
-### Known limitation
-
-- A `wp.netid` command is included as a diagnostic stub, but real Steam64 export from `R5PlayerState.UniqueID` is blocked by UE4SS's Lua reflection: USTRUCT-by-value property access returns the `UScriptStruct` type definition, not the live `FUniqueNetIdRepl` value. A native UE4SS C++ helper is planned for a future release alongside in-game chat broadcast.
-
 ## [1.1.3] - 2026-04-28
 
 ### Changed
