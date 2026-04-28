@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.4] - 2026-04-28
+
+### Fixed
+
+- **Server crashes within 1–5 minutes of player activity ([#41](https://github.com/HumanGenome/WindrosePlus/issues/41)).** Three contributing causes were identified, all surfacing as `UE4SS.dll!UnknownFunction` at the top of the callstack. (1) `dispatchTick` could be invoked with `fn = nil` after a `RestartMod` or Lua GC pass dropped a captured upvalue; the resulting `LUA_ERRRUN` from `pcall(nil)` escaped UE4SS' own callback dispatcher as a fatal exception. The dispatcher now early-returns when `fn` is not a function, and the tick callbacks for `Query`, `LiveMap`, and `POIScan` resolve their writers lazily through `WindrosePlus._modules` at call time instead of capturing the function reference at registration time. (2) The `R5MovementComponent:ServerSaveMoveInput` `RegisterHook` callback could fire before `WindrosePlus` was fully initialised (early map load) or after a partial RestartMod, dereferencing a nil table inside a UE4SS callback dispatcher. The handler now guards against a missing `WindrosePlus`, `state`, `isIdle`, or `setMode` before any work. (3) `HookEngineTick = 1` and `DefaultExecuteInGameThreadMethod = EngineTick` are unsafe on the Windrose Shipping binary — UE4SS cannot reliably install the `UEngine::Tick` detour and `ExecuteInGameThread` dispatch can fault in C++ where no Lua `pcall` can catch it. `UE4SS-settings.ini` now disables the EngineTick hook and switches dispatch to `ProcessEvent`. Thanks to @Daxolion for the diagnosis and patch set, and to @joshua88wa, @haws1290, and @krautech for the crash reports.
+
+### Added
+
+- **Crash precursor heartbeat in the activity log.** The 5-minute `heartbeat` event is now joined by a 30-second `tick.beat` event that records `uptime_sec`, `mode`, `player_count`, and `last_hook_age_sec` (seconds since the last `ServerSaveMoveInput` player-pawn fire). When the Lua VM dies, the gap between the last `tick.beat` and the next `mod.boot` localises time-of-death to within 30 seconds, and `last_hook_age_sec` distinguishes "crashed mid-tick under load" from "crashed while idle" from "crashed while a player was actively moving." Adds ~1.3 MB/day to the log.
+- **`module.load.fail` event for module init failures.** When a Windrose+ module's `init()` raises during boot, the failure now surfaces in the activity log with the module name and error message, alongside the existing `Log.warn` console line. Reduces the need to cross-reference UE4SS.log for boot errors when the activity log is writable.
+- **`alive` flag on `player.join` / `player.leave`.** The query module already collects the corpse-state flag for each connected player; piping it through to the join/leave events is a free signal for rubber-banding-at-sea ([#42](https://github.com/HumanGenome/WindrosePlus/issues/42)) and save-corruption forensics where the character should be alive but the server saw `CurrentHealth = 0` at connect time.
+- **`install.ps1` now creates `windrose_plus_data\logs\` explicitly.** Lua cannot reliably create directories on locked-down hosts, so the events module had been falling back to writing the daily log into `windrose_plus_data\` next to the legacy `events.log` whenever the subdirectory was missing. Fresh installs (and reinstalls) now have the directory pre-created so the log lands in the documented location.
+
 ## [1.1.3] - 2026-04-28
 
 ### Changed

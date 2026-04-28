@@ -75,8 +75,9 @@ function Events.record(ev, payload)
         Log.warn("Events", "Lost write access — activity log disabled")
         return
     end
-    f:write(line)
-    f:write("\n")
+    -- Single write call so concurrent appends from the async heartbeat thread
+    -- and the game-thread player.join callback don't interleave a partial line.
+    f:write(line .. "\n")
     f:close()
 end
 

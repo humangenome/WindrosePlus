@@ -304,7 +304,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 <details>
 <summary><strong>Troubleshooting</strong></summary>
 
-- **Server crashes on startup** - Check `UE4SS-settings.ini`. Only `HookProcessInternal` and `HookEngineTick` should be enabled.
+- **Server crashes on startup** - Check `UE4SS-settings.ini`. As of v1.1.4 only `HookProcessInternal` should be enabled; `HookEngineTick` must be `0` and `DefaultExecuteInGameThreadMethod` must be `ProcessEvent` on Windrose Shipping builds (older guidance to enable `HookEngineTick` is no longer correct).
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed.

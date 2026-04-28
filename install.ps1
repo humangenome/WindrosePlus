@@ -146,6 +146,12 @@ $configPath = Join-Path $gameDir "windrose_plus.json"
 if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
 if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
 
+# Activity log directory. Lua can't reliably mkdir on locked-down hosts, so
+# create it here. Without this the events module falls back to writing into
+# windrose_plus_data\ next to the legacy events.log, which is hard to find.
+$logsDir = Join-Path $dataDir "logs"
+if (-not (Test-Path -LiteralPath $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
+
 # Remove legacy IdleCpuLimiter state from prior versions. The limiter caused
 # join-timeout failures under load and is gone for good as of v1.0.15.
 $legacyIdleMod = Join-Path $modsDir "IdleCpuLimiter"

@@ -151,6 +151,9 @@ local function loadModule(name, loader)
         return result
     end
     Log.warn("Core", name .. " failed: " .. tostring(result))
+    -- Surface module-load failures into the activity log so post-mortem doesn't
+    -- require digging through UE4SS.log alongside the events log.
+    pcall(function() Events.record("module.load.fail", { module = name, err = tostring(result) }) end)
     return nil
 end
 
@@ -389,7 +392,11 @@ local function runModTicks()
     for _, entry in ipairs(_modTickCallbacks) do
         if now - entry.lastRun >= entry.interval then
             entry.lastRun = now
-            pcall(entry.fn)
+            -- Same nil-guard as dispatchTick: a third-party mod that registered
+            -- a tick callback and was later unloaded leaves a stale entry whose
+            -- fn can be nil after Lua GC. pcall(nil) escapes UE4SS as a fatal
+            -- callback exception. See #41.
+            if type(entry.fn) == "function" then pcall(entry.fn) end
         end
     end
 end
@@ -414,11 +421,15 @@ if Admin then
 end
 
 -- Player join/leave events (server activity log).
+-- alive=false at join time = player resurrected on a corpse (server forced
+-- respawn while connecting). alive=false at leave = player died offline or in
+-- the same tick they disconnected. Useful signal for rubber-banding-at-sea (#42)
+-- and for save-corruption forensics where the character should be alive.
 WindrosePlus.API.onPlayerJoin(function(p)
-    Events.record("player.join", { name = p.name, x = p.x, y = p.y, z = p.z })
+    Events.record("player.join", { name = p.name, x = p.x, y = p.y, z = p.z, alive = p.alive })
 end)
 WindrosePlus.API.onPlayerLeave(function(p)
-    Events.record("player.leave", { name = p.name, x = p.x, y = p.y, z = p.z })
+    Events.record("player.leave", { name = p.name, x = p.x, y = p.y, z = p.z, alive = p.alive })
 end)
 
 -- Heartbeat: every 5 minutes, snapshot server state so a later investigator
@@ -453,11 +464,38 @@ pcall(_writeHeartbeat)
 -- Writers used to run here at 1 Hz; removed — they were redoing disk I/O +
 -- FindAllOf walks that the periodic driver already covers at its own cadence.
 local lastHookTime = 0
+
+-- Fast tick.beat (30s cadence). The 5-min heartbeat captures full state, but
+-- when a crash kills the Lua VM it leaves a gap of up to 5 minutes between the
+-- last heartbeat and the next mod.boot — too wide to localise the fault.
+-- A 30s beat narrows time-of-death to <30s and records last_hook_age (seconds
+-- since the last player movement hook fired), so crash forensics can
+-- distinguish "died mid-tick under load" from "died while idle" from
+-- "died while a player was actively moving."
+local function _writeTickBeat()
+    local now = os.time()
+    Events.record("tick.beat", {
+        uptime_sec = now - _bootTime,
+        mode = WindrosePlus.state.mode,
+        player_count = WindrosePlus.state.playerCount,
+        last_hook_age_sec = (lastHookTime > 0) and (now - lastHookTime) or -1,
+    })
+end
+LoopAsync(30000, function() pcall(_writeTickBeat); return false end)
 -- ServerSaveMoveInput fires for every moving actor — players, mobs, and NPCs.
 -- Without a player-pawn check, idle-server NPC AI keeps the mode flag stuck on
 -- "active" through the night, which invalidates the safety claim that idle-mode
 -- writers do zero UObject reads (see #43).
 RegisterHook("/Script/R5.R5MovementComponent:ServerSaveMoveInput", function(self)
+    -- The hook can fire before WindrosePlus is fully initialised (e.g., during
+    -- early map load) or after a partial RestartMod. A nil-table dereference
+    -- here escapes UE4SS as a fatal callback exception. See #41. Guard every
+    -- field the body touches, not just isIdle — a partial table with isIdle
+    -- but missing state or setMode would still throw downstream.
+    if type(WindrosePlus) ~= "table"
+       or type(WindrosePlus.isIdle) ~= "function"
+       or type(WindrosePlus.setMode) ~= "function"
+       or type(WindrosePlus.state) ~= "table" then return end
     local isPlayerPawn = false
     pcall(function()
         local pawn = self:GetOwner()
@@ -500,6 +538,11 @@ local _pendingSince = {}
 local _stalePendingSeconds = 30
 
 local function dispatchTick(fn)
+    -- Tick callbacks resolve their target lazily through WindrosePlus._modules.
+    -- A failed module init or a Lua GC pass on a captured upvalue can land us
+    -- here with fn=nil; pcall(nil) raises LUA_ERRRUN and escapes UE4SS as a
+    -- STATUS_FATAL_USER_CALLBACK_EXCEPTION. Guarding here is cheap insurance.
+    if type(fn) ~= "function" then return end
     if not _hasExecuteInGameThread then
         pcall(fn)
         return
@@ -541,18 +584,30 @@ local function dispatchTick(fn)
     end
 end
 
+-- Lazy module resolution: pulls the writer through WindrosePlus._modules at
+-- call time so a Lua GC pass or RestartMod (which can drop captured upvalues)
+-- doesn't strand a stale function reference inside the tick closure. See #41.
+-- Full type-guard on WindrosePlus too — the standalone LoopAsync path doesn't
+-- run through Rcon's pcall'd dispatch, so an exception here would escape into
+-- UE4SS' callback dispatcher.
+local function _writer(name)
+    if type(WindrosePlus) ~= "table" or type(WindrosePlus._modules) ~= "table" then return nil end
+    local m = WindrosePlus._modules[name]
+    return m and m.writeIfDue
+end
+
 if Rcon and Config.isRconEnabled() then
-    if Query   then Rcon.registerTickCallback(function() dispatchTick(Query.writeIfDue) end) end
-    if LiveMap then Rcon.registerTickCallback(function() dispatchTick(LiveMap.writeIfDue) end) end
-    if POIScan then Rcon.registerTickCallback(function() dispatchTick(POIScan.writeIfDue) end) end
+    if Query   then Rcon.registerTickCallback(function() dispatchTick(_writer("Query"))   end) end
+    if LiveMap then Rcon.registerTickCallback(function() dispatchTick(_writer("LiveMap")) end) end
+    if POIScan then Rcon.registerTickCallback(function() dispatchTick(_writer("POIScan")) end) end
     Rcon.registerTickCallback(function() dispatchTick(runModTicks) end)
 else
     -- RCON disabled — standalone heartbeat
     if (Query or LiveMap or POIScan) and LoopAsync then
         LoopAsync(5000, function()
-            if Query   then dispatchTick(Query.writeIfDue) end
-            if LiveMap then dispatchTick(LiveMap.writeIfDue) end
-            if POIScan then dispatchTick(POIScan.writeIfDue) end
+            if Query   then dispatchTick(_writer("Query"))   end
+            if LiveMap then dispatchTick(_writer("LiveMap")) end
+            if POIScan then dispatchTick(_writer("POIScan")) end
             dispatchTick(runModTicks)
             return false
         end)
