@@ -527,39 +527,88 @@ end
 -- the game thread), skip queuing another one. Prevents unbounded action-vector
 -- growth when the game thread is momentarily slow.
 --
--- Idle-server starvation guard: on a dedicated server with no players, the
--- game thread ticks very slowly and ExecuteInGameThread queues can sit
--- undrained for minutes. If a pending dispatch is older than the stale
--- threshold, force-clear and run the function directly on the async thread.
--- In idle mode the writers do effectively zero UObject reads (no players, no
--- scanning), so the original game-thread race risk doesn't apply.
+-- Queue-starvation guard: on some UE4SS/R5 combinations, ExecuteInGameThread
+-- accepts a closure but never drains it (#46). The fallback below never runs a
+-- UObject-reading writer on the async thread. Query and LiveMap emit degraded
+-- file-only snapshots, POIScan is suppressed, and third-party mod ticks stay on
+-- the original game-thread path.
 local _pendingTicks = {}
 local _pendingSince = {}
-local _stalePendingSeconds = 30
+local _consecutiveStales = {}
+local _degraded = {}
+local _generation = {}
+local _stalePendingSeconds = 10
+local _stalePendingRequired = 2
+local _degradableWriters = { Query = true, LiveMap = true, POIScan = true }
 
-local function dispatchTick(fn)
+-- UE4SS enters one Lua VM for this mod. These dispatch tables are only touched
+-- from Lua callbacks in that VM; the generation token protects against late
+-- game-thread closures after the async loop has dropped or degraded a pending
+-- dispatch.
+local function _writerModule(name)
+    return WindrosePlus and WindrosePlus._modules and WindrosePlus._modules[name] or nil
+end
+
+local function _writeDegraded(name)
+    local reason = "execute_in_game_thread_starved"
+    if name == "Query" then
+        local m = _writerModule("Query")
+        if m and m.writeDegraded then pcall(m.writeDegraded, reason) end
+    elseif name == "LiveMap" then
+        local m = _writerModule("LiveMap")
+        if m and m.writeDegraded then pcall(m.writeDegraded, reason) end
+    end
+end
+
+local function _enterDegraded(key, name)
+    _pendingTicks[key] = nil
+    _pendingSince[key] = nil
+    _consecutiveStales[key] = 0
+    _degraded[key] = true
+    _generation[key] = (_generation[key] or 0) + 1
+    if name == "POIScan" then
+        Log.warn("Core", "ExecuteInGameThread queue starved (#46) — POIScan suppressed in degraded mode")
+    else
+        Log.warn("Core", "ExecuteInGameThread queue starved (#46) — " .. tostring(name) .. " in degraded mode")
+        _writeDegraded(name)
+    end
+end
+
+local function dispatchTick(fn, name)
     -- Tick callbacks resolve their target lazily through WindrosePlus._modules.
     -- A failed module init or a Lua GC pass on a captured upvalue can land us
     -- here with fn=nil; pcall(nil) raises LUA_ERRRUN and escapes UE4SS as a
     -- STATUS_FATAL_USER_CALLBACK_EXCEPTION. Guarding here is cheap insurance.
     if type(fn) ~= "function" then return end
+    local key = name or fn
     if not _hasExecuteInGameThread then
         pcall(fn)
         return
     end
-    if _pendingTicks[fn] then
-        local age = os.time() - (_pendingSince[fn] or 0)
-        if age < _stalePendingSeconds then return end
-        -- Queue starved — drop the entry and wait for the next LoopAsync cycle.
-        -- Running the writer here on the async thread can race UE GC if mode
-        -- has been falsely set to "active" by a non-player pawn (see #43), so
-        -- we trade a delayed write for crash safety.
-        _pendingTicks[fn] = nil
-        _pendingSince[fn] = nil
+    if _degraded[key] then
+        _writeDegraded(name)
         return
     end
-    _pendingTicks[fn] = true
-    _pendingSince[fn] = os.time()
+    if _pendingTicks[key] then
+        local age = os.time() - (_pendingSince[key] or 0)
+        if age < _stalePendingSeconds then return end
+        if _degradableWriters[name] then
+            _consecutiveStales[key] = (_consecutiveStales[key] or 0) + 1
+            _generation[key] = (_generation[key] or 0) + 1
+            if _consecutiveStales[key] >= _stalePendingRequired then
+                _enterDegraded(key, name)
+                return
+            end
+        end
+        -- One stale observation can be a healthy but overloaded game thread.
+        -- Drop this pending marker and give ExecuteInGameThread one more chance.
+        _pendingTicks[key] = nil
+        _pendingSince[key] = nil
+        return
+    end
+    _pendingTicks[key] = true
+    _pendingSince[key] = os.time()
+    local capturedGen = _generation[key] or 0
     -- ExecuteInGameThread can throw if neither EngineTick nor ProcessEvent
     -- hooks are available, and the global itself can transiently be nil during
     -- UE4SS init/shutdown. Resolve the global INSIDE the pcall boundary so a
@@ -567,14 +616,16 @@ local function dispatchTick(fn)
     -- UE4SS callback dispatcher as STATUS_FATAL_USER_CALLBACK_EXCEPTION.
     local ok, err = pcall(function()
         ExecuteInGameThread(function()
-            _pendingTicks[fn] = nil
-            _pendingSince[fn] = nil
+            if (_generation[key] or 0) ~= capturedGen then return end
+            _pendingTicks[key] = nil
+            _pendingSince[key] = nil
+            _consecutiveStales[key] = 0
             pcall(fn)
         end)
     end)
     if not ok then
-        _pendingTicks[fn] = nil
-        _pendingSince[fn] = nil
+        _pendingTicks[key] = nil
+        _pendingSince[key] = nil
         -- Mark the dispatcher dead so subsequent dispatches use the direct
         -- path immediately instead of re-throwing every tick. The next
         -- LoopAsync cycle runs the writer through the
@@ -607,18 +658,18 @@ Log.info("Core", string.format("Writers: query=%s livemap=%s poiscan=%s",
     tostring(_queryEnabled), tostring(_liveMapEnabled), tostring(_poiScanEnabled)))
 
 if Rcon and Config.isRconEnabled() then
-    if Query   and _queryEnabled   then Rcon.registerTickCallback(function() dispatchTick(_writer("Query"))   end) end
-    if LiveMap and _liveMapEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("LiveMap")) end) end
-    if POIScan and _poiScanEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("POIScan")) end) end
-    Rcon.registerTickCallback(function() dispatchTick(runModTicks) end)
+    if Query   and _queryEnabled   then Rcon.registerTickCallback(function() dispatchTick(_writer("Query"), "Query")   end) end
+    if LiveMap and _liveMapEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("LiveMap"), "LiveMap") end) end
+    if POIScan and _poiScanEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("POIScan"), "POIScan") end) end
+    Rcon.registerTickCallback(function() dispatchTick(runModTicks, "RunModTicks") end)
 else
     -- RCON disabled — standalone heartbeat
     if (Query or LiveMap or POIScan) and LoopAsync then
         LoopAsync(5000, function()
-            if Query   and _queryEnabled   then dispatchTick(_writer("Query"))   end
-            if LiveMap and _liveMapEnabled then dispatchTick(_writer("LiveMap")) end
-            if POIScan and _poiScanEnabled then dispatchTick(_writer("POIScan")) end
-            dispatchTick(runModTicks)
+            if Query   and _queryEnabled   then dispatchTick(_writer("Query"), "Query")   end
+            if LiveMap and _liveMapEnabled then dispatchTick(_writer("LiveMap"), "LiveMap") end
+            if POIScan and _poiScanEnabled then dispatchTick(_writer("POIScan"), "POIScan") end
+            dispatchTick(runModTicks, "RunModTicks")
             return false
         end)
     end

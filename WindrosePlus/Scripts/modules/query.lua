@@ -13,6 +13,17 @@ Query._interval = 5
 Query._idleInterval = 30
 Query._lastWrite = 0
 Query._serverInfo = nil
+Query._lastStatus = nil
+Query._lastStatusTs = 0
+
+local function cloneTable(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do
+        out[k] = cloneTable(v)
+    end
+    return out
+end
 
 function Query.init(gameDir, config)
     local dataDir = gameDir .. "windrose_plus_data"
@@ -61,6 +72,84 @@ end
 function Query.forceWrite()
     Query._lastWrite = os.time()
     Query._collectAndWrite()
+end
+
+function Query._multipliers()
+    local cfg = Query._config or {}
+    return {
+        xp = cfg.getXpMultiplier and cfg.getXpMultiplier() or 1,
+        loot = cfg.getLootMultiplier and cfg.getLootMultiplier() or 1,
+        stack_size = cfg.getStackSizeMultiplier and cfg.getStackSizeMultiplier() or 1,
+        craft_efficiency = cfg.getCraftEfficiencyMultiplier and cfg.getCraftEfficiencyMultiplier() or 1,
+        craft_cost = cfg.getCraftEfficiencyMultiplier and cfg.getCraftEfficiencyMultiplier() or 1, -- DEPRECATED, removed in v1.2 (kept for old dashboards)
+        crop_speed = cfg.getCropSpeedMultiplier and cfg.getCropSpeedMultiplier() or 1,
+        weight = cfg.getWeightMultiplier and cfg.getWeightMultiplier() or 1,
+        inventory_size = cfg.getInventorySizeMultiplier and cfg.getInventorySizeMultiplier() or 1,
+        cooking_speed = cfg.getCookingSpeedMultiplier and cfg.getCookingSpeedMultiplier() or 1,
+        harvest_yield = cfg.getHarvestYieldMultiplier and cfg.getHarvestYieldMultiplier() or 1
+    }
+end
+
+function Query._writeStatus(status)
+    local content = json.encode(status)
+    local file = io.open(Query._tmpPath, "w")
+    if not file then return end
+    file:write(content)
+    file:close()
+    os.remove(Query._statusPath)
+    os.rename(Query._tmpPath, Query._statusPath)
+end
+
+function Query._degradedEmpty(reason)
+    if Query._gameDir then
+        Query._loadServerDescription(Query._gameDir)
+    end
+    local si = Query._serverInfo or {}
+    local cachedCount = 0
+    if WindrosePlus and WindrosePlus.state then
+        cachedCount = tonumber(WindrosePlus.state.playerCount) or 0
+    end
+    return {
+        server = {
+            name = si.name or "",
+            game = "Windrose",
+            version = si.version or "unknown",
+            windrose_plus = WindrosePlus and WindrosePlus.VERSION or "1.0.0",
+            invite_code = si.invite_code or "",
+            password_protected = si.password_protected or false,
+            max_players = si.max_players or 10,
+            player_count = cachedCount,
+            game_port = Query._config and Query._config.getGamePort and Query._config.getGamePort() or nil
+        },
+        players = {},
+        perf = {},
+        multipliers = Query._multipliers(),
+        timestamp = os.time(),
+        mode = "degraded",
+        degraded = true,
+        degraded_reason = reason or "execute_in_game_thread_starved"
+    }
+end
+
+function Query.writeDegraded(reason)
+    local now = os.time()
+    if now - Query._lastWrite < Query._interval then return end
+    Query._lastWrite = now
+    local status
+    if Query._lastStatus then
+        status = cloneTable(Query._lastStatus)
+        status.timestamp = now
+        status.mode = "degraded"
+        status.degraded = true
+        status.degraded_reason = reason or "execute_in_game_thread_starved"
+        status.cache_age_sec = now - (Query._lastStatusTs or now)
+    else
+        status = Query._degradedEmpty(reason)
+    end
+    if WindrosePlus and WindrosePlus.setMode then
+        pcall(WindrosePlus.setMode, "degraded")
+    end
+    Query._writeStatus(status)
 end
 
 -- Delegate to shared helper in WindrosePlus global
@@ -186,27 +275,12 @@ function Query._collectAndWrite()
         },
         players = players,
         perf = perf,
-        multipliers = {
-            xp = Query._config.getXpMultiplier(),
-            loot = Query._config.getLootMultiplier(),
-            stack_size = Query._config.getStackSizeMultiplier(),
-            craft_efficiency = Query._config.getCraftEfficiencyMultiplier(),
-            craft_cost = Query._config.getCraftEfficiencyMultiplier(), -- DEPRECATED, removed in v1.2 (kept for old dashboards)
-            crop_speed = Query._config.getCropSpeedMultiplier(),
-            weight = Query._config.getWeightMultiplier(),
-            inventory_size = Query._config.getInventorySizeMultiplier(),
-            cooking_speed = Query._config.getCookingSpeedMultiplier(),
-            harvest_yield = Query._config.getHarvestYieldMultiplier()
-        },
+        multipliers = Query._multipliers(),
         timestamp = os.time()
     }
-    local content = json.encode(status)
-    local file = io.open(Query._tmpPath, "w")
-    if not file then return end
-    file:write(content)
-    file:close()
-    os.remove(Query._statusPath)
-    os.rename(Query._tmpPath, Query._statusPath)
+    Query._lastStatus = cloneTable(status)
+    Query._lastStatusTs = status.timestamp
+    Query._writeStatus(status)
 end
 
 return Query

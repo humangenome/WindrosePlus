@@ -17,6 +17,17 @@ LiveMap._cachedNodes = {}
 LiveMap._lastEntityCollect = 0
 LiveMap._entityCacheTTL = 120  -- clear stale entity cache after 2x entity interval
 LiveMap._wroteEmpty = false
+LiveMap._lastSnapshot = nil
+LiveMap._lastSnapshotTs = 0
+
+local function cloneTable(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do
+        out[k] = cloneTable(v)
+    end
+    return out
+end
 
 function LiveMap.init(gameDir, config)
     local dataDir = gameDir .. "windrose_plus_data"
@@ -159,7 +170,7 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
         LiveMap._lastEntityCollect = os.time()
     end
 
-    local data = json.encode({
+    local payload = {
         players = players,
         mobs = mobs,
         nodes = nodes,
@@ -167,13 +178,58 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
         mob_count = #mobs,
         node_count = #nodes,
         timestamp = os.time()
-    })
+    }
+    LiveMap._lastSnapshot = cloneTable(payload)
+    LiveMap._lastSnapshotTs = payload.timestamp
+    LiveMap._writePayload(payload)
+end
+
+function LiveMap._writePayload(payload)
+    local data = json.encode(payload)
     local file = io.open(LiveMap._tmpPath, "w")
     if not file then return end
     file:write(data)
     file:close()
     os.remove(LiveMap._path)
     os.rename(LiveMap._tmpPath, LiveMap._path)
+end
+
+function LiveMap.writeDegraded(reason)
+    local now = os.time()
+    if now - LiveMap._lastPlayerWrite < LiveMap._playerInterval then return end
+    LiveMap._lastPlayerWrite = now
+    local payload
+    if LiveMap._lastSnapshot then
+        payload = cloneTable(LiveMap._lastSnapshot)
+        payload.timestamp = now
+        payload.degraded = true
+        payload.degraded_reason = reason or "execute_in_game_thread_starved"
+        payload.cache_age_sec = now - (LiveMap._lastSnapshotTs or now)
+    else
+        payload = {
+            players = {},
+            mobs = {},
+            nodes = {},
+            player_count = 0,
+            mob_count = 0,
+            node_count = 0,
+            timestamp = now,
+            degraded = true,
+            degraded_reason = reason or "execute_in_game_thread_starved"
+        }
+    end
+    if WindrosePlus and WindrosePlus.setMode then
+        pcall(WindrosePlus.setMode, "degraded")
+    end
+    LiveMap._writePayload(payload)
+end
+
+-- Force an immediate write (used by future dashboard/API refresh flows)
+function LiveMap.forceWrite()
+    LiveMap._lastPlayerWrite = os.time()
+    LiveMap._lastEntityWrite = os.time()
+    LiveMap._wroteEmpty = false
+    LiveMap._collectAndWrite(true, nil)
 end
 
 return LiveMap

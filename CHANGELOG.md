@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.7] - 2026-04-29
+
+Targets [#46](https://github.com/HumanGenome/WindrosePlus/issues/46) and the same dashboard-stale reports in [#47](https://github.com/HumanGenome/WindrosePlus/issues/47). Affected hosts boot Windrose+ v1.1.6 cleanly, keep the RCON loop alive, and keep writing `tick.beat`, but `server_status.json` and `livemap_data.json` never appear. @kohanis instrumented the dispatcher and confirmed the key failure mode: `pcall(ExecuteInGameThread, fn)` returns `ok=true`, but the queued closure body never runs. That leaves `mode` stuck on `boot` and the dashboard waiting for a server ledger forever.
+
+### Fixed
+
+- **Degraded snapshots for starved `ExecuteInGameThread` queues.** `dispatchTick` now requires two consecutive stale observations before declaring a writer starved. When that happens, Query and LiveMap no longer run their UObject-reading collectors on the async RCON thread. Instead, they write file-only degraded snapshots with `degraded=true`, `mode="degraded"` for status, `degraded_reason="execute_in_game_thread_starved"`, and `cache_age_sec` when a last-known good snapshot exists. If no good snapshot was ever written, the fallback writes an empty no-UObject snapshot so dashboards stop showing "Awaiting server ledger" indefinitely.
+- **Stale queued closures are cancelled.** Each writer dispatch carries a generation token. Once a writer enters degraded mode, any old `ExecuteInGameThread` closure that eventually drains sees the generation mismatch and returns without writing over the degraded snapshot.
+- **POIScan and third-party tick callbacks stay safe.** POIScan is suppressed in degraded mode instead of walking actors off-thread. `runModTicks` is excluded from the degraded fallback entirely, so third-party callbacks registered through `WindrosePlus.API.registerTickCallback` keep the original game-thread semantics. If the UE4SS queue is starved, those callbacks resume only if the queue starts draining again or the server is restarted.
+- **Added `LiveMap.forceWrite()`.** The force-write helper from @brazerZa's #48 contribution is included for future dashboard/API refresh flows; the RCON-command callsite from that PR is intentionally not included because it would still collect UObjects from the async thread on affected hosts.
+
 ## [1.1.6] - 2026-04-28
 
 Targeted at the server-stutter cohort tracked in [#33](https://github.com/HumanGenome/WindrosePlus/issues/33). Eight-plus self-hosted operators have reported game-thread stutter / rubber-banding when 2+ players are online; @James-Wilkinson narrowed the cause with a controlled experiment on GPortal — disabling the runtime mod after applying multipliers eliminated the lag while leaving the PAK patches in place, proving the writer dispatch path was the culprit. This release reduces the per-tick cost via interval relaxation and gives constrained hosts an explicit lever to disable individual writers.
