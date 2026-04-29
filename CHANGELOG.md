@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.7] - 2026-04-29
+
+Targets [#46](https://github.com/HumanGenome/WindrosePlus/issues/46) — dashboard / `/api/status` empty, `mode` stuck on `boot`, `server_status.json` / `live_map.json` / `players.json` never produced. External reporter @kohanis instrumented `dispatchTick` and confirmed that `pcall(ExecuteInGameThread, fn)` returns `ok=true` but the queued closure body never runs on affected hosts. Reproduced internally on multiple servers; observed not to reproduce on others, so the failure is environmental (UE4SS / R5 build / AOB hook state on a given machine), not mod-wide.
+
+### Fixed
+
+- **Stale-pending fallback in `dispatchTick`.** When the game thread silently fails to drain the `ExecuteInGameThread` queue, a per-fn sticky `_directDispatch` flag now flips after one stale-pending observation and that fn runs through `pcall(fn)` on the async thread for the rest of the boot. The first-detection cost dropped from 30s to 10s; subsequent dispatches are immediate. In idle mode the writers do effectively zero `UObject` reads, and the existing `pcall` + type guards in `_writer` and `_collectAndWrite` cover the active-mode race risk that originally motivated the game-thread handoff. Symptom on affected hosts: `mode: boot` + `last_hook_age_sec: -1` permanently in `tick.beat`, `rcon_status.json` updating every 5s but `server_status.json` never written. Detection: one `ExecuteInGameThread queue starved (#46) — fn flipped to direct dispatch` warn line per writer in the UE4SS log shortly after boot.
+
 ## [1.1.6] - 2026-04-28
 
 Targeted at the server-stutter cohort tracked in [#33](https://github.com/HumanGenome/WindrosePlus/issues/33). Eight-plus self-hosted operators have reported game-thread stutter / rubber-banding when 2+ players are online; @James-Wilkinson narrowed the cause with a controlled experiment on GPortal — disabling the runtime mod after applying multipliers eliminated the lag while leaving the PAK patches in place, proving the writer dispatch path was the culprit. This release reduces the per-tick cost via interval relaxation and gives constrained hosts an explicit lever to disable individual writers.

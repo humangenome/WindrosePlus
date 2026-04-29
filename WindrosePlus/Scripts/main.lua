@@ -527,15 +527,20 @@ end
 -- the game thread), skip queuing another one. Prevents unbounded action-vector
 -- growth when the game thread is momentarily slow.
 --
--- Idle-server starvation guard: on a dedicated server with no players, the
--- game thread ticks very slowly and ExecuteInGameThread queues can sit
--- undrained for minutes. If a pending dispatch is older than the stale
--- threshold, force-clear and run the function directly on the async thread.
--- In idle mode the writers do effectively zero UObject reads (no players, no
--- scanning), so the original game-thread race risk doesn't apply.
+-- Stale-pending fallback: on some R5 + UE4SS combinations the game thread
+-- silently never drains the ExecuteInGameThread queue (#46). The pcall(EIGT,
+-- closure) returns ok=true, but the queued closure never runs — writers stay
+-- frozen, mode never flips off "boot". Once we observe one stale-pending
+-- event for a given fn we flip a sticky per-fn flag and run that fn directly
+-- on the async thread for the rest of the boot. Detection cost is one stale
+-- observation per fn. In idle mode the writers do effectively zero UObject
+-- reads (no players, no scanning), so the original game-thread race risk
+-- doesn't apply, and active-mode reads are already pcall-wrapped + type-
+-- guarded inside _writer / _collectAndWrite.
 local _pendingTicks = {}
 local _pendingSince = {}
-local _stalePendingSeconds = 30
+local _directDispatch = {}
+local _stalePendingSeconds = 10
 
 local function dispatchTick(fn)
     -- Tick callbacks resolve their target lazily through WindrosePlus._modules.
@@ -543,19 +548,18 @@ local function dispatchTick(fn)
     -- here with fn=nil; pcall(nil) raises LUA_ERRRUN and escapes UE4SS as a
     -- STATUS_FATAL_USER_CALLBACK_EXCEPTION. Guarding here is cheap insurance.
     if type(fn) ~= "function" then return end
-    if not _hasExecuteInGameThread then
+    if not _hasExecuteInGameThread or _directDispatch[fn] then
         pcall(fn)
         return
     end
     if _pendingTicks[fn] then
         local age = os.time() - (_pendingSince[fn] or 0)
         if age < _stalePendingSeconds then return end
-        -- Queue starved — drop the entry and wait for the next LoopAsync cycle.
-        -- Running the writer here on the async thread can race UE GC if mode
-        -- has been falsely set to "active" by a non-player pawn (see #43), so
-        -- we trade a delayed write for crash safety.
         _pendingTicks[fn] = nil
         _pendingSince[fn] = nil
+        _directDispatch[fn] = true
+        Log.warn("Core", "ExecuteInGameThread queue starved (#46) — fn flipped to direct dispatch")
+        pcall(fn)
         return
     end
     _pendingTicks[fn] = true
