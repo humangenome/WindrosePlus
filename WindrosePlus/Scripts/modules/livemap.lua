@@ -176,4 +176,12 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
     os.rename(LiveMap._tmpPath, LiveMap._path)
 end
 
+-- Force an immediate write (used by RCON commands so dashboards update promptly)
+function LiveMap.forceWrite()
+    LiveMap._lastPlayerWrite = os.time()
+    LiveMap._lastEntityWrite = os.time()
+    LiveMap._wroteEmpty = false
+    LiveMap._collectAndWrite(true, nil)
+end
+
 return LiveMap

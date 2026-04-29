@@ -31,6 +31,13 @@ function Admin.execute(command, args)
     end
     local ok, result = pcall(cmd.handler, args)
     if ok then
+        -- Force immediate JSON writes so the dashboard reads fresh data
+        -- after any RCON command. Resolve modules via _modules at call time
+        -- to survive Lua GC / RestartMod. See #47.
+        local Q = WindrosePlus and WindrosePlus._modules and WindrosePlus._modules.Query
+        local LM = WindrosePlus and WindrosePlus._modules and WindrosePlus._modules.LiveMap
+        if Q and Q.forceWrite then pcall(Q.forceWrite) end
+        if LM and LM.forceWrite then pcall(LM.forceWrite) end
         return "ok", result or "OK"
     else
         return "error", tostring(result)
