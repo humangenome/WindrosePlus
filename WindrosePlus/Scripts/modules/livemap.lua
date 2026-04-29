@@ -19,6 +19,7 @@ LiveMap._entityCacheTTL = 120  -- clear stale entity cache after 2x entity inter
 LiveMap._wroteEmpty = false
 LiveMap._lastSnapshot = nil
 LiveMap._lastSnapshotTs = 0
+LiveMap._pendingContent = nil
 
 local function cloneTable(t)
     if type(t) ~= "table" then return t end
@@ -184,14 +185,28 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
     LiveMap._writePayload(payload)
 end
 
-function LiveMap._writePayload(payload)
-    local data = json.encode(payload)
+function LiveMap._writeContent(content)
+    if not LiveMap._tmpPath or not LiveMap._path then return false end
     local file = io.open(LiveMap._tmpPath, "w")
-    if not file then return end
-    file:write(data)
+    if not file then return false end
+    file:write(content)
     file:close()
     os.remove(LiveMap._path)
     os.rename(LiveMap._tmpPath, LiveMap._path)
+    return true
+end
+
+function LiveMap.flushPendingWrite()
+    local content = LiveMap._pendingContent
+    if not content then return end
+    LiveMap._pendingContent = nil
+    if not LiveMap._writeContent(content) then
+        LiveMap._pendingContent = content
+    end
+end
+
+function LiveMap._writePayload(payload)
+    LiveMap._pendingContent = json.encode(payload)
 end
 
 function LiveMap.writeDegraded(reason)
@@ -222,6 +237,7 @@ function LiveMap.writeDegraded(reason)
         pcall(WindrosePlus.setMode, "degraded")
     end
     LiveMap._writePayload(payload)
+    LiveMap.flushPendingWrite()
 end
 
 -- Force an immediate write (used by future dashboard/API refresh flows)

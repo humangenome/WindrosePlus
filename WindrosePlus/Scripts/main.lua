@@ -460,64 +460,34 @@ pcall(_writeHeartbeat)
 -- Update drivers
 -- ------------
 
--- RegisterHook on player movement — fires on game thread, flips mode to active.
--- Writers used to run here at 1 Hz; removed — they were redoing disk I/O +
--- FindAllOf walks that the periodic driver already covers at its own cadence.
-local lastHookTime = 0
-
 -- Fast tick.beat (30s cadence). The 5-min heartbeat captures full state, but
--- when a crash kills the Lua VM it leaves a gap of up to 5 minutes between the
--- last heartbeat and the next mod.boot — too wide to localise the fault.
--- A 30s beat narrows time-of-death to <30s and records last_hook_age (seconds
--- since the last player movement hook fired), so crash forensics can
--- distinguish "died mid-tick under load" from "died while idle" from
--- "died while a player was actively moving."
+-- when a crash kills the Lua VM it leaves a gap of up to 5 minutes between
+-- the last heartbeat and the next mod.boot, too wide to localise the fault.
+-- A 30s beat narrows time-of-death to <30s and records the age of the last
+-- player detected by the periodic Query/LiveMap poll.
 local function _writeTickBeat()
     local now = os.time()
+    local lastPlayerSeen = WindrosePlus.state.lastPlayerSeen or 0
     Events.record("tick.beat", {
         uptime_sec = now - _bootTime,
         mode = WindrosePlus.state.mode,
         player_count = WindrosePlus.state.playerCount,
-        last_hook_age_sec = (lastHookTime > 0) and (now - lastHookTime) or -1,
+        last_player_age_sec = (lastPlayerSeen > 0) and (now - lastPlayerSeen) or -1,
     })
 end
 LoopAsync(30000, function() pcall(_writeTickBeat); return false end)
--- ServerSaveMoveInput fires for every moving actor — players, mobs, and NPCs.
--- Without a player-pawn check, idle-server NPC AI keeps the mode flag stuck on
--- "active" through the night, which invalidates the safety claim that idle-mode
--- writers do zero UObject reads (see #43).
-RegisterHook("/Script/R5.R5MovementComponent:ServerSaveMoveInput", function(self)
-    -- The hook can fire before WindrosePlus is fully initialised (e.g., during
-    -- early map load) or after a partial RestartMod. A nil-table dereference
-    -- here escapes UE4SS as a fatal callback exception. See #41. Guard every
-    -- field the body touches, not just isIdle — a partial table with isIdle
-    -- but missing state or setMode would still throw downstream.
-    if type(WindrosePlus) ~= "table"
-       or type(WindrosePlus.isIdle) ~= "function"
-       or type(WindrosePlus.setMode) ~= "function"
-       or type(WindrosePlus.state) ~= "table" then return end
-    local isPlayerPawn = false
-    pcall(function()
-        local pawn = self:GetOwner()
-        if pawn and pawn:IsValid() and pawn.IsPlayerControlled then
-            isPlayerPawn = pawn:IsPlayerControlled()
-        end
-    end)
-    if not isPlayerPawn then return end
-    local now = os.time()
-    if now - lastHookTime < 1 then return end
-    lastHookTime = now
-    if WindrosePlus.isIdle() then
-        WindrosePlus.setMode("active")
-    end
-end)
+
+-- Do not hook ServerSaveMoveInput. UE4SS still crosses the Lua bridge for
+-- every movement RPC before our Lua body can return, which is enough to cause
+-- ship/AI rubber-banding on constrained hosts (#33). Periodic Query/LiveMap
+-- polling updates player count and active/idle state without that hot-path
+-- hook overhead.
 
 -- Writers touch UObjects (FindAllOf, property reads). UE4SS's LoopAsync runs on
 -- a dedicated async thread, which races with game-thread GC / spawn / destroy.
--- We dispatch each writer tick to the game thread via ExecuteInGameThread.
--- JSON encode + disk writes run on the game thread too — payloads are small
--- (~5-50 KB), so the tick cost is negligible compared to the cost of racing
--- UObject iteration.
+-- We dispatch each writer's UObject collection to the game thread via
+-- ExecuteInGameThread, then flush queued JSON file writes from the async driver
+-- on the next tick so disk I/O does not run on the simulation thread (#33).
 local _hasExecuteInGameThread = type(ExecuteInGameThread) == "function"
 if not _hasExecuteInGameThread then
     Log.warn("Core", "ExecuteInGameThread not available — writers will run on async thread (UObject races possible)")
@@ -647,6 +617,19 @@ local function _writer(name)
     return m and m.writeIfDue
 end
 
+local function _flushPendingWriter(name)
+    local m = _writerModule(name)
+    if m and type(m.flushPendingWrite) == "function" then
+        pcall(m.flushPendingWrite)
+    end
+end
+
+local function _dispatchWriter(name)
+    _flushPendingWriter(name)
+    dispatchTick(_writer(name), name)
+    _flushPendingWriter(name)
+end
+
 -- Per-writer enable flags. Constrained hosts can disable individual writers
 -- via [livemap].enabled / [query].enabled / [poiscan].enabled in the config
 -- to drop the per-tick game-thread cost while keeping RCON, admin commands,
@@ -658,16 +641,16 @@ Log.info("Core", string.format("Writers: query=%s livemap=%s poiscan=%s",
     tostring(_queryEnabled), tostring(_liveMapEnabled), tostring(_poiScanEnabled)))
 
 if Rcon and Config.isRconEnabled() then
-    if Query   and _queryEnabled   then Rcon.registerTickCallback(function() dispatchTick(_writer("Query"), "Query")   end) end
-    if LiveMap and _liveMapEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("LiveMap"), "LiveMap") end) end
+    if Query   and _queryEnabled   then Rcon.registerTickCallback(function() _dispatchWriter("Query")   end) end
+    if LiveMap and _liveMapEnabled then Rcon.registerTickCallback(function() _dispatchWriter("LiveMap") end) end
     if POIScan and _poiScanEnabled then Rcon.registerTickCallback(function() dispatchTick(_writer("POIScan"), "POIScan") end) end
     Rcon.registerTickCallback(function() dispatchTick(runModTicks, "RunModTicks") end)
 else
     -- RCON disabled — standalone heartbeat
     if (Query or LiveMap or POIScan) and LoopAsync then
         LoopAsync(5000, function()
-            if Query   and _queryEnabled   then dispatchTick(_writer("Query"), "Query")   end
-            if LiveMap and _liveMapEnabled then dispatchTick(_writer("LiveMap"), "LiveMap") end
+            if Query   and _queryEnabled   then _dispatchWriter("Query")   end
+            if LiveMap and _liveMapEnabled then _dispatchWriter("LiveMap") end
             if POIScan and _poiScanEnabled then dispatchTick(_writer("POIScan"), "POIScan") end
             dispatchTick(runModTicks, "RunModTicks")
             return false

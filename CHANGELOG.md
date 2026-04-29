@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.8] - 2026-04-29
+
+Targets [#33](https://github.com/HumanGenome/WindrosePlus/issues/33), the GPortal-class ship/AI rubber-banding that disappears when Windrose+ is disabled.
+
+### Fixed
+- **Removed the movement hot-path hook.** Windrose+ no longer registers `R5MovementComponent:ServerSaveMoveInput`, which UE4SS has to bridge into Lua on every player movement RPC before the callback body can return. Active/idle mode now comes from the periodic Query/LiveMap player poll, avoiding that per-movement game-thread tax entirely.
+- **Moved normal Query/LiveMap file writes off the game-thread closure.** UObject reads still happen on the game thread, but the JSON payload is queued and flushed by the async driver on the next tick. This keeps `server_status.json` and `livemap_data.json` current without doing disk I/O on the simulation thread.
+
 ## [1.1.7] - 2026-04-29
 
 Targets [#46](https://github.com/HumanGenome/WindrosePlus/issues/46) and the same dashboard-stale reports in [#47](https://github.com/HumanGenome/WindrosePlus/issues/47). Affected hosts boot Windrose+ v1.1.6 cleanly, keep the RCON loop alive, and keep writing `tick.beat`, but `server_status.json` and `livemap_data.json` never appear. @kohanis instrumented the dispatcher and confirmed the key failure mode: `pcall(ExecuteInGameThread, fn)` returns `ok=true`, but the queued closure body never runs. That leaves `mode` stuck on `boot` and the dashboard waiting for a server ledger forever.

@@ -15,6 +15,7 @@ Query._lastWrite = 0
 Query._serverInfo = nil
 Query._lastStatus = nil
 Query._lastStatusTs = 0
+Query._pendingContent = nil
 
 local function cloneTable(t)
     if type(t) ~= "table" then return t end
@@ -90,14 +91,28 @@ function Query._multipliers()
     }
 end
 
-function Query._writeStatus(status)
-    local content = json.encode(status)
+function Query._writeContent(content)
+    if not Query._tmpPath or not Query._statusPath then return false end
     local file = io.open(Query._tmpPath, "w")
-    if not file then return end
+    if not file then return false end
     file:write(content)
     file:close()
     os.remove(Query._statusPath)
     os.rename(Query._tmpPath, Query._statusPath)
+    return true
+end
+
+function Query.flushPendingWrite()
+    local content = Query._pendingContent
+    if not content then return end
+    Query._pendingContent = nil
+    if not Query._writeContent(content) then
+        Query._pendingContent = content
+    end
+end
+
+function Query._writeStatus(status)
+    Query._pendingContent = json.encode(status)
 end
 
 function Query._degradedEmpty(reason)
@@ -150,6 +165,7 @@ function Query.writeDegraded(reason)
         pcall(WindrosePlus.setMode, "degraded")
     end
     Query._writeStatus(status)
+    Query.flushPendingWrite()
 end
 
 -- Delegate to shared helper in WindrosePlus global
