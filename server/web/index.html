@@ -1324,6 +1324,11 @@
                         const row = document.createElement('div');
                         row.className = 'player-row';
                         row.dataset.player = p.name || '';
+                        // Stash current Z on the row so the click handler has a fallback
+                        // if /api/terrain_height returns null (ocean / out-of-bounds /
+                        // pre-export). Always sending a Z avoids an arg-parser ambiguity
+                        // in wp.tp when player names are numeric or end in a numeric token.
+                        row.dataset.playerZ = p.z != null ? Math.round(p.z) : '';
                         if (tpArmedPlayer && tpArmedPlayer === p.name) {
                             row.classList.add('tp-armed');
                         }
@@ -1810,6 +1815,7 @@
         // `wp.tp <player> <x> <y> [z]` and disarms. ESC or re-clicking the same TELEPORT
         // button cancels and reverts the row coords to the player's actual position.
         var tpArmedPlayer = null;
+        var tpArmedPlayerZ = null;  // captured at arm time as a fallback Z for click commits
         var tpPreviewCoords = null;
 
         function armTeleport(playerName) {
@@ -1824,7 +1830,15 @@
             // Reflect in the row UI immediately (the next /api/status refresh will also keep it).
             document.querySelectorAll('.player-row').forEach(function(r) { r.classList.remove('tp-armed'); });
             var row = document.querySelector('.player-row[data-player="' + (window.CSS && CSS.escape ? CSS.escape(playerName) : playerName) + '"]');
-            if (row) row.classList.add('tp-armed');
+            if (row) {
+                row.classList.add('tp-armed');
+                // Capture the player's current Z so we can fall back to it at click time
+                // if /api/terrain_height has no land data for the click point.
+                var pz = row.dataset.playerZ;
+                tpArmedPlayerZ = (pz !== '' && pz != null) ? parseInt(pz, 10) : null;
+            } else {
+                tpArmedPlayerZ = null;
+            }
 
             // Auto-switch to SEA CHART tab and prep the map.
             var seachartTab = document.querySelector('.dashboard-tab[data-tab="seachart"]');
@@ -1845,6 +1859,7 @@
 
         function disarmTeleport() {
             tpArmedPlayer = null;
+            tpArmedPlayerZ = null;
             tpPreviewCoords = null;
             document.querySelectorAll('.player-row.tp-armed').forEach(function(r) { r.classList.remove('tp-armed'); });
             // Restore any preview-styled position fields to the actual coords.
@@ -2015,30 +2030,46 @@
                 //   - terrain Z < 0 (shoreline / underwater): float 3m above sea level —
                 //     the pawn capsule extends below the feet pivot and water shaders
                 //     make even +1m look "in water", so we need more clearance
-                // If the endpoint returns z:null (ocean / out-of-bounds) or the request
-                // fails, we omit Z and `wp.tp` preserves the player's current Z.
+                //
+                // We ALWAYS send a Z (never the 3-arg `wp.tp <name> <x> <y>` form). When
+                // terrain data is unavailable (ocean / out-of-bounds / pre-heightmap-export
+                // / endpoint unreachable) we fall back to the armed player's current Z
+                // captured at arm time. This avoids an arg-parser ambiguity in wp.tp where
+                // a numeric or numeric-suffix player name could be misread as a coord.
+                function commitTeleport(player, x, y, z) {
+                    sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y + ' ' + z);
+                }
+
                 seachartMap.on('click', function(e) {
                     if (!tpArmedPlayer) return;
                     var x = Math.round(e.latlng.lng);
                     var y = Math.round(e.latlng.lat);
                     var player = tpArmedPlayer;
+                    var fallbackZ = tpArmedPlayerZ;  // captured at arm time
                     disarmTeleport();
 
                     fetch('/api/terrain_height?x=' + x + '&y=' + y)
                         .then(function(r) { return r.json(); })
                         .then(function(data) {
-                            var cmd = 'wp.tp ' + player + ' ' + x + ' ' + y;
+                            var z;
                             if (data && typeof data.z === 'number') {
-                                var z = data.z >= 0
+                                z = data.z >= 0
                                     ? Math.round(data.z + 100)
                                     : 300;
-                                cmd += ' ' + z;
+                            } else if (fallbackZ != null) {
+                                // Terrain data unavailable — keep player at their current Z.
+                                z = fallbackZ;
+                            } else {
+                                // Last resort: float just above sea level.
+                                z = 300;
                             }
-                            sendRconCommand(cmd);
+                            commitTeleport(player, x, y, z);
                         })
                         .catch(function() {
-                            // Endpoint unreachable — fall back to no-Z behavior.
-                            sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y);
+                            // Endpoint unreachable — fall back to player's current Z, or
+                            // a sea-level float if that's somehow missing too.
+                            var z = fallbackZ != null ? fallbackZ : 300;
+                            commitTeleport(player, x, y, z);
                         });
                 });
 
