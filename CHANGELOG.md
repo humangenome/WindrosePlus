@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.9] - 2026-04-29
+
+### Added
+
+- **SEA CHART click-to-teleport.** The dashboard now adds a TELEPORT action on each online player row. Arm a player, click the SEA CHART, and Windrose+ sends `wp.tp` with a heightmap-derived Z so the player lands above the selected terrain.
+- **`wp.tp [player] <x> <y> [z]`.** Adds an admin teleport command using `K2_SetActorLocation(..., bTeleport=true)`. Dashboard calls always send Z to avoid ambiguous numeric player names; manual RCON callers can still omit Z to preserve the player's current height.
+- **`/api/terrain_height?x=&y=`.** Adds a dashboard API endpoint that samples the exported heightmap files and returns ground Z for click-to-teleport.
+
+### Fixed
+
+- **On-ship player and pawn positions no longer render at world origin.** Query and LiveMap now prefer `K2_GetActorLocation()` before falling back to `ReplicatedMovement.Location`, fixing player, AI ship, crew, and mineral marker positions when actors are attached to moving parents.
+- **Teleport-triggered map refresh stays on the safe writer path.** `wp.tp` now requests the next LiveMap write through a flag consumed by `LiveMap.writeIfDue()` instead of collecting UObjects directly from the RCON command handler.
+
 ## [1.1.8] - 2026-04-29
 
 Targets [#33](https://github.com/HumanGenome/WindrosePlus/issues/33), the GPortal-class ship/AI rubber-banding that disappears when Windrose+ is disabled.
