@@ -596,13 +596,16 @@ function Admin._registerCommands()
                 end
             end
 
-            -- Push the new position to the dashboard immediately rather than waiting
-            -- for the next LiveMap interval. Keeps the click-to-teleport UI snappy
-            -- without forcing a faster default interval on every server.
+            -- Request the next LiveMap tick force a write so the new player position
+            -- reaches the dashboard immediately rather than waiting up to one
+            -- _playerInterval. We only set a flag here — the actual UObject collection
+            -- runs in writeIfDue on the game-thread-dispatched path, never from this
+            -- RCON command-processing thread (preserves the dispatchTick / degraded-mode
+            -- protection introduced for #33/#46).
             if anyTeleported then
                 local LiveMap = WindrosePlus._modules and WindrosePlus._modules.LiveMap
-                if LiveMap and LiveMap.forceWrite then
-                    pcall(LiveMap.forceWrite)
+                if LiveMap and LiveMap.requestForceWrite then
+                    pcall(LiveMap.requestForceWrite)
                 end
             end
 
