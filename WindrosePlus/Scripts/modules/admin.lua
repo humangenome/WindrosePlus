@@ -519,6 +519,101 @@ function Admin._registerCommands()
         end
     }
 
+    -- Teleport an online player to absolute world coordinates (UU/cm).
+    -- Z is optional — if omitted, player's current Z is preserved (works well for
+    -- short hops; for cross-map jumps the SEA CHART click-to-teleport in the
+    -- dashboard supplies a heightmap-derived Z so the player lands above terrain).
+    Admin._commands["wp.tp"] = {
+        description = "Teleport player to absolute world coordinates (X, Y, optional Z)",
+        usage = "wp.tp [player] <x> <y> [z]",
+        category = "admin",
+        examples = {"wp.tp 100000 200000", "wp.tp HumanGenome 100000 200000 5000"},
+        playerArg = true,
+        handler = function(args)
+            local n = #args
+            if n < 2 then return "Usage: wp.tp [player] <x> <y> [z]" end
+
+            -- Trailing 2 or 3 args are numeric coords; everything before is the (possibly
+            -- multi-word) player name. Same disambiguation pattern as wp.speed.
+            local last1 = tonumber(args[n])
+            local last2 = n >= 2 and tonumber(args[n-1]) or nil
+            local last3 = n >= 3 and tonumber(args[n-2]) or nil
+            local x, y, z, nameEnd
+            if last3 and last2 and last1 then
+                x, y, z = last3, last2, last1
+                nameEnd = n - 3
+            elseif last2 and last1 then
+                x, y = last2, last1
+                nameEnd = n - 2
+            else
+                return "Need 2 or 3 trailing numeric coords (x y [z])"
+            end
+            local targetName = nameEnd > 0 and table.concat(args, " ", 1, nameEnd):lower() or nil
+
+            local pcs = FindAllOf("PlayerController")
+            if not pcs then return "No players found" end
+
+            local results = {}
+            local matched = 0
+            local anyTeleported = false
+            for _, pc in ipairs(pcs) do
+                if pc:IsValid() then
+                    local pName = getPlayerName(pc)
+                    local nameMatch = not targetName or (pName and pName:lower() == targetName)
+                    if nameMatch then
+                        matched = matched + 1
+                        pcall(function()
+                            local pawn = pc.Pawn
+                            if not (pawn and pawn:IsValid()) then
+                                table.insert(results, (pName or "?") .. ": no pawn")
+                                return
+                            end
+
+                            -- Use current Z if not given
+                            local targetZ = z
+                            if not targetZ then
+                                local locOk, loc = pcall(function() return pawn:K2_GetActorLocation() end)
+                                if locOk and loc and loc.Z then targetZ = loc.Z else targetZ = 0 end
+                            end
+
+                            local newLoc = { X = x, Y = y, Z = targetZ }
+                            -- K2_SetActorLocation(NewLocation, bSweep, OutSweepHitResult, bTeleport)
+                            -- bSweep=false: don't collide-test against world while moving
+                            -- bTeleport=true: discontinuous move, signals to physics/replication
+                            --   that this is intentional (vs. a desync, which would rubber-band)
+                            local callOk, ret = pcall(function()
+                                return pawn:K2_SetActorLocation(newLoc, false, {}, true)
+                            end)
+                            if not callOk then
+                                table.insert(results, string.format("%s: ERR %s", pName or "?", tostring(ret)))
+                                return
+                            end
+                            anyTeleported = true
+                            table.insert(results, string.format("%s: tp -> (%.0f, %.0f, %.0f) ret=%s",
+                                pName or "?", x, y, targetZ, tostring(ret)))
+                        end)
+                    end
+                end
+            end
+
+            -- Request the next LiveMap tick force a write so the new player position
+            -- reaches the dashboard immediately rather than waiting up to one
+            -- _playerInterval. We only set a flag here — the actual UObject collection
+            -- runs in writeIfDue on the game-thread-dispatched path, never from this
+            -- RCON command-processing thread (preserves the dispatchTick / degraded-mode
+            -- protection introduced for #33/#46).
+            if anyTeleported then
+                local LiveMap = WindrosePlus._modules and WindrosePlus._modules.LiveMap
+                if LiveMap and LiveMap.requestForceWrite then
+                    pcall(LiveMap.requestForceWrite)
+                end
+            end
+
+            if matched == 0 then return "No matching player" end
+            return table.concat(results, "\n")
+        end,
+    }
+
     -- =========================================
     -- Real-time Game Settings (modify UE4 objects live)
     -- =========================================

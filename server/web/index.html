@@ -350,13 +350,78 @@
 
         .player-row {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
             align-items: center;
             gap: 10px;
             padding: 6px 8px;
             border-radius: 8px;
             border: 1px solid rgba(212, 160, 74, 0.08);
             background: rgba(255, 248, 230, 0.02);
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .player-row.tp-armed {
+            border-color: rgba(212, 160, 74, 0.5);
+            background: rgba(212, 160, 74, 0.07);
+        }
+
+        .player-tp-btn {
+            background: transparent;
+            border: 1px solid rgba(212, 160, 74, 0.25);
+            color: var(--text-muted);
+            font-family: 'Cinzel', serif;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .player-tp-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(212, 160, 74, 0.05);
+        }
+
+        .player-row.tp-armed .player-tp-btn {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(212, 160, 74, 0.12);
+        }
+
+        #seachart-map.tp-armed,
+        #seachart-map.tp-armed .leaflet-container,
+        #seachart-map.tp-armed .leaflet-grab,
+        #seachart-map.tp-armed .leaflet-interactive {
+            cursor: crosshair !important;
+        }
+
+        .tp-hint-banner {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 16, 10, 0.92);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 7px 16px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-family: 'Cormorant Garamond', serif;
+            letter-spacing: 0.03em;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+        }
+
+        .tp-hint-banner .hint-key {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-left: 8px;
         }
 
         .player-dot {
@@ -386,6 +451,19 @@
             font-size: 0.78rem;
             color: var(--text-muted);
             white-space: nowrap;
+            transition: color 0.15s ease;
+        }
+
+        .player-pos.tp-preview {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        .tp-hint-coords {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+            margin: 0 8px;
+            color: var(--text);
         }
 
         .empty-state {
@@ -1159,6 +1237,7 @@
             </div>
             <div class="tab-content" id="seachart-pane">
                 <div id="seachart-map"></div>
+                <div class="tp-hint-banner" id="tp-hint-banner" style="display:none;"></div>
             </div>
 
             <!-- Hidden elements preserved for test compatibility -->
@@ -1244,6 +1323,15 @@
                     for (const p of players) {
                         const row = document.createElement('div');
                         row.className = 'player-row';
+                        row.dataset.player = p.name || '';
+                        // Stash current Z on the row so the click handler has a fallback
+                        // if /api/terrain_height returns null (ocean / out-of-bounds /
+                        // pre-export). Always sending a Z avoids an arg-parser ambiguity
+                        // in wp.tp when player names are numeric or end in a numeric token.
+                        row.dataset.playerZ = p.z != null ? Math.round(p.z) : '';
+                        if (tpArmedPlayer && tpArmedPlayer === p.name) {
+                            row.classList.add('tp-armed');
+                        }
 
                         const dot = document.createElement('div');
                         dot.className = 'player-dot' + (p.alive === false ? ' dead' : '');
@@ -1252,13 +1340,31 @@
                         name.className = 'player-name';
                         name.textContent = p.name || 'Unknown';
 
+                        const tpBtn = document.createElement('button');
+                        tpBtn.className = 'player-tp-btn';
+                        tpBtn.type = 'button';
+                        tpBtn.textContent = 'TELEPORT';
+                        tpBtn.title = 'Teleport ' + (p.name || 'this player') + ' — then click anywhere on the SEA CHART';
+                        tpBtn.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            armTeleport(p.name);
+                        });
+
                         const pos = document.createElement('span');
                         pos.className = 'player-pos';
-                        if (p.x != null) {
-                            pos.textContent = `${Math.round(p.x)}, ${Math.round(p.y)}`;
+                        const actualPosText = p.x != null ? `${Math.round(p.x)}, ${Math.round(p.y)}` : '';
+                        // If this is the armed player and a preview is active, keep showing
+                        // the cursor coords; stash the actual position so disarm/mouseout
+                        // can revert without waiting for the next status refresh.
+                        if (tpArmedPlayer === p.name && tpPreviewCoords) {
+                            pos.textContent = `${tpPreviewCoords.x}, ${tpPreviewCoords.y}`;
+                            pos.classList.add('tp-preview');
+                            pos.dataset.origText = actualPosText;
+                        } else {
+                            pos.textContent = actualPosText;
                         }
 
-                        row.append(dot, name, pos);
+                        row.append(dot, name, tpBtn, pos);
                         list.appendChild(row);
                     }
                 }
@@ -1699,6 +1805,125 @@
         // Tab switching
         var seachartInitialized = false;
         var seachartMap = null;
+
+        // -------- Click-to-teleport state --------
+        // The TELEPORT button on each player row "arms" a teleport for that player. While
+        // armed, the SEA CHART map shows a crosshair cursor and a hint banner. As the
+        // cursor moves over the map, tpPreviewCoords tracks the hover point and we mirror
+        // it into the player row's coords field (in italic accent) and the banner — so
+        // the admin sees exactly where the click would land. The next map click sends
+        // `wp.tp <player> <x> <y> [z]` and disarms. ESC or re-clicking the same TELEPORT
+        // button cancels and reverts the row coords to the player's actual position.
+        var tpArmedPlayer = null;
+        var tpArmedPlayerZ = null;  // captured at arm time as a fallback Z for click commits
+        var tpPreviewCoords = null;
+
+        function armTeleport(playerName) {
+            if (!playerName) return;
+            // Toggle off if same player already armed
+            if (tpArmedPlayer === playerName) {
+                disarmTeleport();
+                return;
+            }
+            tpArmedPlayer = playerName;
+
+            // Reflect in the row UI immediately (the next /api/status refresh will also keep it).
+            document.querySelectorAll('.player-row').forEach(function(r) { r.classList.remove('tp-armed'); });
+            var row = document.querySelector('.player-row[data-player="' + (window.CSS && CSS.escape ? CSS.escape(playerName) : playerName) + '"]');
+            if (row) {
+                row.classList.add('tp-armed');
+                // Capture the player's current Z so we can fall back to it at click time
+                // if /api/terrain_height has no land data for the click point.
+                var pz = row.dataset.playerZ;
+                tpArmedPlayerZ = (pz !== '' && pz != null) ? parseInt(pz, 10) : null;
+            } else {
+                tpArmedPlayerZ = null;
+            }
+
+            // Auto-switch to SEA CHART tab and prep the map.
+            var seachartTab = document.querySelector('.dashboard-tab[data-tab="seachart"]');
+            if (seachartTab && !seachartTab.classList.contains('active')) {
+                seachartTab.click();
+            }
+            var mapEl = document.getElementById('seachart-map');
+            if (mapEl) mapEl.classList.add('tp-armed');
+
+            var banner = document.getElementById('tp-hint-banner');
+            if (banner) {
+                banner.innerHTML = 'Click the map to teleport <strong>' + escHtmlGlobal(playerName) + '</strong>'
+                    + '<span class="tp-hint-coords" id="tp-hint-coords"></span>'
+                    + '<span class="hint-key">ESC to cancel</span>';
+                banner.style.display = 'block';
+            }
+        }
+
+        function disarmTeleport() {
+            tpArmedPlayer = null;
+            tpArmedPlayerZ = null;
+            tpPreviewCoords = null;
+            document.querySelectorAll('.player-row.tp-armed').forEach(function(r) { r.classList.remove('tp-armed'); });
+            // Restore any preview-styled position fields to the actual coords.
+            document.querySelectorAll('.player-pos.tp-preview').forEach(function(el) {
+                el.classList.remove('tp-preview');
+                if (el.dataset.origText != null) {
+                    el.textContent = el.dataset.origText;
+                    delete el.dataset.origText;
+                }
+            });
+            var mapEl = document.getElementById('seachart-map');
+            if (mapEl) mapEl.classList.remove('tp-armed');
+            var banner = document.getElementById('tp-hint-banner');
+            if (banner) banner.style.display = 'none';
+        }
+
+        // Update the armed player's row coords + banner to reflect the cursor position.
+        // Called on map mousemove while armed. Stashes the original text on first call so
+        // we can restore it on mouseout / disarm.
+        function updateTeleportPreview(x, y) {
+            tpPreviewCoords = { x: x, y: y };
+            if (!tpArmedPlayer) return;
+            var sel = '.player-row[data-player="' + (window.CSS && CSS.escape ? CSS.escape(tpArmedPlayer) : tpArmedPlayer) + '"]';
+            var row = document.querySelector(sel);
+            if (row) {
+                var pos = row.querySelector('.player-pos');
+                if (pos) {
+                    if (pos.dataset.origText == null) pos.dataset.origText = pos.textContent;
+                    pos.textContent = x + ', ' + y;
+                    pos.classList.add('tp-preview');
+                }
+            }
+            var coordsEl = document.getElementById('tp-hint-coords');
+            if (coordsEl) coordsEl.textContent = '(' + x + ', ' + y + ')';
+        }
+
+        // Called when cursor leaves the map (or on disarm) — revert preview without
+        // clearing tpArmedPlayer (so a re-enter resumes the preview).
+        function clearTeleportPreview() {
+            tpPreviewCoords = null;
+            document.querySelectorAll('.player-pos.tp-preview').forEach(function(el) {
+                el.classList.remove('tp-preview');
+                if (el.dataset.origText != null) {
+                    el.textContent = el.dataset.origText;
+                    delete el.dataset.origText;
+                }
+            });
+            var coordsEl = document.getElementById('tp-hint-coords');
+            if (coordsEl) coordsEl.textContent = '';
+        }
+
+        function escHtmlGlobal(s) {
+            var d = document.createElement('div');
+            d.appendChild(document.createTextNode(String(s)));
+            return d.innerHTML;
+        }
+
+        // ESC anywhere disarms.
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && tpArmedPlayer) {
+                disarmTeleport();
+            }
+        });
+
         document.querySelectorAll('.dashboard-tab').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var tab = this.getAttribute('data-tab');
@@ -1780,6 +2005,73 @@
 
                 var playerLayer = L.layerGroup().addTo(seachartMap);
                 var mobLayer = L.layerGroup().addTo(seachartMap);
+
+                // Live preview: as the cursor moves while armed, mirror the hover point
+                // into the player row's coords field and the hint banner.
+                seachartMap.on('mousemove', function(e) {
+                    if (!tpArmedPlayer) return;
+                    updateTeleportPreview(Math.round(e.latlng.lng), Math.round(e.latlng.lat));
+                });
+                seachartMap.on('mouseout', function() {
+                    if (!tpArmedPlayer) return;
+                    clearTeleportPreview();
+                });
+
+                // Click-to-teleport. Active only when a player is armed via the TELEPORT
+                // button in the player list. Leaflet's CRS already maps lat/lng to world
+                // Y/X 1:1 (see L.marker(L.latLng(p.y, p.x)) below), so click coords are
+                // world coords directly — no projection math.
+                //
+                // For Z: we ask /api/terrain_height to sample the exported heightmap at
+                // (X, Y). Sea level is Z=0 in Windrose's heightfield. Different clearances
+                // for land vs water:
+                //   - terrain Z >= 0 (dry land): land 1m above terrain — small offset so
+                //     mountain/grass clicks don't make the player visibly drop
+                //   - terrain Z < 0 (shoreline / underwater): float 3m above sea level —
+                //     the pawn capsule extends below the feet pivot and water shaders
+                //     make even +1m look "in water", so we need more clearance
+                //
+                // We ALWAYS send a Z (never the 3-arg `wp.tp <name> <x> <y>` form). When
+                // terrain data is unavailable (ocean / out-of-bounds / pre-heightmap-export
+                // / endpoint unreachable) we fall back to the armed player's current Z
+                // captured at arm time. This avoids an arg-parser ambiguity in wp.tp where
+                // a numeric or numeric-suffix player name could be misread as a coord.
+                function commitTeleport(player, x, y, z) {
+                    sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y + ' ' + z);
+                }
+
+                seachartMap.on('click', function(e) {
+                    if (!tpArmedPlayer) return;
+                    var x = Math.round(e.latlng.lng);
+                    var y = Math.round(e.latlng.lat);
+                    var player = tpArmedPlayer;
+                    var fallbackZ = tpArmedPlayerZ;  // captured at arm time
+                    disarmTeleport();
+
+                    fetch('/api/terrain_height?x=' + x + '&y=' + y)
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            var z;
+                            if (data && typeof data.z === 'number') {
+                                z = data.z >= 0
+                                    ? Math.round(data.z + 100)
+                                    : 300;
+                            } else if (fallbackZ != null) {
+                                // Terrain data unavailable — keep player at their current Z.
+                                z = fallbackZ;
+                            } else {
+                                // Last resort: float just above sea level.
+                                z = 300;
+                            }
+                            commitTeleport(player, x, y, z);
+                        })
+                        .catch(function() {
+                            // Endpoint unreachable — fall back to player's current Z, or
+                            // a sea-level float if that's somehow missing too.
+                            var z = fallbackZ != null ? fallbackZ : 300;
+                            commitTeleport(player, x, y, z);
+                        });
+                });
 
                 function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
 

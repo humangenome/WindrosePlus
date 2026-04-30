@@ -207,10 +207,20 @@ function Query.getPlayers()
             pcall(function()
                 local pawn = pc.Pawn
                 if pawn and pawn:IsValid() then
+                    -- K2_GetActorLocation() traverses the attachment hierarchy and returns
+                    -- true world coords. ReplicatedMovement.Location stops giving world
+                    -- coords when the pawn is attached to a moving parent (e.g. on a ship),
+                    -- producing (0,0,0) for boarded players.
                     pcall(function()
-                        local loc = pawn.ReplicatedMovement.Location
+                        local loc = pawn:K2_GetActorLocation()
                         if loc then p.x = loc.X; p.y = loc.Y; p.z = loc.Z end
                     end)
+                    if not p.x then
+                        pcall(function()
+                            local loc = pawn.ReplicatedMovement.Location
+                            if loc then p.x = loc.X; p.y = loc.Y; p.z = loc.Z end
+                        end)
+                    end
                     pcall(function()
                         local hc = pawn.HealthComponent
                         if hc and hc:IsValid() then

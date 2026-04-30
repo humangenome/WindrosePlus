@@ -20,6 +20,7 @@ LiveMap._wroteEmpty = false
 LiveMap._lastSnapshot = nil
 LiveMap._lastSnapshotTs = 0
 LiveMap._pendingContent = nil
+LiveMap._forceRequested = false  -- consumed by writeIfDue on the game-thread dispatch path
 
 local function cloneTable(t)
     if type(t) ~= "table" then return t end
@@ -72,8 +73,13 @@ function LiveMap.writeIfDue()
     LiveMap._wroteEmpty = false
 
     local now = os.time()
-    local playersDue = (now - LiveMap._lastPlayerWrite >= LiveMap._playerInterval)
-    local entitiesDue = (now - LiveMap._lastEntityWrite >= LiveMap._entityInterval)
+    -- Honor a pending force-write request (e.g. set from wp.tp). Consume the flag
+    -- here on the game-thread-dispatched path so UObject collection never runs
+    -- from the RCON command-processing thread.
+    local forced = LiveMap._forceRequested
+    if forced then LiveMap._forceRequested = false end
+    local playersDue = forced or (now - LiveMap._lastPlayerWrite >= LiveMap._playerInterval)
+    local entitiesDue = forced or (now - LiveMap._lastEntityWrite >= LiveMap._entityInterval)
 
     if not playersDue then return end
     LiveMap._lastPlayerWrite = now
@@ -90,6 +96,13 @@ function LiveMap.writeIfDue()
     end
 
     LiveMap._collectAndWrite(collectEntities, allPlayers)
+end
+
+-- Request that the next writeIfDue tick force a write regardless of interval timing.
+-- Safe to call from any thread (RCON command handlers, async tasks) — only sets a flag.
+-- The actual UObject collection happens in writeIfDue on the game-thread-dispatched path.
+function LiveMap.requestForceWrite()
+    LiveMap._forceRequested = true
 end
 
 function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
@@ -128,10 +141,19 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
                                 m.name = fn:match("BP_([^_]+)") or "Mob"
                             end
                         end)
+                        -- K2_GetActorLocation() walks attachment hierarchy and returns
+                        -- true world coords; ReplicatedMovement.Location reads (0,0,0)
+                        -- for actors attached to moving parents (ships, etc.).
                         pcall(function()
-                            local loc = pawn.ReplicatedMovement.Location
+                            local loc = pawn:K2_GetActorLocation()
                             if loc then m.x = loc.X; m.y = loc.Y; m.z = loc.Z end
                         end)
+                        if not m.x then
+                            pcall(function()
+                                local loc = pawn.ReplicatedMovement.Location
+                                if loc then m.x = loc.X; m.y = loc.Y; m.z = loc.Z end
+                            end)
+                        end
                         if m.x then table.insert(mobs, m) end
                     end
                 end
@@ -148,9 +170,15 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
                         n.name = fn:match("BP_([^_]+)") or "Mineral"
                     end)
                     pcall(function()
-                        local loc = node.ReplicatedMovement.Location
+                        local loc = node:K2_GetActorLocation()
                         if loc then n.x = loc.X; n.y = loc.Y; n.z = loc.Z end
                     end)
+                    if not n.x then
+                        pcall(function()
+                            local loc = node.ReplicatedMovement.Location
+                            if loc then n.x = loc.X; n.y = loc.Y; n.z = loc.Z end
+                        end)
+                    end
                     if not n.x then
                         pcall(function()
                             local root = node.RootComponent

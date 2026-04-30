@@ -289,6 +289,96 @@ function Write-AtomicUtf8Json($path, $data) {
     Move-Item -LiteralPath $tmpPath -Destination $path -Force
 }
 
+# --- Terrain heightmap sampling (for click-to-teleport on the SEA CHART) ---
+# The dashboard already has full elevation data exported by HeightmapExporter:
+#   windrose_plus_data/terrain_v17.json   — manifest of components (wx, wy, minZ, maxZ, res, file)
+#   windrose_plus_data/heightmaps/*.bin   — uint16 heightfield grids per component
+# Component binary format: int32 res, then res*res uint16 samples.
+# Sample formula: worldZ = minZ + (raw / 65535) * (maxZ - minZ).
+# Components with maxZ < 100 are ocean floor (per generateTiles.ps1's seaLevelThreshold);
+# we skip those so a click over ocean falls back to "preserve current Z" rather than
+# teleporting the player to the sea floor.
+$script:TerrainCacheReady = $false
+$script:TerrainLandComps = $null
+
+function Initialize-TerrainCache($DataDir) {
+    if ($script:TerrainCacheReady) { return $true }
+    $jsonPath = Join-Path $DataDir "terrain_v17.json"
+    if (-not (Test-Path -LiteralPath $jsonPath)) { return $false }
+    try {
+        $meta = Get-Content $jsonPath -Raw | ConvertFrom-Json
+    } catch { return $false }
+
+    # Per-landscape step (delta between consecutive sx values; defines compW = step * scale)
+    $byLand = @{}
+    foreach ($c in $meta.components) {
+        $li = [string]$c.l
+        if (-not $byLand.ContainsKey($li)) { $byLand[$li] = @() }
+        $byLand[$li] += $c
+    }
+    $landSteps = @{}
+    foreach ($li in $byLand.Keys) {
+        $sxs = @($byLand[$li] | ForEach-Object { $_.sx } | Sort-Object -Unique)
+        if ($sxs.Count -gt 1) { $landSteps[$li] = $sxs[1] - $sxs[0] }
+        else { $landSteps[$li] = 255 }
+    }
+
+    $comps = New-Object System.Collections.Generic.List[object]
+    foreach ($c in $meta.components) {
+        if ($c.h -ne 1) { continue }
+        $maxZ = if ($null -ne $c.maxZ) { [double]$c.maxZ } else { 1.0 }
+        if ($maxZ -lt 100) { continue }  # ocean floor — skip
+        $li = [string]$c.l
+        $land = $meta.landscapes[$c.l]
+        $scale = if ($land.sx -gt 0) { [double]$land.sx } else { 100.0 }
+        $step = if ($landSteps.ContainsKey($li)) { [double]$landSteps[$li] } else { 255.0 }
+        $compW = $step * $scale
+        $minZ = if ($null -ne $c.minZ) { [double]$c.minZ } else { 0.0 }
+        $comps.Add([PSCustomObject]@{
+            wx = [double]$c.wx
+            wy = [double]$c.wy
+            wx2 = [double]$c.wx + $compW
+            wy2 = [double]$c.wy + $compW
+            res = [int]$c.res
+            minZ = $minZ
+            maxZ = $maxZ
+            f = [string]$c.f
+        }) | Out-Null
+    }
+    $script:TerrainLandComps = $comps
+    $script:TerrainCacheReady = $true
+    return $true
+}
+
+function Get-TerrainHeightAt($DataDir, [double]$WorldX, [double]$WorldY) {
+    if (-not (Initialize-TerrainCache $DataDir)) { return $null }
+    foreach ($c in $script:TerrainLandComps) {
+        if ($WorldX -ge $c.wx -and $WorldX -lt $c.wx2 -and $WorldY -ge $c.wy -and $WorldY -lt $c.wy2) {
+            $hfPath = Join-Path $DataDir "heightmaps\$($c.f)"
+            if (-not (Test-Path -LiteralPath $hfPath)) { return $null }
+            try {
+                $bytes = [System.IO.File]::ReadAllBytes($hfPath)
+                if ($bytes.Length -lt 8) { return $null }
+                $res = [BitConverter]::ToInt32($bytes, 0)
+                if ($res -le 0 -or $res -ne $c.res) { return $null }
+                $compW = $c.wx2 - $c.wx
+                $fx = ($WorldX - $c.wx) / $compW
+                $fy = ($WorldY - $c.wy) / $compW
+                $hx = [int][Math]::Floor($fx * $res)
+                $hy = [int][Math]::Floor($fy * $res)
+                if ($hx -lt 0) { $hx = 0 } elseif ($hx -ge $res) { $hx = $res - 1 }
+                if ($hy -lt 0) { $hy = 0 } elseif ($hy -ge $res) { $hy = $res - 1 }
+                $byteOff = 4 + ($hy * $res + $hx) * 2
+                if ($byteOff + 1 -ge $bytes.Length) { return $null }
+                $raw = [BitConverter]::ToUInt16($bytes, $byteOff)
+                $z = $c.minZ + ($raw / 65535.0) * ($c.maxZ - $c.minZ)
+                return $z
+            } catch { return $null }
+        }
+    }
+    return $null
+}
+
 function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
     $statusPath = Join-Path $dataDir "rcon_status.json"
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -715,6 +805,7 @@ try {
                         @{name="wp.speed"; usage="wp.speed [player] <mult>"; description="Set movement speed"; category="admin"},
                         @{name="wp.jump"; usage="wp.jump [player] <mult>"; description="Set jump height (1.0=normal, 2.0=double)"; category="admin"},
                         @{name="wp.gravity"; usage="wp.gravity [player] <mult>"; description="Set gravity (1.0=normal, 0.3=moon)"; category="admin"},
+                        @{name="wp.tp"; usage="wp.tp [player] <x> <y> [z]"; description="Teleport player to absolute world coordinates"; category="admin"},
                         @{name="wp.time"; usage="wp.time"; description="Read current time of day"; category="world"},
                         @{name="wp.creatures"; usage="wp.creatures"; description="Count spawned creatures by type"; category="world"},
                         @{name="wp.entities"; usage="wp.entities"; description="Count entities by type"; category="world"},
@@ -741,6 +832,29 @@ try {
                         Send-Json $context @{
                             error = "Map not ready yet. Join the server once to auto-generate the map."
                             generation = $generation
+                        }
+                    }
+                }
+                "/api/terrain_height" {
+                    # Sample the exported heightmap at a world (X, Y) and return ground Z.
+                    # Used by the SEA CHART click-to-teleport so we don't drop the player
+                    # under a mountain or in deep water.
+                    $qs = $context.Request.QueryString
+                    $xRaw = $qs["x"]
+                    $yRaw = $qs["y"]
+                    $worldX = 0.0; $worldY = 0.0
+                    if ([string]::IsNullOrWhiteSpace($xRaw) -or [string]::IsNullOrWhiteSpace($yRaw)) {
+                        Send-Json $context @{ error = "x and y query params required" } 400
+                    } elseif (-not [double]::TryParse($xRaw, [ref]$worldX)) {
+                        Send-Json $context @{ error = "x must be numeric" } 400
+                    } elseif (-not [double]::TryParse($yRaw, [ref]$worldY)) {
+                        Send-Json $context @{ error = "y must be numeric" } 400
+                    } else {
+                        $z = Get-TerrainHeightAt -DataDir $dataDir -WorldX $worldX -WorldY $worldY
+                        if ($null -eq $z) {
+                            Send-Json $context @{ x = $worldX; y = $worldY; z = $null; reason = "no_land_data" }
+                        } else {
+                            Send-Json $context @{ x = $worldX; y = $worldY; z = [double]$z }
                         }
                     }
                 }
