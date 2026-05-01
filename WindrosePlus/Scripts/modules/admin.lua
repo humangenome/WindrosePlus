@@ -296,6 +296,28 @@ function Admin._registerCommands()
         return pName
     end
 
+    local function getControlledPawn(pc)
+        local pawn = nil
+        pcall(function() pawn = pc.Pawn end)
+        if not (pawn and pawn:IsValid()) then return nil, nil, nil end
+
+        local fullName = nil
+        local shortName = nil
+        pcall(function()
+            fullName = pawn:GetFullName()
+            shortName = fullName and (fullName:match("([^%.]+)$") or fullName) or nil
+        end)
+        return pawn, shortName, fullName
+    end
+
+    local function playerTargetMatches(targetName, displayName, actorName, actorFullName)
+        if not targetName then return true end
+        if displayName and displayName:lower() == targetName then return true end
+        if actorName and actorName:lower() == targetName then return true end
+        if actorFullName and actorFullName:lower() == targetName then return true end
+        return false
+    end
+
     local function captureBaseline(cheat, mc, key)
         local store = Admin._origMovementProp[cheat.prop]
         if not store then
@@ -388,14 +410,13 @@ function Admin._registerCommands()
         for _, pc in ipairs(pcs) do
             if pc:IsValid() then
                 local pName = getPlayerName(pc)
-                local nameMatch = not targetName or (pName and pName:lower() == targetName)
-                if nameMatch then
+                local pawn, pawnName, pawnFullName = getControlledPawn(pc)
+                if playerTargetMatches(targetName, pName, pawnName, pawnFullName) then
                     pcall(function()
-                        local pawn = pc.Pawn
                         if pawn and pawn:IsValid() then
                             local mc = pawn.CharacterMovement or pawn.MovementComponent
                             if mc and mc:IsValid() then
-                                local key = pName or tostring(pc)
+                                local key = pName or pawnName or tostring(pc)
                                 local base = captureBaseline(cheat, mc, key)
                                 cheat.apply(mc, mult, base)
                                 count = count + 1
@@ -439,7 +460,7 @@ function Admin._registerCommands()
         description = "Set player movement speed multiplier",
         usage = "wp.speed [player] <multiplier>",
         category = "admin",
-        examples = {"wp.speed 2.0", "wp.speed HumanGenome 1.5", "wp.speed John Smith 1.5"},
+        examples = {"wp.speed 2.0", "wp.speed HumanGenome 1.5", "wp.speed BP_R5Character_C_2147418445 1.5"},
         playerArg = true,
         handler = function(args) return setMovementCheat(args, "speed") end,
     }
@@ -448,7 +469,7 @@ function Admin._registerCommands()
         description = "Set player jump height multiplier (JumpZVelocity; 1.0=normal, 2.0=double)",
         usage = "wp.jump [player] <multiplier>",
         category = "admin",
-        examples = {"wp.jump 2.0", "wp.jump HumanGenome 3"},
+        examples = {"wp.jump 2.0", "wp.jump HumanGenome 3", "wp.jump BP_R5Character_C_2147418445 3"},
         playerArg = true,
         handler = function(args) return setMovementCheat(args, "jump") end,
     }
@@ -457,7 +478,7 @@ function Admin._registerCommands()
         description = "Set player gravity multiplier (CharacterMovement.GravityScale; 1.0=normal, 0.3=moon)",
         usage = "wp.gravity [player] <multiplier>",
         category = "admin",
-        examples = {"wp.gravity 0.3", "wp.gravity HumanGenome 2"},
+        examples = {"wp.gravity 0.3", "wp.gravity HumanGenome 2", "wp.gravity BP_R5Character_C_2147418445 0.3"},
         playerArg = true,
         handler = function(args) return setMovementCheat(args, "gravity") end,
     }
@@ -559,13 +580,12 @@ function Admin._registerCommands()
             for _, pc in ipairs(pcs) do
                 if pc:IsValid() then
                     local pName = getPlayerName(pc)
-                    local nameMatch = not targetName or (pName and pName:lower() == targetName)
-                    if nameMatch then
+                    local pawn, pawnName, pawnFullName = getControlledPawn(pc)
+                    if playerTargetMatches(targetName, pName, pawnName, pawnFullName) then
                         matched = matched + 1
                         pcall(function()
-                            local pawn = pc.Pawn
                             if not (pawn and pawn:IsValid()) then
-                                table.insert(results, (pName or "?") .. ": no pawn")
+                                table.insert(results, (pName or pawnName or "?") .. ": no pawn")
                                 return
                             end
 
@@ -585,12 +605,12 @@ function Admin._registerCommands()
                                 return pawn:K2_SetActorLocation(newLoc, false, {}, true)
                             end)
                             if not callOk then
-                                table.insert(results, string.format("%s: ERR %s", pName or "?", tostring(ret)))
+                                table.insert(results, string.format("%s: ERR %s", pName or pawnName or "?", tostring(ret)))
                                 return
                             end
                             anyTeleported = true
                             table.insert(results, string.format("%s: tp -> (%.0f, %.0f, %.0f) ret=%s",
-                                pName or "?", x, y, targetZ, tostring(ret)))
+                                pName or pawnName or "?", x, y, targetZ, tostring(ret)))
                         end)
                     end
                 end

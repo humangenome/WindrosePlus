@@ -364,7 +364,7 @@ Connections:
 ### wp.speed
 
 Set movement speed multiplier for one or all players. Accepts `[player]` argument.
-
+The player argument can be either the display name or the actor ID shown by `wp.players`.
 
 ```
 Usage: wp.speed [player] <multiplier>
@@ -378,6 +378,9 @@ Speed set to 2.0x for 3 player(s)
 
 > wp.speed HumanGenome 1.5
 Speed set to 1.5x for humangenome
+
+> wp.speed BP_R5Character_C_2147418445 4
+Speed set to 4x for bp_r5character_c_2147418445
 ```
 
 ---
