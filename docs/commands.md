@@ -522,11 +522,14 @@ Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 
 ## HTTP API Endpoints
 
-The web dashboard exposes a REST API for external tools and integrations. All endpoints except `/api/health` require cookie-based authentication (login via the dashboard with your RCON password).
+The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "timestamp": ...}` |
+| GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
+| GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
+| GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/status` | Yes | Server status: player list, multipliers, server info |
 | GET | `/api/livemap` | Yes | Live map data: player positions, mobs, resource nodes |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |

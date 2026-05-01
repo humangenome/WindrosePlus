@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in public Sea Chart at `/public-map` for server owners who want friends to view the map without exposing the dashboard console. It is disabled by default, supports an optional share token, and exposes only map data and tiles.
+
+### Fixed
+
+- Movement/admin commands that target players now accept the same actor IDs shown by `wp.players`, in addition to display names.
+
 ### Documentation
 
 - Clarified README multiplier examples so disabled compatibility keys such as `stack_size` are not shown as active server-side multipliers.

@@ -257,6 +257,12 @@ Example `windrose_plus.json`:
     "server": {
         "http_port": 8780,
         "bind_ip": ""
+    },
+    "livemap": {
+        "public": {
+            "enabled": false,
+            "token": ""
+        }
     }
 }
 ```
@@ -268,6 +274,19 @@ See [docs/config-reference.md](docs/config-reference.md) for every advanced INI 
 ### Dashboard
 
 Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing player and mob positions in real-time.
+
+If you want friends to see the Sea Chart without the dashboard password, enable the optional map-only view:
+
+```json
+"livemap": {
+    "public": {
+        "enabled": true,
+        "token": "optional-share-token"
+    }
+}
+```
+
+Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only map data and tiles; the console, config, repair, and admin APIs still require the dashboard login.
 
 ### Commands
 

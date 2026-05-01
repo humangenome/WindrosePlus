@@ -42,9 +42,22 @@
             var loadEl = document.getElementById('loading');
             var manifest;
 
+            var isPublicMap = window.location.pathname.replace(/\/+$/, '') === '/public-map';
+            var publicToken = '';
+            try {
+                publicToken = new URLSearchParams(window.location.search).get('token') || '';
+            } catch (e) {}
+            if (isPublicMap) document.title = 'WindrosePlus — Public Sea Chart';
+
+            function withPublicToken(url) {
+                if (!isPublicMap || !publicToken) return url;
+                return url + (url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(publicToken);
+            }
+
             // Fetch map manifest from HTTP server API
             try {
-                var res = await fetch('/api/mapinfo');
+                var mapInfoUrl = isPublicMap ? '/api/public/mapinfo' : '/api/mapinfo';
+                var res = await fetch(withPublicToken(mapInfoUrl));
                 if (res.ok) manifest = await res.json();
             } catch (e) {}
 
@@ -100,7 +113,8 @@
             });
 
             var tileBase = window.location.origin;
-            L.tileLayer(tileBase + '/livemap/tiles/{z}/{x}-{y}.png', {
+            var tilePath = isPublicMap ? '/public-map/tiles/{z}/{x}-{y}.png' : '/livemap/tiles/{z}/{x}-{y}.png';
+            L.tileLayer(tileBase + withPublicToken(tilePath), {
                 minZoom: 0,
                 maxZoom: maxZoom + 2,
                 maxNativeZoom: maxZoom,
@@ -126,7 +140,8 @@
 
             async function fetchEntities() {
                 try {
-                    var res = await fetch('/api/livemap');
+                    var liveMapUrl = isPublicMap ? '/api/public/livemap' : '/api/livemap';
+                    var res = await fetch(withPublicToken(liveMapUrl));
                     if (!res.ok) return;
                     var data = await res.json();
 

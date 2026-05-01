@@ -109,6 +109,93 @@ function Get-CurrentRconPassword {
     return $null
 }
 
+# Re-read public map settings on every request so hosts can enable, disable, or
+# rotate the optional share token without restarting the dashboard process.
+function Get-CurrentPublicMapConfig {
+    $jsonPath = Join-Path $gameDir "windrose_plus.json"
+    for ($i = 0; $i -lt 3; $i++) {
+        try {
+            $cfg = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
+            $public = $null
+            if ($cfg.livemap -and $cfg.livemap.public) { $public = $cfg.livemap.public }
+            $enabled = $false
+            $token = ""
+            if ($public) {
+                $enabled = ($public.enabled -eq $true)
+                if ($public.token) { $token = [string]$public.token }
+            }
+            return [PSCustomObject]@{
+                Enabled = $enabled
+                Token = $token
+            }
+        } catch {
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    Write-Host "WARN: Unable to parse public map settings after 3 retries"
+    return $null
+}
+
+function Test-PublicMapAccess($request) {
+    $publicMap = Get-CurrentPublicMapConfig
+    if ($null -eq $publicMap) {
+        return @{ Allowed = $false; StatusCode = 503; Error = "Config temporarily unavailable, retry in a moment" }
+    }
+    if (-not $publicMap.Enabled) {
+        return @{ Allowed = $false; StatusCode = 404; Error = "Public map is not enabled" }
+    }
+    if (-not $publicMap.Token) {
+        return @{ Allowed = $true; StatusCode = 200; Error = "" }
+    }
+
+    $provided = $request.QueryString["token"]
+    if (-not $provided) { $provided = $request.Headers["X-WindrosePlus-Map-Token"] }
+    if ($provided -eq $publicMap.Token) {
+        return @{ Allowed = $true; StatusCode = 200; Error = "" }
+    }
+    return @{ Allowed = $false; StatusCode = 401; Error = "Invalid public map token" }
+}
+
+function ConvertTo-PublicLiveMapData($data) {
+    $players = @()
+    if ($data.players) {
+        foreach ($p in @($data.players)) {
+            $item = [ordered]@{}
+            if ($p.name) { $item["name"] = [string]$p.name }
+            if ($null -ne $p.x) { $item["x"] = [double]$p.x }
+            if ($null -ne $p.y) { $item["y"] = [double]$p.y }
+            if ($null -ne $p.z) { $item["z"] = [double]$p.z }
+            $players += [PSCustomObject]$item
+        }
+    }
+
+    $mobs = @()
+    if ($data.mobs) {
+        foreach ($m in @($data.mobs)) {
+            $item = [ordered]@{}
+            if ($m.name) { $item["name"] = [string]$m.name }
+            if ($null -ne $m.x) { $item["x"] = [double]$m.x }
+            if ($null -ne $m.y) { $item["y"] = [double]$m.y }
+            if ($null -ne $m.z) { $item["z"] = [double]$m.z }
+            $mobs += [PSCustomObject]$item
+        }
+    }
+
+    $publicData = [ordered]@{
+        players = $players
+        mobs = $mobs
+        player_count = $players.Count
+        mob_count = $mobs.Count
+        timestamp = $data.timestamp
+    }
+    if ($data.degraded) {
+        $publicData["degraded"] = $true
+        $publicData["degraded_reason"] = $data.degraded_reason
+        $publicData["cache_age_sec"] = $data.cache_age_sec
+    }
+    return [PSCustomObject]$publicData
+}
+
 # Session management — HMAC-signed tokens
 $sessionSecret = [System.Guid]::NewGuid().ToString()
 
@@ -609,6 +696,66 @@ try {
             # API health endpoint — no auth (used for monitoring)
             if ($path -eq "/api/health") {
                 Send-Json $context @{ status = "ok"; version = $Version; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
+                continue
+            }
+
+            # Optional public Sea Chart. This deliberately exposes only the map
+            # manifest, livemap snapshot, and generated tiles. Dashboard, RCON,
+            # config, repair, status, and terrain-height routes still require
+            # the normal authenticated dashboard session above.
+            if ($path -eq "/public-map" -or $path.StartsWith("/api/public/") -or $path.StartsWith("/public-map/tiles/")) {
+                $publicAccess = Test-PublicMapAccess $context.Request
+                if (-not $publicAccess.Allowed) {
+                    if ($path.StartsWith("/api/")) {
+                        Send-Json $context @{ error = $publicAccess.Error } $publicAccess.StatusCode
+                    } else {
+                        Send-Html $context ("<html><body>{0}</body></html>" -f [System.Net.WebUtility]::HtmlEncode($publicAccess.Error)) $publicAccess.StatusCode
+                    }
+                    continue
+                }
+
+                if ($path -eq "/public-map") {
+                    Send-File $context (Join-Path $webDir "livemap\index.html")
+                    continue
+                }
+
+                if ($path -eq "/api/public/livemap") {
+                    $mapFile = Join-Path $dataDir "livemap_data.json"
+                    if (Test-Path -LiteralPath $mapFile) {
+                        $data = Get-Content $mapFile -Raw | ConvertFrom-Json
+                        Send-Json $context (ConvertTo-PublicLiveMapData $data)
+                    } else {
+                        Send-Json $context @{ error = "No livemap data" }
+                    }
+                    continue
+                }
+
+                if ($path -eq "/api/public/mapinfo") {
+                    $mapCoordsFile = Join-Path $dataDir "map_coords.json"
+                    if (Test-Path -LiteralPath $mapCoordsFile) {
+                        $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
+                        Send-Json $context $data
+                    } else {
+                        $generation = $null
+                        $statusFile = Join-Path $dataDir "map_generation_status.json"
+                        if (Test-Path -LiteralPath $statusFile) {
+                            try { $generation = Get-Content $statusFile -Raw | ConvertFrom-Json } catch {}
+                        }
+                        Send-Json $context @{
+                            error = "Map not ready yet. Join the server once to auto-generate the map."
+                            generation = $generation
+                        }
+                    }
+                    continue
+                }
+
+                if ($path -match "^/public-map/tiles/(\d+)/(\d+)-(\d+)\.png$") {
+                    $tilePath = Join-Path $dataDir "map_tiles\$($Matches[1])\$($Matches[2])-$($Matches[3]).png"
+                    Send-File $context $tilePath
+                    continue
+                }
+
+                Send-Json $context @{ error = "Not found" } 404
                 continue
             }
 

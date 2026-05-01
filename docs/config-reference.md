@@ -37,6 +37,32 @@ Example:
 }
 ```
 
+### livemap
+
+Live map writer and public Sea Chart settings.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Write live player and world-position data for the Sea Chart. |
+| `player_interval_ms` | `5000` | Player position write interval. |
+| `entity_interval_ms` | `30000` | Creature/resource position write interval. |
+| `public.enabled` | `false` | Enable the map-only public route at `/public-map`. |
+| `public.token` | `""` | Optional share token. If set, visitors must use `/public-map?token=<token>`. |
+
+Example:
+
+```json
+{
+    "livemap": {
+        "enabled": true,
+        "public": {
+            "enabled": true,
+            "token": "change-this-or-leave-blank"
+        }
+    }
+}
+```
+
 ---
 
 ## windrose_plus.ini (Main Config)
