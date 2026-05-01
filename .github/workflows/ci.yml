@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  powershell-syntax:
+    name: PowerShell syntax
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path . -Recurse -File -Filter '*.ps1' |
+            Where-Object { $_.FullName -notmatch '\\.git\\' } |
+            Sort-Object FullName
+
+          $failed = $false
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Error "PowerShell parse errors in $($file.FullName)"
+              foreach ($err in $errors) {
+                Write-Error ("  line {0}, column {1}: {2}" -f $err.Extent.StartLineNumber, $err.Extent.StartColumnNumber, $err.Message)
+              }
+            }
+          }
+
+          if ($failed) {
+            throw "PowerShell syntax validation failed"
+          }
+
+          Write-Host "Parsed $($files.Count) PowerShell script(s)."
+
+  windrose-heal-tests:
+    name: windrose-heal tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/windrose-heal -> target
+
+      - name: Test windrose-heal
+        run: cargo test --locked --manifest-path tools/windrose-heal/Cargo.toml
