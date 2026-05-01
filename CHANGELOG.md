@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.14] - 2026-05-01
+
 ### Added
 
 - Added an opt-in public Sea Chart at `/public-map` for server owners who want friends to view the map without exposing the dashboard console. It is disabled by default, supports an optional share token, and exposes only map data and tiles.
