@@ -91,6 +91,40 @@ end, 10000)  -- interval in milliseconds (default: 5000)
 
 Tick callbacks run on the main game thread during the 5-second polling loop. Keep them fast -- long-running work blocks the server.
 
+### Delayed UE4SS Hooks
+
+```lua
+API.registerHookWhenAvailable(path, preHook, postHook, options)
+```
+
+Register a UE4SS hook immediately if possible, or retry for Blueprint/game functions that exist before their function pointer is hookable. This is useful for reverse-engineering server-side game surfaces that may only become hookable after the world finishes loading.
+
+```lua
+local handle = API.registerHookWhenAvailable(
+    "/Script/R5.R5BuildingCenterStorageComponent:OnInventoryViewChanged",
+    function(context)
+        API.log("debug", "StorageProbe", "storage view changed")
+    end,
+    {
+        intervalMs = 5000,
+        maxAttempts = 24,
+        onRegistered = function(h)
+            API.log("info", "StorageProbe", "hooked after " .. h.attempts .. " attempt(s)")
+        end
+    }
+)
+```
+
+`postHook` is optional. You may pass the options table as the third argument when you only need one callback:
+
+```lua
+API.registerHookWhenAvailable("/Script/R5.SomeClass:SomeFunction", function(context)
+    -- keep hook work fast
+end, { maxAttempts = 12 })
+```
+
+The returned handle includes `path`, `attempts`, `registered`, `failed`, `cancelled`, `lastError`, `preHookId`, `postHookId`, and `cancel()`. Call `handle.cancel()` only when you want to stop future retries; already-registered hooks remain owned by UE4SS for the life of this Lua state.
+
 ### Data Access
 
 ```lua

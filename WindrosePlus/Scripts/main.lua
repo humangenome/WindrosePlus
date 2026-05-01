@@ -343,6 +343,87 @@ WindrosePlus.API.registerTickCallback = function(fn, intervalMs)
     table.insert(_modTickCallbacks, { fn = fn, interval = (intervalMs or 5000) / 1000, lastRun = 0 })
 end
 
+-- Some Blueprint-backed UFunctions exist before their native function pointer is
+-- ready for UE4SS hooks. This helper retries registration for mods that want to
+-- hook late-discovered game surfaces without hand-rolling LoopAsync timers.
+WindrosePlus.API.registerHookWhenAvailable = function(path, preHook, postHook, options)
+    if type(postHook) == "table" and options == nil then
+        options = postHook
+        postHook = nil
+    end
+    if type(options) ~= "table" then options = {} end
+
+    local handle = {
+        path = path,
+        attempts = 0,
+        registered = false,
+        failed = false,
+        cancelled = false,
+        lastError = nil,
+        preHookId = nil,
+        postHookId = nil,
+    }
+
+    function handle.cancel()
+        handle.cancelled = true
+    end
+
+    local source = tostring(options.logSource or "API")
+    local intervalMs = tonumber(options.intervalMs) or 5000
+    local maxAttempts = tonumber(options.maxAttempts) or 24
+    if intervalMs < 250 then intervalMs = 250 end
+    if maxAttempts < 1 then maxAttempts = 1 end
+
+    local function fail(message)
+        handle.failed = true
+        handle.lastError = tostring(message)
+        Log.warn(source, "Hook unavailable: " .. tostring(path) .. " (" .. handle.lastError .. ")")
+        if type(options.onFailed) == "function" then pcall(options.onFailed, handle) end
+        return true
+    end
+
+    local function tryRegister()
+        if handle.cancelled or handle.registered or handle.failed then return true end
+        if type(path) ~= "string" or path == "" then return fail("invalid hook path") end
+        if type(preHook) ~= "function" and type(postHook) ~= "function" then return fail("missing hook callback") end
+
+        handle.attempts = handle.attempts + 1
+        if type(RegisterHook) ~= "function" then
+            handle.lastError = "RegisterHook not available"
+        else
+            local ok, id1, id2
+            if type(postHook) == "function" then
+                ok, id1, id2 = pcall(RegisterHook, path, preHook, postHook)
+            else
+                ok, id1, id2 = pcall(RegisterHook, path, preHook)
+            end
+            if ok then
+                handle.registered = true
+                handle.preHookId = id1
+                handle.postHookId = id2
+                Log.info(source, "Hook registered: " .. path .. " after " .. handle.attempts .. " attempt(s)")
+                if type(options.onRegistered) == "function" then pcall(options.onRegistered, handle) end
+                return true
+            end
+            handle.lastError = tostring(id1)
+        end
+
+        if handle.attempts >= maxAttempts then
+            return fail(handle.lastError or "max attempts reached")
+        end
+        return false
+    end
+
+    local done = tryRegister()
+    if not done and type(LoopAsync) == "function" then
+        LoopAsync(intervalMs, tryRegister)
+    elseif not done then
+        fail("LoopAsync not available")
+    end
+
+    return handle
+end
+
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
 local _playerLeaveCallbacks = {}
