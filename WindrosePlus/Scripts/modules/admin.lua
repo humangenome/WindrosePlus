@@ -1373,6 +1373,117 @@ function Admin._registerCommands()
     -- New Commands: Diagnostics
     -- =========================================
 
+    Admin._commands["wp.doctor"] = {
+        description = "Show a support snapshot with runtime, module, and config warnings",
+        usage = "wp.doctor",
+        category = "diagnostics",
+        examples = {"wp.doctor"},
+        handler = function(args)
+            local function yesno(v) return v and "yes" or "no" end
+            local function enabled(v) return v and "enabled" or "disabled" end
+            local function fmtDuration(sec)
+                sec = tonumber(sec) or 0
+                local days = math.floor(sec / 86400)
+                local hours = math.floor((sec % 86400) / 3600)
+                local mins = math.floor((sec % 3600) / 60)
+                if days > 0 then return string.format("%dd %dh %dm", days, hours, mins) end
+                return string.format("%dh %dm", hours, mins)
+            end
+
+            local lines = {"WindrosePlus Doctor:"}
+            local warnings = {}
+            local state = WindrosePlus and WindrosePlus.state or {}
+            local cfg = Admin._config
+            local now = os.time()
+
+            table.insert(lines, "  Version: " .. (WindrosePlus and WindrosePlus.VERSION or "?"))
+            table.insert(lines, "  Mode: " .. tostring(state.mode or "unknown"))
+            table.insert(lines, "  Uptime: " .. fmtDuration(now - (Admin._bootTime or now)))
+
+            local controllers, active, zombies = 0, 0, 0
+            local pcs = FindAllOf("PlayerController")
+            if pcs then
+                for _, pc in ipairs(pcs) do
+                    if pc:IsValid() then
+                        controllers = controllers + 1
+                        if Admin._isConnected(pc) then active = active + 1 else zombies = zombies + 1 end
+                    end
+                end
+            end
+            table.insert(lines, "  Players: " .. active .. " active, " .. zombies .. " zombie, " .. tostring(state.playerCount or 0) .. " cached")
+            table.insert(lines, "  PlayerControllers: " .. controllers)
+            if zombies > 0 then table.insert(warnings, zombies .. " zombie PlayerController(s) detected") end
+
+            local lastSeen = tonumber(state.lastPlayerSeen) or 0
+            if lastSeen > 0 then
+                table.insert(lines, "  Last Player: " .. fmtDuration(now - lastSeen) .. " ago")
+            else
+                table.insert(lines, "  Last Player: never seen")
+            end
+            if state.mode == "degraded" then
+                table.insert(warnings, "WindrosePlus is in degraded mode; game-thread dispatch may be starved")
+            end
+
+            table.insert(lines, "")
+            table.insert(lines, "Runtime:")
+            table.insert(lines, "  LoopAsync: " .. yesno(type(LoopAsync) == "function"))
+            table.insert(lines, "  ExecuteInGameThread: " .. yesno(type(ExecuteInGameThread) == "function"))
+            table.insert(lines, "  RegisterHook: " .. yesno(type(RegisterHook) == "function"))
+            table.insert(lines, "  RestartMod: " .. yesno(type(RestartMod) == "function"))
+            if type(LoopAsync) ~= "function" then table.insert(warnings, "LoopAsync is unavailable; timers and RCON polling cannot run normally") end
+            if type(ExecuteInGameThread) ~= "function" then table.insert(warnings, "ExecuteInGameThread is unavailable; UObject reads may race") end
+            if type(RegisterHook) ~= "function" then table.insert(warnings, "RegisterHook is unavailable; hook-based mods cannot attach") end
+
+            table.insert(lines, "")
+            table.insert(lines, "Modules:")
+            local modules = WindrosePlus and WindrosePlus._modules or {}
+            for _, name in ipairs({"Config", "Admin", "Query", "RCON", "LiveMap", "MapGen", "POIScan", "Mods"}) do
+                table.insert(lines, "  " .. name .. ": " .. (modules[name] and "OK" or "missing"))
+                if not modules[name] then table.insert(warnings, name .. " module is missing") end
+            end
+
+            table.insert(lines, "")
+            table.insert(lines, "Features:")
+            table.insert(lines, "  RCON: " .. enabled(cfg and cfg.isRconEnabled and cfg.isRconEnabled()))
+            table.insert(lines, "  Query: " .. enabled(cfg and cfg.isQueryEnabled and cfg.isQueryEnabled()))
+            table.insert(lines, "  LiveMap: " .. enabled(cfg and cfg.isLiveMapEnabled and cfg.isLiveMapEnabled()))
+            table.insert(lines, "  POIScan: " .. enabled(cfg and cfg.isPOIScanEnabled and cfg.isPOIScanEnabled()))
+            if cfg and cfg.getQueryInterval and cfg.getQueryIdleInterval then
+                table.insert(lines, "  Query intervals: " .. tostring(cfg.getQueryInterval()) .. "ms active / " .. tostring(cfg.getQueryIdleInterval()) .. "ms idle")
+            end
+            if cfg and cfg.getLiveMapPlayerInterval and cfg.getLiveMapEntityInterval then
+                table.insert(lines, "  LiveMap intervals: " .. tostring(cfg.getLiveMapPlayerInterval()) .. "ms players / " .. tostring(cfg.getLiveMapEntityInterval()) .. "ms entities")
+            end
+            local mods = modules.Mods
+            if mods and mods.getLoadedCount then
+                table.insert(lines, "  Mods loaded: " .. tostring(mods.getLoadedCount()))
+            end
+            if cfg and cfg.isQueryEnabled and not cfg.isQueryEnabled() then table.insert(warnings, "Query writer is disabled; dashboard/server-status data may not update") end
+            if cfg and cfg.isLiveMapEnabled and not cfg.isLiveMapEnabled() then table.insert(warnings, "LiveMap writer is disabled; Sea Chart data may not update") end
+
+            local disabledMultipliers = {"points_per_level", "stack_size", "weight", "inventory_size", "crop_speed"}
+            for _, key in ipairs(disabledMultipliers) do
+                local raw = cfg and cfg.get and cfg.get("multipliers", key) or nil
+                local n = tonumber(tostring(raw))
+                if n and n ~= 1.0 then
+                    table.insert(warnings, key .. " is configured as " .. tostring(raw) .. "x but is disabled/no-op in current PAK builds")
+                end
+            end
+
+            table.insert(lines, "")
+            table.insert(lines, "Warnings:")
+            if #warnings == 0 then
+                table.insert(lines, "  none")
+            else
+                for _, warning in ipairs(warnings) do
+                    table.insert(lines, "  - " .. warning)
+                end
+            end
+
+            return table.concat(lines, "\n")
+        end
+    }
+
     Admin._commands["wp.memory"] = {
         description = "Show detailed memory usage",
         usage = "wp.memory",

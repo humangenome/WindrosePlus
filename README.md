@@ -39,7 +39,7 @@ A real-time map of your server showing player positions, creature locations, and
 ![Sea Chart](docs/screenshots/seachart.png)
 
 ### Admin Console (RCON)
-Run commands from a web dashboard with autocomplete. Check who's online, view server stats, repair known character-save drift, monitor performance, and manage your server remotely. 30 built-in commands out of the box.
+Run commands from a web dashboard with autocomplete. Check who's online, view server stats, repair known character-save drift, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
 
 ![Console](docs/screenshots/console.png)
 
@@ -271,7 +271,7 @@ Open the dashboard in your browser to manage your server. It includes a command 
 
 ### Commands
 
-Type `wp.help` in the console to see all 30 available commands. Common ones:
+Type `wp.help` in the console to see all available commands. Common ones:
 
 | Command | What it does |
 |---------|-------------|
@@ -280,6 +280,7 @@ Type `wp.help` in the console to see all 30 available commands. Common ones:
 | `wp.config` | Current settings |
 | `wp.creatures` | What's spawned on the map |
 | `wp.memory` | Server memory usage |
+| `wp.doctor` | Support snapshot and config warnings |
 
 Full reference: [docs/commands.md](docs/commands.md)
 
