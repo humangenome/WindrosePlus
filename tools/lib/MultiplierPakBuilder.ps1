@@ -567,6 +567,10 @@ function Build-MultiplierPak {
                 $data = $json | ConvertFrom-Json
                 if (-not $data.EventHandlers) { continue }
                 $changed = $false
+                if ($null -ne $data.MaxScore) {
+                    $data.MaxScore = [Math]::Max(0.0, [Math]::Round(([double]$data.MaxScore) * $harvestYield, 4))
+                    $changed = $true
+                }
                 foreach ($handler in $data.EventHandlers) {
                     if ($null -ne $handler.Score -and $null -ne $handler.Score.Min -and $null -ne $handler.Score.Max) {
                         $handler.Score.Min = [Math]::Max(0.0, [Math]::Round(([double]$handler.Score.Min) * $harvestYield, 4))
