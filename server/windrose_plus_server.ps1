@@ -958,6 +958,7 @@ try {
                         @{name="wp.entities"; usage="wp.entities"; description="Count entities by type"; category="world"},
                         @{name="wp.weather"; usage="wp.weather"; description="Read weather values"; category="world"},
                         @{name="wp.perf"; usage="wp.perf"; description="Show server performance metrics"; category="diagnostics"},
+                        @{name="wp.doctor"; usage="wp.doctor"; description="Support snapshot with runtime and config warnings"; category="diagnostics"},
                         @{name="wp.memory"; usage="wp.memory"; description="Detailed memory usage"; category="diagnostics"},
                         @{name="wp.connections"; usage="wp.connections"; description="Network connection info"; category="diagnostics"},
                         @{name="wp.mapgen"; usage="wp.mapgen"; description="Generate heightmap for live map"; category="server"},

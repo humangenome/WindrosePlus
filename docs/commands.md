@@ -340,6 +340,33 @@ Memory Usage:
   Page File: 5120 MB
 ```
 
+### wp.doctor
+
+Show a support snapshot with runtime capabilities, module load state, feature flags, player/controller health, and config warnings.
+
+```
+Usage: wp.doctor
+```
+
+```
+> wp.doctor
+WindrosePlus Doctor:
+  Version: 1.1.12
+  Mode: active
+  Uptime: 0h 42m
+  Players: 2 active, 1 zombie, 2 cached
+  PlayerControllers: 3
+
+Runtime:
+  LoopAsync: yes
+  ExecuteInGameThread: yes
+  RegisterHook: yes
+  RestartMod: yes
+
+Warnings:
+  - stack_size is configured as 5x but is disabled/no-op in current PAK builds
+```
+
 ### wp.connections
 
 Show network connection info including active players, zombie controllers, server mode, and time since last player.
