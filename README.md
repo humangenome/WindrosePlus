@@ -112,7 +112,7 @@ Alchemy_Potion_Healing_Great_HealthRestoreRatio = 0.8
 ### Mod Support
 Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
 
-**For modders** — full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md).
+**For modders** — full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Server-side storage hook notes: [docs/storage-hook-research.md](docs/storage-hook-research.md).
 
 Ships with an example mod:
 
