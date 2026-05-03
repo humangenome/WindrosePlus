@@ -547,6 +547,43 @@ function Build-MultiplierPak {
             }
             if ($foliageMod -gt 0) { Write-Host "    Modified $foliageMod foliage loot tables" }
 
+            # Pickup-resource loot tables (LootTables/PickupResource/*.json):
+            # sulfur pickup chests, salt rocks, mushrooms, shells, dodo eggs,
+            # etc. Same LootData[].Min/Max schema as foliage. The loot pass
+            # already scaled these by loot multiplier; stack harvest_yield on
+            # top by reading the working file from tmpDir if present.
+            $pickupFiles = Invoke-RepakList -Repak $repak -AesKey $AesKey -PakPath $pak -Filter "LootTables/PickupResource/"
+            $pickupMod = 0
+            foreach ($pf in $pickupFiles) {
+                $pfTrim = $pf.Trim()
+                $outPath = Join-Path $tmpDir $pfTrim
+                $existedBefore = Test-Path -LiteralPath $outPath
+                if ($existedBefore) {
+                    $json = Get-Content -LiteralPath $outPath -Raw
+                } else {
+                    $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $pfTrim
+                }
+                if (-not $json) { continue }
+                $data = $json | ConvertFrom-Json
+                if (-not $data.LootData) { continue }
+                $changed = $false
+                foreach ($item in $data.LootData) {
+                    if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
+                    if ($null -ne $item.Min -and $null -ne $item.Max) {
+                        $item.Min = [Math]::Max(1, [int]($item.Min * $harvestYield))
+                        $item.Max = [Math]::Max(1, [int]($item.Max * $harvestYield))
+                        $changed = $true
+                    }
+                }
+                if ($changed) {
+                    New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    if (-not $existedBefore) { $modifiedCount++ }
+                    $pickupMod++
+                }
+            }
+            if ($pickupMod -gt 0) { Write-Host "    Modified $pickupMod pickup resource loot tables" }
+
             # Segmented trees and cave dig volumes use contextual destroy
             # scores instead of the LootData tables above.
             $contextualHarvestFiles = @(

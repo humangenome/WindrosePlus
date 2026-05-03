@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.1.15] - 2026-05-03
+
+### Fixed
+
+- **Harvest yield now applies to pickup-resource loot tables.** Sulfur pickup chests, salt rocks, mushrooms, shells, dodo eggs, and other items in `LootTables/PickupResource/*.json` were only being scaled by the loot multiplier, leaving full-node sulfur drops at roughly base × loot × 1 instead of base × loot × harvest_yield. The pickup-resource pass now stacks on top of the loot pass like the foliage pass already does.
+
 ## [1.1.14] - 2026-05-01
 
 ### Added
