@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.16] - 2026-05-04
+
 ### Changed
 
 - **`wp.config` and `wp.multipliers` now mark disabled multiplier keys as `(disabled)`** when the customer has set a non-default value. The PAK builder skips `stack_size`, `weight`, `inventory_size`, `points_per_level`, and `crop_speed` for save-safety reasons, but the in-game echo previously reported parsed values without indicating they were no-ops, leading to "I set stack_size=3 but in-game stacks are unchanged" reports (#70). The `wp.doctor` warning already surfaced this; the basic config readout now does too.
