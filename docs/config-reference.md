@@ -10,6 +10,7 @@ Windrose+ uses `windrose_plus.json` for everyday settings and optional `.ini` fi
 | `windrose_plus.food.ini` | Food buffs, consumables, alchemy items |
 | `windrose_plus.gear.ini` | Armor sets, set bonuses, jewelry |
 | `windrose_plus.entities.ini` | Land and naval entity base stats |
+| `windrose_plus.harvest.ini` | Per-resource harvest yield overrides (wood, stone, ore, etc.) |
 
 ---
 
@@ -65,6 +66,63 @@ Example:
 
 ---
 
+## windrose_plus.harvest.ini (Per-Resource Yield)
+
+Optional file. Adds per-resource multipliers for harvest yield, stacking
+multiplicatively on top of `multipliers.harvest_yield` from `windrose_plus.json`:
+
+```text
+final_yield = harvest_yield * <per-resource value>
+```
+
+Default `1.0` for every key means "use `harvest_yield` only, no override".
+Drop a value to scale only that resource family. Wood-only example
+(everything else stays at vanilla, wood drops 5x):
+
+```ini
+[Resources]
+Wood = 5.0
+```
+
+Combined example (`harvest_yield = 2.0` in `windrose_plus.json` + this file):
+
+```ini
+[Resources]
+Wood        = 3.0   ; wood drops 2.0 * 3.0 = 6x
+Stone       = 1.0   ; stone drops 2.0 * 1.0 = 2x (just harvest_yield)
+CopperOre   = 0.5   ; copper drops 2.0 * 0.5 = 1x (back to vanilla)
+```
+
+### [Resources]
+
+Keys are UE asset family names. The matcher reads the
+`Resource_<Name>_T<digit>` token from each loot entry's path
+(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Case-insensitive — `Wood`,
+`wood`, and `WOOD` all match.
+
+| Key | Default | Where it applies |
+|-----|---------|------------------|
+| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores |
+| `Bark` | `1.0` | Higher-tier tree drops |
+| `FiberPlant` | `1.0` | Grasses, agave, hemp, flax bushes |
+| `Stone` | `1.0` | Stone outcrops |
+| `Clay` | `1.0` | Clay deposits |
+| `Ash` | `1.0` | Ash deposits |
+| `Sulfur` | `1.0` | Sulfur outcrops |
+| `CopperOre` | `1.0` | Surface copper nodes + `CopperCaves_DigVolumesDestroy` |
+| `Iron` | `1.0` | `IronCaverns_DigVolumesDestroy` |
+| `Charcoal` | `1.0` | Coal nodes |
+| `Feather`, `Fat`, `Leather`, `GoatHorn`, `Bezoar` | `1.0` | Animal-derived. Mostly creature drops (not affected); foliage tables that include them are scaled here. |
+
+Unknown family names in the INI are silently ignored. Unknown families on
+in-game loot entries fall through to `harvest_yield` only.
+
+Edits to this file trigger a PAK rebuild on the next launch via
+`StartWindrosePlusServer.bat`, the same way the other type-specific INIs
+do.
+
+---
+
 ## windrose_plus.ini (Main Config)
 
 ### [Server]
@@ -94,7 +152,7 @@ Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half.
 | `craft_efficiency` | `1` | Crafting efficiency. Higher = cheaper recipes (`2.0` = half cost, `0.5` = double cost). The legacy key `craft_cost` is still accepted with identical semantics for backward compatibility. |
 | `crop_speed` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change crop timing. |
 | `cooking_speed` | `1` | Cooking / fermentation / smelting speed (2.0 = twice as fast) |
-| `harvest_yield` | `1` | Resource node yield (berries, ore, wood, herbs, etc.). Scales `Amount.Min`/`Max` per node; minimum stays at `1` after rounding. |
+| `harvest_yield` | `1` | Resource node yield (berries, ore, wood, herbs, etc.). Scales `Amount.Min`/`Max` per node; minimum stays at `1` after rounding. For per-resource overrides (e.g. wood-only), see the [windrose_plus.harvest.ini](#windrose_plusharvestini-per-resource-yield) section below. |
 | `weight` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item weight. |
 | `inventory_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change slot counts. |
 | `points_per_level` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not grant points. |

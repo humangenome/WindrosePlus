@@ -823,7 +823,8 @@ try {
                         (Join-Path $gameDir "windrose_plus.weapons.ini"),
                         (Join-Path $gameDir "windrose_plus.food.ini"),
                         (Join-Path $gameDir "windrose_plus.gear.ini"),
-                        (Join-Path $gameDir "windrose_plus.entities.ini")
+                        (Join-Path $gameDir "windrose_plus.entities.ini"),
+                        (Join-Path $gameDir "windrose_plus.harvest.ini")
                     )
                     $ctConfigPresent = $false
                     foreach ($p in $iniPaths) {
@@ -866,6 +867,33 @@ try {
                                     }
                                 }
                             } catch { }
+                        }
+                        # windrose_plus.harvest.ini alone (no non-default
+                        # multipliers in the JSON) also requires a Multipliers
+                        # PAK. Inline parse — same `Key = Number` shape that
+                        # Read-HarvestIni handles in MultiplierPakBuilder.ps1.
+                        if (-not $expectMultPak) {
+                            $harvestIniPath = Join-Path $gameDir "windrose_plus.harvest.ini"
+                            if (Test-Path -LiteralPath $harvestIniPath) {
+                                try {
+                                    foreach ($raw in Get-Content -LiteralPath $harvestIniPath) {
+                                        $line = $raw.Trim()
+                                        if (-not $line) { continue }
+                                        $first = $line[0]
+                                        if ($first -eq ';' -or $first -eq '#' -or $first -eq '[') { continue }
+                                        $eq = $line.IndexOf('=')
+                                        if ($eq -lt 1) { continue }
+                                        $val = $line.Substring($eq + 1)
+                                        $semi = $val.IndexOf(';')
+                                        if ($semi -ge 0) { $val = $val.Substring(0, $semi) }
+                                        $val = $val.Trim()
+                                        $d = 0.0
+                                        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d)) {
+                                            if ($d -ne 1.0) { $expectMultPak = $true; break }
+                                        }
+                                    }
+                                } catch { }
+                            }
                         }
 
                         if (-not $script:IniParserLoaded) {
