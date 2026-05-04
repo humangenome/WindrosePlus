@@ -10,6 +10,7 @@
 
 local json = require("modules.json")
 local Log = require("modules.log")
+local Events = require("modules.events")
 
 local POIScan = {}
 POIScan._path = nil
@@ -24,6 +25,23 @@ POIScan._scanFailedAt = 0                 -- timestamp of last encode/write fail
 POIScan._retryBackoff = 60                -- min seconds before retrying a failed scan
 POIScan._discovered = {}                  -- class -> count (for refining patterns)
 POIScan._discoveredCap = 500
+POIScan._lastGateEv = {}                  -- reason -> last unix-ts we recorded poiscan.gate for it
+POIScan._gateEvInterval = 300             -- min seconds between identical-reason gate events (5 min)
+
+local function _recordGate(reason, payload)
+    -- Throttle: emit a poiscan.gate event for each distinct reason at most once
+    -- per _gateEvInterval. Without throttling, every tick blocked by the
+    -- player_count gate on an idle server would write a JSONL line, ballooning
+    -- the daily log. With it, we still confirm in production whether the gate
+    -- is firing and which path is blocking.
+    local now = os.time()
+    local last = POIScan._lastGateEv[reason] or 0
+    if (now - last) < POIScan._gateEvInterval then return end
+    POIScan._lastGateEv[reason] = now
+    payload = payload or {}
+    payload.reason = reason
+    pcall(Events.record, "poiscan.gate", payload)
+end
 
 -- Class-name patterns we treat as POI sources.
 -- Order matters — first match wins for the kind label.
@@ -155,7 +173,10 @@ end
 
 function POIScan.writeIfDue()
     if not POIScan._path then return end
-    if POIScan._scanning then return end   -- in-flight; skip overlapping dispatch
+    if POIScan._scanning then
+        _recordGate("scanning_in_flight")
+        return
+    end
 
     -- Detect manual refresh trigger (drop a file at <dataDir>\poiscan_refresh).
     -- Don't consume it yet — if we early-return below (readiness / backoff),
@@ -170,15 +191,25 @@ function POIScan.writeIfDue()
     -- to manual triggers too — otherwise a persistent FS error would log and
     -- re-attempt every tick. Manual triggers still bypass the 4h scheduled
     -- interval so operators can force a refresh on demand.
-    if (now - POIScan._scanFailedAt) < POIScan._retryBackoff then return end
+    if (now - POIScan._scanFailedAt) < POIScan._retryBackoff then
+        _recordGate("backoff", { since_fail_s = now - POIScan._scanFailedAt, backoff_s = POIScan._retryBackoff })
+        return
+    end
 
     -- Scheduled refresh interval (only enforced after first successful scan,
     -- and only when this wasn't a manual trigger)
-    if not triggered and POIScan._wroteOnce and (now - POIScan._lastWrite) < POIScan._refreshInterval then return end
+    if not triggered and POIScan._wroteOnce and (now - POIScan._lastWrite) < POIScan._refreshInterval then
+        _recordGate("interval_not_due", { since_last_s = now - POIScan._lastWrite, interval_s = POIScan._refreshInterval })
+        return
+    end
 
     -- First scan requires the world to be streamed in (needs at least one player)
     if not POIScan._wroteOnce then
-        if not (WindrosePlus and WindrosePlus.state.playerCount > 0) then return end
+        local pc = (WindrosePlus and WindrosePlus.state and WindrosePlus.state.playerCount) or 0
+        if pc <= 0 then
+            _recordGate("idle_no_players", { player_count = pc, triggered = triggered })
+            return
+        end
     end
 
     -- Committed to scanning — consume the trigger file if present.
@@ -189,16 +220,19 @@ function POIScan.writeIfDue()
         if not removed then
             Log.warn("POIScan", "could not remove trigger file: " .. tostring(removeErr))
             POIScan._scanFailedAt = os.time()
+            _recordGate("trigger_remove_failed", { err = tostring(removeErr) })
             return
         end
     end
 
     POIScan._scanning = true
+    pcall(Events.record, "poiscan.scan.start", { triggered = triggered, wrote_once = POIScan._wroteOnce })
     local ok, err = pcall(POIScan._scanAndWrite)
     POIScan._scanning = false
     if not ok then
         POIScan._scanFailedAt = os.time()
         Log.warn("POIScan", "scan pcall failed: " .. tostring(err))
+        pcall(Events.record, "poiscan.scan.fail", { err = tostring(err) })
     end
 end
 
@@ -221,6 +255,7 @@ function POIScan._scanAndWrite()
     if not ok or not actors then
         Log.warn("POIScan", "FindAllOf(Actor) failed or returned nil")
         POIScan._scanFailedAt = os.time()
+        pcall(Events.record, "poiscan.scan.fail", { stage = "findallof", actors_nil = (actors == nil) })
         return
     end
 
@@ -297,6 +332,7 @@ function POIScan._scanAndWrite()
         Log.warn("POIScan", "json.encode failed: " .. tostring(encErr))
         print("[POIScan] json.encode failed: " .. tostring(encErr))
         POIScan._scanFailedAt = os.time()
+        pcall(Events.record, "poiscan.scan.fail", { stage = "encode", err = tostring(encErr) })
         return
     end
     print(string.format("[POIScan] payload encoded, %d bytes", payload and #payload or 0))
@@ -315,6 +351,7 @@ function POIScan._scanAndWrite()
         Log.warn("POIScan", "file write failed: " .. tostring(writeErr))
         print("[POIScan] file write failed: " .. tostring(writeErr))
         POIScan._scanFailedAt = os.time()
+        pcall(Events.record, "poiscan.scan.fail", { stage = "write", err = tostring(writeErr) })
         return
     end
     print("[POIScan] file written")
@@ -322,6 +359,13 @@ function POIScan._scanAndWrite()
     POIScan._wroteOnce = true
     POIScan._lastWrite = os.time()
     POIScan._scanFailedAt = 0
+    pcall(Events.record, "poiscan.scan.done", {
+        pois = #pois,
+        actors_scanned = actorsScanned,
+        actors_matched = actorsMatched,
+        missing_position = missingPosCount,
+        bytes = payload and #payload or 0,
+    })
 
     if newDiscoveries then
         local sorted = {}
