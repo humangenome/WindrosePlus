@@ -45,9 +45,17 @@ end
 
 -- Class-name patterns we treat as POI sources.
 -- Order matters — first match wins for the kind label.
+-- BP_MarkerModel_* are the world-attached marker actors that mirror map-marker
+-- entries (scenario POIs, quest objectives, simple landmarks). Their actor
+-- names don't carry the |I|<island>|P<sub>|v<x>|... pipe-encoded metadata, so
+-- parseEncodedName will return nils for them — we still capture x/y/z via the
+-- standard world-location fallbacks and emit the entry with class + poiId.
 POIScan._poiClasses = {
-    { pat = "R5POIOverlapVolume", kind = "overlap" },
-    { pat = "R5POIAudioVolume",   kind = "audio"   },
+    { pat = "R5POIOverlapVolume",         kind = "overlap" },
+    { pat = "R5POIAudioVolume",           kind = "audio"   },
+    { pat = "BP_MarkerModel_ScenarioPOI_C", kind = "marker_scenario" },
+    { pat = "BP_MarkerModel_Quest_C",       kind = "marker_quest"    },
+    { pat = "BP_MarkerModel_Simple_C",      kind = "marker_simple"   },
 }
 
 -- Class names we ALSO want to capture as discovery candidates so we can refine
@@ -242,6 +250,7 @@ function POIScan._scanAndWrite()
     -- the Actor walk reaches them (verified empirically via discovery output).
     local pois = {}
     local kindCounts = {}
+    local classCounts = {}     -- per-class match counter (e.g. R5POIOverlapVolume=42, BP_MarkerModel_ScenarioPOI_C=10)
     local islandCounts = {}
     local subTypeCounts = {}
     local missingPosCount = 0
@@ -301,6 +310,7 @@ function POIScan._scanAndWrite()
                 poiId = fn,
             })
             kindCounts[kind] = (kindCounts[kind] or 0) + 1
+            classCounts[className] = (classCounts[className] or 0) + 1
             if meta.islandId then
                 local k = "I" .. tostring(meta.islandId)
                 islandCounts[k] = (islandCounts[k] or 0) + 1
@@ -319,6 +329,7 @@ function POIScan._scanAndWrite()
         payload = json.encode({
             pois = pois,
             kind_counts = kindCounts,
+            class_counts = classCounts,
             island_counts = islandCounts,
             sub_type_counts = subTypeCounts,
             total_pois = #pois,
@@ -364,6 +375,7 @@ function POIScan._scanAndWrite()
         actors_scanned = actorsScanned,
         actors_matched = actorsMatched,
         missing_position = missingPosCount,
+        matched_classes = classCounts,
         bytes = payload and #payload or 0,
     })
 
