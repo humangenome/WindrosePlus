@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.18] - 2026-05-04
+
 ### Added
 
 - **POIScan now also matches `BP_MarkerModel_*_C` actor classes.** The original `R5POIOverlapVolume` / `R5POIAudioVolume` filters captured the procgen-spawned POI volumes; the new entries (`BP_MarkerModel_ScenarioPOI_C`, `BP_MarkerModel_Quest_C`, `BP_MarkerModel_Simple_C`) capture the world-attached marker actors that mirror map-marker entries (scenario POIs, quest objectives, simple landmarks). Their actor names don't carry the `|I|...|P...|v...` pipe-encoded metadata, so structured fields stay nil for those entries — but the world transform via `K2_GetActorLocation` and the raw class + full actor name still get recorded, which is enough for a dashboard POI overlay.
