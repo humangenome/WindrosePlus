@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Multiplier downgrade ratchet for `xp` (#69).** Lowering the `xp` multiplier under a saved character whose level / talent / stat allocations were earned at the higher value causes Windrose's save validator to reject the character on next login (`RewardLevel < CurrentLevel`), with no clean rollback path. The PAK builder now tracks the highest historically applied value of save-state-baking multipliers in `R5/Content/Paks/.windroseplus_multiplier_history.json` and refuses to rebuild with a lower value unless `WINDROSEPLUS_ALLOW_DOWNGRADE=1` is set in the environment. Mirrors the safety guard already present in panel-managed installs.
+  - Only `xp` is currently ratcheted because that is the only save-baking key the PAK builder actively applies. The other potentially save-baking keys (`points_per_level`, `inventory_size`, `stack_size`, `weight`, `crop_speed`) are skipped by the builder for unrelated save-safety reasons; if any is unblocked in the future the ratchet list will grow with it.
+  - Persistence is atomic (write to `.tmp` + `[System.IO.File]::Replace`), gated on a successful non-dry build, and applied on both the hash-skip success path and the full-build success path. Build exits with code 3 on a refused downgrade and code 4 if the history file cannot be persisted.
+
 ## [1.1.15] - 2026-05-03
 
 ### Fixed

@@ -131,6 +131,147 @@ if ($multipliers.ContainsKey("craft_cost")) {
     $null = $multipliers.Remove("craft_cost")
 }
 
+# Save-state corruption guard. The xp multiplier rebuilds DA_HeroLevels /
+# EntityProgression PAK overrides; once a character has logged in and saved
+# with xp > 1, lowering it shrinks the active reward curve under the persisted
+# level/talent allocations and the engine save validator rejects the character
+# on next login (RewardLevel < CurrentLevel). See issue #69 (xp=2 -> xp=1
+# after 30+ hours of play, character locked out).
+#
+# Only `xp` is ratcheted today because that's the only save-state-baking key
+# the current PAK builder actually applies. points_per_level / inventory_size /
+# stack_size / weight / crop_speed are skipped by the builder (save-safety
+# disabled). When any of those is unblocked in the future, add it here.
+# loot / harvest_yield / craft_efficiency don't bake into save state; safe
+# to move in either direction.
+#
+# History is written ATOMICALLY at the end of the script after the PAK build
+# succeeds — never on dry runs, never on failed builds.
+$ratchetKeys = @("xp")
+$historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+$allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
+
+function Save-MultiplierHistory {
+    param([hashtable]$History, [string]$Path)
+    if (-not $History) { return }
+    $tmp = "$Path.tmp"
+    $json = $History | ConvertTo-Json -Depth 2
+    Set-Content -LiteralPath $tmp -Value $json -Encoding UTF8
+    if (Test-Path -LiteralPath $Path) {
+        # Atomic replace on NTFS (and most POSIX filesystems pwsh supports).
+        # Move-Item -Force is NOT a documented atomic primitive in PowerShell;
+        # [IO.File]::Replace IS atomic on Windows, [IO.File]::Move on first create.
+        [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
+    } else {
+        [System.IO.File]::Move($tmp, $Path)
+    }
+}
+
+$history = @{}
+$historyExisted = Test-Path -LiteralPath $historyFile
+$historyCorrupt = $false
+if ($historyExisted) {
+    try {
+        $raw = Get-Content -LiteralPath $historyFile -Raw
+        if (-not $raw -or $raw.Trim() -eq "") {
+            $historyCorrupt = $true
+        } else {
+            $hjson = $raw | ConvertFrom-Json
+            if ($hjson -isnot [pscustomobject]) {
+                $historyCorrupt = $true
+            } else {
+                foreach ($prop in $hjson.PSObject.Properties) {
+                    $val = $prop.Value
+                    $isNum = ($val -is [double] -or $val -is [int] -or $val -is [long] -or $val -is [decimal] -or $val -is [single])
+                    if (-not $isNum) {
+                        # If a ratchet key is present with a non-numeric value, that's corrupt — fail closed.
+                        if ($ratchetKeys -contains $prop.Name) { $historyCorrupt = $true }
+                        continue
+                    }
+                    $d = [double]$val
+                    if ([double]::IsNaN($d) -or [double]::IsInfinity($d) -or $d -le 0) {
+                        if ($ratchetKeys -contains $prop.Name) { $historyCorrupt = $true }
+                        continue
+                    }
+                    $history[$prop.Name] = $d
+                }
+            }
+        }
+    } catch {
+        $historyCorrupt = $true
+    }
+}
+
+if ($historyCorrupt -and -not $allowDowngrade) {
+    Write-Host ""
+    Write-Host "REFUSING TO BUILD: multiplier history file is unreadable" -ForegroundColor Red
+    Write-Host "  $historyFile" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  This file tracks the highest historically applied value of save-baking" -ForegroundColor Red
+    Write-Host "  multipliers. If it is corrupt, the ratchet cannot verify your requested" -ForegroundColor Red
+    Write-Host "  values are safe. Two recovery paths:" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  1. After backing up SaveProfiles, delete the history file. The next" -ForegroundColor Cyan
+    Write-Host "     build will treat current values as the new baseline." -ForegroundColor Cyan
+    Write-Host "  2. Set WINDROSEPLUS_ALLOW_DOWNGRADE=1 to bypass for one build." -ForegroundColor Cyan
+    Write-Host ""
+    exit 3
+}
+
+# Compute current values defaulting to 1.0 for missing keys, so removing
+# `"xp": 2` from windrose_plus.json is treated as a downgrade to 1.0 (not as
+# "no value to check").
+$plannedHistory = @{}
+foreach ($k in $history.Keys) { $plannedHistory[$k] = $history[$k] }
+
+$blockedDowngrades = @()
+foreach ($key in $ratchetKeys) {
+    $current = if ($multipliers.ContainsKey($key)) { [double]$multipliers[$key] } else { 1.0 }
+    if ([double]::IsNaN($current) -or [double]::IsInfinity($current) -or $current -le 0) { $current = 1.0 }
+    $previousMax = if ($history.ContainsKey($key)) { [double]$history[$key] } else { $current }
+
+    if ($current -lt $previousMax) {
+        if (-not $allowDowngrade) {
+            $blockedDowngrades += [pscustomobject]@{
+                Key = $key
+                Current = $current
+                PreviousMax = $previousMax
+            }
+        } else {
+            Write-Warning ("Allowed downgrade of {0}: {1}x -> {2}x (WINDROSEPLUS_ALLOW_DOWNGRADE=1). Existing characters may fail to load." -f $key, $previousMax, $current)
+        }
+    }
+
+    if ($current -gt $previousMax) {
+        $plannedHistory[$key] = $current
+    } elseif (-not $plannedHistory.ContainsKey($key)) {
+        $plannedHistory[$key] = $current
+    }
+}
+
+if ($blockedDowngrades.Count -gt 0) {
+    Write-Host ""
+    Write-Host "REFUSING TO BUILD: requested multiplier(s) below historical maximum" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  These multipliers bake into character / save state. Lowering them" -ForegroundColor Red
+    Write-Host "  shrinks the active curve under your persisted save data, and Windrose" -ForegroundColor Red
+    Write-Host "  will refuse to load characters whose accumulated values exceed the" -ForegroundColor Red
+    Write-Host "  new maximum on next login." -ForegroundColor Red
+    Write-Host ""
+    foreach ($d in $blockedDowngrades) {
+        Write-Host ("  {0}: requested {1}x, historical maximum was {2}x" -f $d.Key, $d.Current, $d.PreviousMax) -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "  To proceed anyway AFTER backing up SaveProfiles:" -ForegroundColor Cyan
+    Write-Host "    Windows: set WINDROSEPLUS_ALLOW_DOWNGRADE=1 && rebuild" -ForegroundColor Cyan
+    Write-Host "    Linux:   WINDROSEPLUS_ALLOW_DOWNGRADE=1 pwsh -File ./tools/WindrosePlus-BuildPak.ps1" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Or, if you have wiped the save and want to start a fresh ratchet:" -ForegroundColor Cyan
+    Write-Host "    delete $historyFile" -ForegroundColor Cyan
+    Write-Host ""
+    exit 3
+}
+
 # --- Read INI (CurveTables only) ---
 $iniConfig = $null
 $hasIniConfig = $false
@@ -280,6 +421,16 @@ if (Test-Path -LiteralPath $hashFile) {
 
 if ($cachedHash -eq $currentHash -and $allExpectedExist -and -not $DryRun -and -not $ForceExtract) {
     Write-Host "Config unchanged since last build (hash matches). Skipping."
+    # Backfill history on legacy installs whose previous build (pre-ratchet)
+    # never wrote one. The PAK on disk reflects $plannedHistory exactly because
+    # config did not change since it was built.
+    try {
+        Save-MultiplierHistory -History $plannedHistory -Path $historyFile
+    } catch {
+        [Console]::Error.WriteLine("FAILED to persist multiplier history at ${historyFile}: $_")
+        [Console]::Error.WriteLine("The downgrade ratchet for issue #69 needs this file. Resolve the file-system issue (permissions / disk space) and rebuild.")
+        exit 4
+    }
     exit 0
 }
 
@@ -510,6 +661,22 @@ if ($hasCT) {
         }
     } finally {
         Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
+    }
+}
+
+# --- Persist multiplier history (only on successful non-dry build) ---
+# Written BEFORE hash cache so a future hash-skip path always sees a valid
+# history. Hard fail if we cannot persist — without this file the next
+# downgrade is unprotected, which is exactly the failure mode the ratchet
+# exists to prevent (issue #69).
+if (-not $DryRun) {
+    try {
+        Save-MultiplierHistory -History $plannedHistory -Path $historyFile
+    } catch {
+        [Console]::Error.WriteLine("FAILED to persist multiplier history at ${historyFile}: $_")
+        [Console]::Error.WriteLine("The PAK was built, but the downgrade ratchet for issue #69 cannot work without this file.")
+        [Console]::Error.WriteLine("Resolve the underlying file-system issue (permissions / disk space) and rebuild.")
+        exit 4
     }
 }
 
