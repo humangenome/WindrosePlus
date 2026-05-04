@@ -163,7 +163,14 @@ function Admin._registerCommands()
                 if p.x then
                     posStr = string.format(" @ %.0f, %.0f, %.0f", p.x, p.y, p.z)
                 end
-                table.insert(lines, "  " .. i .. ". " .. p.name .. posStr)
+                -- Show actor ID as canonical (per #61 / 227aa3c convention).
+                -- Display name (if known) is shown as a parenthetical so users
+                -- can recognize who's who at a glance.
+                local label = p.actorName or p.name or "?"
+                if p.displayName and p.displayName ~= label then
+                    label = label .. " (" .. p.displayName .. ")"
+                end
+                table.insert(lines, "  " .. i .. ". " .. label .. posStr)
             end
             return table.concat(lines, "\n")
         end
@@ -310,13 +317,9 @@ function Admin._registerCommands()
         return pawn, shortName, fullName
     end
 
-    local function playerTargetMatches(targetName, displayName, actorName, actorFullName)
-        if not targetName then return true end
-        if displayName and displayName:lower() == targetName then return true end
-        if actorName and actorName:lower() == targetName then return true end
-        if actorFullName and actorFullName:lower() == targetName then return true end
-        return false
-    end
+    -- Local alias to the module-level helper so movement-command and
+    -- info-command targeting paths share one matcher and can't drift apart.
+    local playerTargetMatches = Admin._playerTargetMatches
 
     local function captureBaseline(cheat, mc, key)
         local store = Admin._origMovementProp[cheat.prop]
@@ -489,31 +492,38 @@ function Admin._registerCommands()
         category = "players",
         playerArg = true,
         handler = function(args)
-            local players = Admin._findPlayersByName(args[1])
-            if #players == 0 then return args[1] and ("Player '" .. args[1] .. "' not found") or "No players online" end
+            -- Join all args as the player name so multi-word names ("Some Player") match.
+            local targetName = (#args > 0) and table.concat(args, " ") or nil
+            local players = Admin._findPlayersByName(targetName)
+            if #players == 0 then return targetName and ("Player '" .. targetName .. "' not found") or "No players online" end
 
+            -- Health lives on PlayerState.R5AttributeSet (GAS), NOT on
+            -- HealthComponent. HealthComponent.CurrentHealth was a non-existent
+            -- FProperty that UE4SS resolved to a UObject wrapper, producing
+            -- "UObject: 0x..." output. Read from the AttributeSet's Health /
+            -- MaxHealth FGameplayAttributeData structs instead.
+            --
+            -- Use p.playerState captured during _getPlayers' targeting pass
+            -- rather than re-scanning R5Character actors. The re-scan path can
+            -- silently fail when the pawn's PlayerState is detached during
+            -- transitional states like ship boarding — even though the player
+            -- is otherwise targetable through the controller (per maintainer
+            -- review of PR #68).
             local lines = {}
-            local chars = FindAllOf("R5Character")
-            if not chars then return "No character data" end
             for _, p in ipairs(players) do
-                for _, char in ipairs(chars) do
-                    if char:IsValid() then
-                        local charName = nil
-                        pcall(function() charName = char:GetFullName():match("([^%.]+)$") end)
-                        if charName == p.name then
-                            pcall(function()
-                                local hc = char.HealthComponent
-                                if hc and hc:IsValid() then
-                                    local hp = hc.CurrentHealth
-                                    local maxHp = hc.MaxHealth
-                                    table.insert(lines, p.name .. ": " .. (hp and tostring(hp) or "?") .. "/" .. (maxHp and tostring(maxHp) or "?") .. " HP")
-                                else
-                                    table.insert(lines, p.name .. ": No HealthComponent")
-                                end
-                            end)
-                            break
-                        end
-                    end
+                local ps = p.playerState
+                local attrSet = nil
+                if Admin._isValidUObject(ps) then
+                    pcall(function() attrSet = ps.R5AttributeSet end)
+                end
+                if Admin._isValidUObject(attrSet) then
+                    local hp = Admin._readGameplayAttribute(attrSet, "Health")
+                    local maxHp = Admin._readGameplayAttribute(attrSet, "MaxHealth")
+                    local hpStr = hp and tostring(math.floor(hp + 0.5)) or "?"
+                    local maxStr = maxHp and tostring(math.floor(maxHp + 0.5)) or "?"
+                    table.insert(lines, p.name .. ": " .. hpStr .. "/" .. maxStr .. " HP")
+                else
+                    table.insert(lines, p.name .. ": No AttributeSet")
                 end
             end
             return #lines > 0 and table.concat(lines, "\n") or "No health data"
@@ -526,8 +536,10 @@ function Admin._registerCommands()
         category = "players",
         playerArg = true,
         handler = function(args)
-            local players = Admin._findPlayersByName(args[1])
-            if #players == 0 then return args[1] and ("Player '" .. args[1] .. "' not found") or "No players online" end
+            -- Join all args as the player name so multi-word names ("Some Player") match.
+            local targetName = (#args > 0) and table.concat(args, " ") or nil
+            local players = Admin._findPlayersByName(targetName)
+            if #players == 0 then return targetName and ("Player '" .. targetName .. "' not found") or "No players online" end
             local lines = {}
             for _, p in ipairs(players) do
                 if p.x then
@@ -672,45 +684,92 @@ function Admin._registerCommands()
         category = "players",
         playerArg = true,
         handler = function(args)
-            local targetName = args[1] and args[1]:lower() or nil
-            local chars = FindAllOf("R5Character")
-            if not chars then return "No character data" end
+            -- Aligned with sibling info commands (wp.health, wp.pos, wp.playerinfo,
+            -- wp.playtime, wp.tp): use the shared _findPlayersByName helper for
+            -- multi-word + display-name + actor-ID matching. The previous
+            -- implementation only matched lowercase actor IDs exactly, so typing
+            -- a player's display name never resolved.
+            local targetName = (#args > 0) and table.concat(args, " ") or nil
+            local players = Admin._findPlayersByName(targetName)
+            if #players == 0 then return targetName and ("Player '" .. targetName .. "' not found") or "No players online" end
+
+            local function fmt(v) return v and tostring(math.floor(v + 0.5)) or "?" end
+
+            -- GAS attribute names tried in order. _readGameplayAttribute returns
+            -- nil for unknown fields (and guards UObject wrappers per the Round
+            -- 2 review fix), so probing candidate names is safe and forward-
+            -- compatible with engine renames. First non-nil result wins.
+            local function tryAttrs(attrSet, candidates)
+                for _, name in ipairs(candidates) do
+                    local v = Admin._readGameplayAttribute(attrSet, name)
+                    if v ~= nil then return v end
+                end
+                return nil
+            end
 
             local lines = {}
-            for _, char in ipairs(chars) do
-                if char:IsValid() then
-                    local charName = nil
-                    pcall(function() charName = char:GetFullName():match("([^%.]+)$") end)
+            for _, p in ipairs(players) do
+                local ps = p.playerState
+                local attrSet = nil
+                if Admin._isValidUObject(ps) then
+                    pcall(function() attrSet = ps.R5AttributeSet end)
+                end
 
-                    local nameMatch = not targetName or (charName and charName:lower() == targetName)
-                    if nameMatch then
-                        local playerLines = {}
-                        for _, comp in ipairs({"StaminaComponent", "HungerComponent", "ThirstComponent"}) do
-                            pcall(function()
-                                local c = char[comp]
-                                if c and c:IsValid() then
-                                    local props = {"CurrentStamina", "MaxStamina", "CurrentValue", "MaxValue",
-                                                   "CurrentHunger", "MaxHunger", "CurrentThirst", "MaxThirst"}
-                                    for _, p in ipairs(props) do
-                                        pcall(function()
-                                            local v = c[p]
-                                            if v ~= nil then
-                                                table.insert(playerLines, "  " .. comp .. "." .. p .. " = " .. tostring(v))
-                                            end
-                                        end)
-                                    end
-                                end
-                            end)
-                        end
-                        if #playerLines > 0 then
-                            table.insert(lines, (charName or "Unknown") .. ":")
-                            for _, l in ipairs(playerLines) do table.insert(lines, l) end
-                        end
+                local playerLines = {}
+                if Admin._isValidUObject(attrSet) then
+                    -- Stamina names confirmed via wp.playerinfo's working read path.
+                    local stam = Admin._readGameplayAttribute(attrSet, "Stamina")
+                    local maxStam = Admin._readGameplayAttribute(attrSet, "MaxStamina")
+                    if stam or maxStam then
+                        table.insert(playerLines, "  Stamina: " .. fmt(stam) .. "/" .. fmt(maxStam))
+                    end
+                    -- Hunger/Thirst names not yet confirmed against R5AttributeSet —
+                    -- probe common UE GAS naming conventions. Whichever name the
+                    -- engine actually exposes will surface; the rest return nil.
+                    local hunger = tryAttrs(attrSet, {"Hunger", "Saturation", "Food", "FoodLevel"})
+                    local maxHunger = tryAttrs(attrSet, {"MaxHunger", "MaxSaturation", "MaxFood", "MaxFoodLevel"})
+                    if hunger or maxHunger then
+                        table.insert(playerLines, "  Hunger:  " .. fmt(hunger) .. "/" .. fmt(maxHunger))
+                    end
+                    local thirst = tryAttrs(attrSet, {"Thirst", "Hydration", "Water", "WaterLevel"})
+                    local maxThirst = tryAttrs(attrSet, {"MaxThirst", "MaxHydration", "MaxWater", "MaxWaterLevel"})
+                    if thirst or maxThirst then
+                        table.insert(playerLines, "  Thirst:  " .. fmt(thirst) .. "/" .. fmt(maxThirst))
                     end
                 end
+
+                -- Legacy fallback: pre-GAS builds may still expose vitals as
+                -- ActorComponents on the pawn. Surfaces nothing on current
+                -- GAS-based builds (where the AttributeSet path above hits).
+                if #playerLines == 0 and Admin._isValidUObject(p.pawn) then
+                    for _, comp in ipairs({"StaminaComponent", "HungerComponent", "ThirstComponent"}) do
+                        pcall(function()
+                            local c = p.pawn[comp]
+                            if c and Admin._isValidUObject(c) then
+                                local props = {"CurrentStamina", "MaxStamina",
+                                               "CurrentHunger", "MaxHunger",
+                                               "CurrentThirst", "MaxThirst"}
+                                for _, prop in ipairs(props) do
+                                    pcall(function()
+                                        local v = c[prop]
+                                        if v ~= nil then
+                                            table.insert(playerLines, "  " .. comp .. "." .. prop .. " = " .. tostring(v))
+                                        end
+                                    end)
+                                end
+                            end
+                        end)
+                    end
+                end
+
+                if #playerLines > 0 then
+                    table.insert(lines, p.name .. ":")
+                    for _, l in ipairs(playerLines) do table.insert(lines, l) end
+                else
+                    table.insert(lines, p.name .. ": No vitals data")
+                end
             end
-            if #lines == 0 and targetName then return "Player '" .. targetName .. "' not found" end
-            return #lines > 0 and table.concat(lines, "\n") or "No stamina data"
+            return table.concat(lines, "\n")
         end
     }
 
@@ -1220,50 +1279,207 @@ function Admin._registerCommands()
     -- =========================================
 
     Admin._commands["wp.playerinfo"] = {
-        description = "Show consolidated player info (health, position, status)",
+        description = "Show consolidated player info (identity, vitals, stats, combat, progression)",
         usage = "wp.playerinfo [player]",
         category = "players",
         playerArg = true,
-        examples = {"wp.playerinfo", "wp.playerinfo HumanGenome"},
+        examples = {"wp.playerinfo", "wp.playerinfo HumanGenome", "wp.playerinfo Some Player"},
         handler = function(args)
-            local players = Admin._findPlayersByName(args[1])
-            if #players == 0 then return args[1] and ("Player '" .. args[1] .. "' not found") or "No players online" end
-            local chars = FindAllOf("R5Character")
+            -- Join all args as the player name so multi-word names match.
+            local targetName = (#args > 0) and table.concat(args, " ") or nil
+            local players = Admin._findPlayersByName(targetName)
+            if #players == 0 then return targetName and ("Player '" .. targetName .. "' not found") or "No players online" end
             local lines = {}
-            for _, p in ipairs(players) do
-                local info = {p.name .. ":"}
-                if p.x then
-                    table.insert(info, string.format("  Position: %.0f, %.0f, %.0f", p.x, p.y, p.z))
+
+            -- Helper: format a numeric value rounded to int, or "?" if nil
+            local function fmtN(v) return v and tostring(math.floor(v + 0.5)) or "?" end
+            -- Helper: format with width-aligned 3-char number
+            local function fmtStat(label, v) return string.format("%-4s %3s", label, v and tostring(math.floor(v + 0.5)) or "?") end
+            -- Helper: normalize whatever UE4SS returns for bAlive into a real bool.
+            -- Some bindings return native booleans; some return 0/1 ints; some return
+            -- string literals "true"/"false". Per maintainer review of PR #68.
+            local function normalizeBool(v)
+                if v == true or v == false then return v end
+                if type(v) == "number" then return v ~= 0 end
+                if type(v) == "string" then
+                    local s = v:lower()
+                    if s == "true" or s == "1" then return true end
+                    if s == "false" or s == "0" then return false end
                 end
-                -- Find matching character for health
-                if chars then
-                    for _, char in ipairs(chars) do
-                        if char:IsValid() then
-                            local cn = nil
-                            pcall(function() cn = char:GetFullName():match("([^%.]+)$") end)
-                            if cn == p.name then
-                                pcall(function()
-                                    local hc = char.HealthComponent
-                                    if hc and hc:IsValid() then
-                                        table.insert(info, "  Health: " .. tostring(hc.CurrentHealth or "?") .. "/" .. tostring(hc.MaxHealth or "?"))
-                                        local alive = hc.CurrentHealth and tonumber(tostring(hc.CurrentHealth)) > 0
-                                        table.insert(info, "  Alive: " .. (alive and "Yes" or "No"))
-                                    end
-                                end)
-                                break
-                            end
-                        end
+                return nil
+            end
+
+            for _, p in ipairs(players) do
+                -- Reuse pawn + playerState captured during _getPlayers' targeting
+                -- pass instead of re-scanning R5Character actors. The re-scan path
+                -- can silently fail when the pawn's PlayerState is detached during
+                -- transitional states like ship boarding — even though the player
+                -- is targetable via PlayerController (per maintainer review of #68).
+                local pawn = p.pawn
+                local ps = p.playerState
+                local attrSet, prog = nil, nil
+                if Admin._isValidUObject(ps) then
+                    pcall(function() attrSet = ps.R5AttributeSet end)
+                    pcall(function() prog = ps.ProgressionComponent end)
+                end
+                if not Admin._isValidUObject(attrSet) then attrSet = nil end
+                if not Admin._isValidUObject(prog) then prog = nil end
+
+                -- ==== Identity header ====
+                local pName = p.displayName or p.name or "?"
+                local actorId = p.actorName or "?"
+                table.insert(lines, pName .. "  (" .. actorId .. ")")
+
+                -- Server-local PlayerId (Engine.PlayerState.PlayerId, IntProperty).
+                -- Self-hosted Windrose servers don't have an OnlineSubsystem
+                -- populating UniqueID/SteamId/EpicAccountId, so those return
+                -- empty UObject wrappers. PlayerId is the next-best stable
+                -- identifier — unique per player per session, server-assigned,
+                -- no auth dependency. Already resolved during _getPlayers.
+                if p.playerId then
+                    table.insert(lines, "  Player ID: " .. tostring(math.floor(p.playerId)))
+                end
+
+
+                -- ==== Session time ====
+                -- Use the unified _resolveJoinTimeKey helper so wp.playerinfo
+                -- and wp.playtime stay in lockstep with main.lua's onPlayerJoin
+                -- keying (per maintainer review of PR #68).
+                if Admin._playerJoinTimes then
+                    local key = Admin._resolveJoinTimeKey(p)
+                    local joinTime = key and Admin._playerJoinTimes[key]
+                    if joinTime then
+                        local elapsed = os.time() - joinTime
+                        local hours = math.floor(elapsed / 3600)
+                        local mins = math.floor((elapsed % 3600) / 60)
+                        table.insert(lines, "  Session:   " .. hours .. "h " .. mins .. "m")
                     end
                 end
-                -- Session time
-                if Admin._playerJoinTimes and Admin._playerJoinTimes[p.name] then
-                    local elapsed = os.time() - Admin._playerJoinTimes[p.name]
-                    local hours = math.floor(elapsed / 3600)
-                    local mins = math.floor((elapsed % 3600) / 60)
-                    table.insert(info, "  Session: " .. hours .. "h " .. mins .. "m")
+
+                -- ==== Position ====
+                if p.x then
+                    table.insert(lines, string.format("  Position:  %.0f, %.0f, %.0f", p.x, p.y, p.z))
                 end
-                for _, l in ipairs(info) do table.insert(lines, l) end
+
+                -- ==== Status (alive/dead via HealthComponent.bAlive) ====
+                local alive = nil
+                if Admin._isValidUObject(pawn) then
+                    pcall(function()
+                        local hc = pawn.HealthComponent
+                        if Admin._isValidUObject(hc) then
+                            alive = normalizeBool(hc.bAlive)
+                        end
+                    end)
+                end
+                if alive ~= nil then
+                    table.insert(lines, "  Status:    " .. (alive and "Alive" or "Dead"))
+                end
+
+                -- ==== Vitals row (HP, Stamina, Stamina Recovery, Corruption) ====
+                -- Aligned with the in-game UI's "Stat bonuses" panel. Corruption is
+                -- hidden when both current and max are 0, since most players never
+                -- accrue any (only certain biomes/effects produce it).
+                if attrSet then
+                    local hp = Admin._readGameplayAttribute(attrSet, "Health")
+                    local maxHp = Admin._readGameplayAttribute(attrSet, "MaxHealth")
+                    local stam = Admin._readGameplayAttribute(attrSet, "Stamina")
+                    local maxStam = Admin._readGameplayAttribute(attrSet, "MaxStamina")
+                    local stamRegen = Admin._readGameplayAttribute(attrSet, "StaminaRegenRate")
+                    local corrupt = Admin._readGameplayAttribute(attrSet, "CorruptionStatus")
+                    local maxCorrupt = Admin._readGameplayAttribute(attrSet, "MaxCorruptionStatus")
+
+                    local vitals = {}
+                    if hp or maxHp then
+                        table.insert(vitals, "HP " .. fmtN(hp) .. "/" .. fmtN(maxHp))
+                    end
+                    if stam or maxStam then
+                        table.insert(vitals, "Stamina " .. fmtN(stam) .. "/" .. fmtN(maxStam))
+                    end
+                    if stamRegen and stamRegen > 0 then
+                        table.insert(vitals, "Recovery " .. fmtN(stamRegen))
+                    end
+                    -- Show Corruption when the player has any corruption capacity
+                    -- (max > 0), even at 0 current — that surfaces "you can take
+                    -- corruption damage in this biome" as informative state.
+                    -- Hidden only when both current and max are 0 / nil.
+                    if (corrupt and corrupt > 0) or (maxCorrupt and maxCorrupt > 0) then
+                        table.insert(vitals, "Corruption " .. fmtN(corrupt) .. "/" .. fmtN(maxCorrupt))
+                    end
+                    if #vitals > 0 then
+                        table.insert(lines, "  Vitals:    " .. table.concat(vitals, "   "))
+                    end
+
+                    -- ==== Stats grid — only the 6 stats the in-game UI surfaces ====
+                    -- Mobility and Fortitude exist in R5AttributeSet but never display
+                    -- in the player's Stats panel; they're always 0 for normal play
+                    -- and would just clutter the output.
+                    local stats = {
+                        Str  = Admin._readGameplayAttribute(attrSet, "Strength"),
+                        Agi  = Admin._readGameplayAttribute(attrSet, "Agility"),
+                        Prec = Admin._readGameplayAttribute(attrSet, "Precision"),
+                        Mas  = Admin._readGameplayAttribute(attrSet, "Mastery"),
+                        Vit  = Admin._readGameplayAttribute(attrSet, "Vitality"),
+                        End  = Admin._readGameplayAttribute(attrSet, "Endurance"),
+                    }
+                    if stats.Str or stats.Agi or stats.Prec or stats.Mas then
+                        table.insert(lines, "  Stats:     "
+                            .. fmtStat("Str",  stats.Str) .. "  "
+                            .. fmtStat("Agi",  stats.Agi) .. "  "
+                            .. fmtStat("Prec", stats.Prec))
+                        table.insert(lines, "             "
+                            .. fmtStat("Mas",  stats.Mas) .. "  "
+                            .. fmtStat("Vit",  stats.Vit) .. "  "
+                            .. fmtStat("End",  stats.End))
+                    end
+
+                    -- ==== Combat headlines (matches UI Stat bonuses panel) ====
+                    -- Armor + Secondary AttackPower omitted: the UI surfaces
+                    -- "Damage Resistance %" not raw Armor, and SecondaryAttackPower
+                    -- typically equals MainAttackPower for non-dual-wield builds.
+                    -- Crit values are 0-1 fractions in GAS; the UI multiplies by
+                    -- 100 for percent display, so we do the same.
+                    local atkMain = Admin._readGameplayAttribute(attrSet, "MainAttackPower")
+                    local def = Admin._readGameplayAttribute(attrSet, "DefencePower")
+                    local critBase = Admin._readGameplayAttribute(attrSet, "CriticalChanceBase")
+                    local critMod = Admin._readGameplayAttribute(attrSet, "CriticalChanceModifier")
+                    local critDmg = Admin._readGameplayAttribute(attrSet, "CriticalDamageDoneModifier")
+                    local crit = nil
+                    if critBase then crit = (critBase + (critMod or 0)) * 100 end
+                    local critDmgPct = critDmg and (critDmg * 100) or nil
+
+                    local combat = {}
+                    if atkMain then table.insert(combat, "Attack " .. fmtN(atkMain)) end
+                    if def then table.insert(combat, "Defense " .. fmtN(def)) end
+                    if crit then table.insert(combat, string.format("Crit %.1f%%", crit)) end
+                    if critDmgPct and critDmgPct > 0 then
+                        table.insert(combat, string.format("CritDmg %.0f%%", critDmgPct))
+                    end
+                    if #combat > 0 then
+                        table.insert(lines, "  Combat:    " .. table.concat(combat, "   "))
+                    end
+                end
+
+                -- ==== Progression (talent + stat-point counts) ====
+                -- nT is distinct talents that have at least one point, NOT total
+                -- points spent across them. CachedLearnedTalents entry shape
+                -- isn't fully probed yet — once we know the per-entry struct we
+                -- can sum points and surface "X talents (Y points)".
+                if Admin._isValidUObject(prog) then
+                    local talents, statsArr = nil, nil
+                    pcall(function() talents = prog.CachedLearnedTalents end)
+                    pcall(function() statsArr = prog.CachedLearnedStats end)
+                    local nT = Admin._readArrayLen(talents)
+                    local nS = Admin._readArrayLen(statsArr)
+                    if nT > 0 or nS > 0 then
+                        table.insert(lines, "  Progress:  " .. nT .. " talents   " .. nS .. " stat upgrades")
+                    end
+                end
+
+                -- Blank line between players (skip after last)
+                table.insert(lines, "")
             end
+            -- Trim trailing blank line
+            if #lines > 0 and lines[#lines] == "" then table.remove(lines) end
             return table.concat(lines, "\n")
         end
     }
@@ -1273,14 +1489,20 @@ function Admin._registerCommands()
         usage = "wp.playtime [player]",
         category = "players",
         playerArg = true,
-        examples = {"wp.playtime", "wp.playtime HumanGenome"},
+        examples = {"wp.playtime", "wp.playtime HumanGenome", "wp.playtime Some Player"},
         handler = function(args)
             if not Admin._playerJoinTimes then return "No session data available" end
-            local players = Admin._findPlayersByName(args[1])
-            if #players == 0 then return args[1] and ("Player '" .. args[1] .. "' not found") or "No players online" end
+            -- Join all args as the player name so multi-word names ("Some Player") match.
+            local targetName = (#args > 0) and table.concat(args, " ") or nil
+            local players = Admin._findPlayersByName(targetName)
+            if #players == 0 then return targetName and ("Player '" .. targetName .. "' not found") or "No players online" end
             local lines = {}
             for _, p in ipairs(players) do
-                local joinTime = Admin._playerJoinTimes[p.name]
+                -- Use the unified _resolveJoinTimeKey helper so wp.playtime
+                -- and wp.playerinfo stay in lockstep with main.lua's
+                -- onPlayerJoin keying (per maintainer review of PR #68).
+                local key = Admin._resolveJoinTimeKey(p)
+                local joinTime = key and Admin._playerJoinTimes[key]
                 if joinTime then
                     local elapsed = os.time() - joinTime
                     local hours = math.floor(elapsed / 3600)
@@ -1657,37 +1879,105 @@ function Admin._matchFilter(name, type_or_nil, filter)
     return false
 end
 
--- Helper: find player(s) by display name from R5PlayerState.PlayerNamePrivate
--- Returns table of { state = R5PlayerState, pc = PlayerController-or-nil, name = "..." }
-function Admin._findPlayerByDisplayName(targetName)
-    local matches = {}
-    local target = targetName and targetName:lower() or nil
-    local states = FindAllOf("R5PlayerState") or FindAllOf("PlayerState")
-    if not states then return matches end
-    for _, ps in ipairs(states) do
-        if ps:IsValid() then
-            local name = nil
-            pcall(function() name = ps.PlayerNamePrivate:ToString() end)
-            if name and name ~= "" then
-                if not target or name:lower() == target then
-                    local pc = nil
-                    pcall(function() pc = ps:GetPlayerController() end)
-                    table.insert(matches, { state = ps, pc = pc, name = name })
-                end
-            end
-        end
-    end
-    return matches
+-- Defensive UObject validity check. Calling :IsValid() outside pcall on a
+-- non-UObject (or torn-down object) can fault below the Lua boundary in some
+-- UE4SS bindings; pcall keeps that contained.
+function Admin._isValidUObject(o)
+    if o == nil then return false end
+    local ok, valid = pcall(function() return o:IsValid() end)
+    return ok and valid == true
 end
 
--- Helper: find players by name (case-insensitive exact match, or return all if no filter)
+-- Module-level player-target matcher. Mirrors the local helper in
+-- _registerCommands() that the movement commands use, hoisted here so
+-- _findPlayersByName can share it (per maintainer review of PR #68 — avoid
+-- drift between the movement and info-command targeting paths).
+function Admin._playerTargetMatches(targetName, displayName, actorName, actorFullName)
+    if not targetName then return true end
+    local target = targetName:lower()
+    if displayName and displayName:lower() == target then return true end
+    if actorName and actorName:lower() == target then return true end
+    if actorFullName and actorFullName:lower() == target then return true end
+    return false
+end
+
+-- Read a value from an FGameplayAttributeData struct on an R5GAS AttributeSet.
+-- GAS attributes have BaseValue (raw) and CurrentValue (after active modifiers).
+-- We prefer CurrentValue since that's what the game logic actually uses for
+-- damage rolls / regen / display. Falls back through other patterns if the
+-- struct shape varies.
+function Admin._readGameplayAttribute(attrSet, fieldName)
+    if not Admin._isValidUObject(attrSet) then return nil end
+    local attr = nil
+    pcall(function() attr = attrSet[fieldName] end)
+    if attr == nil then return nil end
+    -- Defensive: if a future engine update renames or removes the attribute,
+    -- UE4SS may surface the missing field as a UObject wrapper instead of an
+    -- FGameplayAttributeData struct. Drilling into a UObject sub-handle here
+    -- has hung the UE4SS Lua VM in the past (e.g. R5GameMode.TimeOfDay walks
+    -- on 4/29) — and pcall can't catch a hang. Bail early if we got a wrapper.
+    if tostring(attr):match("^UObject:") then return nil end
+    -- Try the GAS standard sub-fields in priority order (most builds expose
+    -- the FGameplayAttributeData struct fields directly).
+    for _, sub in ipairs({"CurrentValue", "BaseValue", "Value"}) do
+        local ok, val = pcall(function() return attr[sub] end)
+        if ok and val ~= nil then
+            local n = tonumber(tostring(val))
+            if n then return n end
+        end
+    end
+    -- Method-form cascade: some GAS builds expose the values via
+    -- BlueprintCallable getters instead of direct struct access.
+    -- (Per maintainer review of PR #68.)
+    for _, method in ipairs({"GetCurrentValue", "GetBaseValue", "GetValue"}) do
+        local ok, val = pcall(function() return attr[method](attr) end)
+        if ok and val ~= nil then
+            local n = tonumber(tostring(val))
+            if n then return n end
+        end
+    end
+    -- Last resort: tostring the whole thing in case it's a raw float
+    local n = tonumber(tostring(attr))
+    if n then return n end
+    return nil
+end
+
+-- Resolves the key main.lua's onPlayerJoin used to populate Admin._playerJoinTimes.
+-- main.lua keys by player.name from Query.getPlayers(), which follows the
+-- priority: PlayerNamePrivate -> "Player <id>" -> "Player". The same priority
+-- here keeps wp.playerinfo and wp.playtime aligned even in the early-connect
+-- race window where displayName hasn't loaded yet (per maintainer review of #68).
+function Admin._resolveJoinTimeKey(p)
+    if not p then return nil end
+    if p.displayName and p.displayName ~= "" then return p.displayName end
+    if p.name and p.name ~= "" then return p.name end
+    if p.playerId then return "Player " .. tostring(p.playerId) end
+    return nil
+end
+
+-- Read length of a UE TArray defensively. UE4SS exposes arrays through
+-- different access patterns depending on type — try the Lua # operator first,
+-- then UE's GetArrayNum() method, then a Length property.
+function Admin._readArrayLen(arr)
+    if arr == nil then return 0 end
+    local ok, len = pcall(function() return #arr end)
+    if ok and type(len) == "number" then return len end
+    ok, len = pcall(function() return arr:GetArrayNum() end)
+    if ok and type(len) == "number" then return len end
+    ok, len = pcall(function() return arr.Length end)
+    if ok and type(len) == "number" then return len end
+    return 0
+end
+
 function Admin._findPlayersByName(targetName)
     local players = Admin._getPlayers()
     if not targetName then return players end
-    local target = targetName:lower()
     local matched = {}
     for _, p in ipairs(players) do
-        if p.name and p.name:lower() == target then
+        -- Use the shared matcher so info-commands and movement-commands stay
+        -- in lockstep (per maintainer review of PR #68).
+        if Admin._playerTargetMatches(targetName, p.displayName, p.actorName, p.actorFullName)
+           or (p.name and p.name:lower() == targetName:lower()) then
             table.insert(matched, p)
         end
     end
@@ -1788,58 +2078,184 @@ function Admin._findFirstValid(typeName)
     return nil
 end
 
--- Helper: get player list with positions
+-- Helper: lookup live position from the LiveMap snapshot (which is collected
+-- on the game thread by LiveMap.writeIfDue and stored as plain Lua values).
+-- This is the async-safe path: reading from the snapshot is just table access,
+-- no UFunction calls. Returns nil if the snapshot is missing or no entry
+-- matches by display name / actor name. Same data the dashboard uses.
+local function liveMapPosition(displayName, actorName)
+    local lm = WindrosePlus and WindrosePlus._modules and WindrosePlus._modules.LiveMap
+    if not lm then return nil end
+    local snap = lm._lastSnapshot
+    if not snap or type(snap.players) ~= "table" then return nil end
+    for _, sp in ipairs(snap.players) do
+        if sp.name and (sp.name == displayName or sp.name == actorName) and sp.x then
+            return sp.x, sp.y, sp.z
+        end
+    end
+    return nil
+end
+
+-- Helper: read display name + playerId off a PlayerState, with fallbacks
+-- matching Query.getPlayers()'s priority (PlayerNamePrivate -> "Player <id>"
+-- -> "Player"). Returns (displayName, playerId, fallbackName).
+-- displayName is nil if PlayerNamePrivate hasn't replicated yet.
+local function readNameFromPlayerState(ps)
+    local displayName, playerId = nil, nil
+    if not Admin._isValidUObject(ps) then return nil, nil, nil end
+    pcall(function()
+        local val = ps.PlayerNamePrivate
+        if val then
+            local ok, str = pcall(function() return val:ToString() end)
+            if ok and str and str ~= "" then displayName = str end
+        end
+    end)
+    pcall(function()
+        local pid = ps.PlayerId
+        if pid ~= nil then
+            local n = tonumber(tostring(pid))
+            if n then playerId = n end
+        end
+    end)
+    local fallbackName = displayName or (playerId and ("Player " .. tostring(playerId))) or "Player"
+    return displayName, playerId, fallbackName
+end
+
+-- Helper: read position from LiveMap snapshot first (game-thread-collected,
+-- async-safe), then ReplicatedMovement.Location (struct property, async-safe
+-- but lags a tick / reads 0,0,0 for ship-parented actors), then RootComponent
+-- as a last resort. Returns x,y,z or nil. K2_GetActorLocation is intentionally
+-- not called here — it's a UFunction and unsafe from the LoopAsync thread
+-- that drives info commands.
+local function readPositionAsyncSafe(actor, displayName, actorName)
+    local x, y, z = liveMapPosition(displayName, actorName)
+    if x then return x, y, z end
+    if not Admin._isValidUObject(actor) then return nil end
+    pcall(function()
+        local repMove = actor.ReplicatedMovement
+        if repMove then
+            local loc = repMove.Location
+            if loc then x, y, z = loc.X, loc.Y, loc.Z end
+        end
+    end)
+    if x then return x, y, z end
+    pcall(function()
+        local root = actor.RootComponent
+        if Admin._isValidUObject(root) then
+            local rel = root.RelativeLocation
+            if rel then x, y, z = rel.X, rel.Y, rel.Z end
+        end
+    end)
+    return x, y, z
+end
+
+-- Helper: get player list with positions and resolved component references.
+-- Mirrors Query.getPlayers()'s PlayerController-primary + R5Character-fallback
+-- pattern (per maintainer review of PR #68 — issue #67 reports cases where
+-- the PC scan returns empty even with players connected; the R5Character
+-- iteration is reached via char.Controller.PlayerState in those cases).
+--
+-- Position chain is async-safe by design: K2_GetActorLocation is a UFunction
+-- and unsafe from the LoopAsync thread that drives info commands. We read
+-- from the LiveMap snapshot (game-thread-collected) or the already-replicated
+-- Location struct field instead.
+--
+-- Each entry exposes:
+--   p.name          - displayName -> "Player <id>" -> "Player" (matches Query)
+--   p.displayName   - PlayerState.PlayerNamePrivate (nil during early connect)
+--   p.playerId      - PlayerState.PlayerId (server-local int, stable per session)
+--   p.actorName     - last segment of pawn:GetFullName(), e.g. BP_R5Character_C_2145886219
+--   p.actorFullName - full pawn:GetFullName()
+--   p.pawn          - PlayerController.Pawn (the R5Character actor) or nil
+--   p.playerState   - PlayerController.PlayerState or nil
+--   p.x/p.y/p.z     - position, when available
 function Admin._getPlayers()
     local players = {}
-    local chars = FindAllOf("R5Character")
-    if not chars then return players end
 
-    for _, char in ipairs(chars) do
-        if char:IsValid() then
-            local hasController = false
-            pcall(function()
-                local ctrl = char.Controller
-                if ctrl and ctrl:IsValid() then hasController = true end
-            end)
+    -- Primary: iterate PlayerControllers, filtered through Admin._isConnected
+    -- so we don't pull in disconnected/spectator PCs (matches Query.getPlayers).
+    local pcs = FindAllOf("PlayerController")
+    if pcs then
+        for _, pc in ipairs(pcs) do
+            if Admin._isValidUObject(pc) and Admin._isConnected(pc) then
+                local ps = nil
+                pcall(function() ps = pc.PlayerState end)
+                if not Admin._isValidUObject(ps) then ps = nil end
 
-            if hasController then
-                local player = { name = "Unknown" }
+                local displayName, playerId, fallbackName = readNameFromPlayerState(ps)
 
-                pcall(function()
-                    local fn = char:GetFullName()
-                    player.name = fn:match("([^%.]+)$") or fn
-                end)
+                local pawn = nil
+                pcall(function() pawn = pc.Pawn end)
+                if not Admin._isValidUObject(pawn) then pawn = nil end
 
-                pcall(function()
-                    local repMove = char.ReplicatedMovement
-                    if repMove then
-                        local loc = repMove.Location
-                        if loc then
-                            player.x = loc.X
-                            player.y = loc.Y
-                            player.z = loc.Z
-                        end
-                    end
-                end)
-
-                if not player.x then
+                if pawn then
+                    local actorFullName, actorName = nil, nil
                     pcall(function()
-                        local root = char.RootComponent
-                        if root and root:IsValid() then
-                            local rel = root.RelativeLocation
-                            if rel then
-                                player.x = rel.X
-                                player.y = rel.Y
-                                player.z = rel.Z
-                            end
+                        actorFullName = pawn:GetFullName()
+                        if actorFullName then
+                            actorName = actorFullName:match("([^%.]+)$") or actorFullName
                         end
                     end)
-                end
 
-                table.insert(players, player)
+                    local player = {
+                        name          = fallbackName,
+                        displayName   = displayName,
+                        playerId      = playerId,
+                        actorName     = actorName,
+                        actorFullName = actorFullName,
+                        pawn          = pawn,
+                        playerState   = ps,
+                    }
+                    player.x, player.y, player.z = readPositionAsyncSafe(pawn, displayName, actorName)
+                    table.insert(players, player)
+                end
             end
         end
     end
+
+    -- Fallback: if PC enumeration yielded nothing (issue #67 — at least one
+    -- customer report where this happens even with players online), iterate
+    -- R5Character actors and reach PlayerState through char.Controller. Same
+    -- struct shape so info commands work identically against either path.
+    if #players == 0 then
+        local chars = FindAllOf("R5Character")
+        if chars then
+            for _, char in ipairs(chars) do
+                if Admin._isValidUObject(char) then
+                    local controller = nil
+                    pcall(function() controller = char.Controller end)
+                    if Admin._isValidUObject(controller) then
+                        local ps = nil
+                        pcall(function() ps = controller.PlayerState end)
+                        if not Admin._isValidUObject(ps) then ps = nil end
+
+                        local displayName, playerId, fallbackName = readNameFromPlayerState(ps)
+
+                        local actorFullName, actorName = nil, nil
+                        pcall(function()
+                            actorFullName = char:GetFullName()
+                            if actorFullName then
+                                actorName = actorFullName:match("([^%.]+)$") or actorFullName
+                            end
+                        end)
+
+                        local player = {
+                            name          = fallbackName,
+                            displayName   = displayName,
+                            playerId      = playerId,
+                            actorName     = actorName,
+                            actorFullName = actorFullName,
+                            pawn          = char,
+                            playerState   = ps,
+                        }
+                        player.x, player.y, player.z = readPositionAsyncSafe(char, displayName, actorName)
+                        table.insert(players, player)
+                    end
+                end
+            end
+        end
+    end
+
     return players
 end
 

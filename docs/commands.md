@@ -129,7 +129,9 @@ Config reloaded
 
 ### wp.players
 
-List all online players with their world positions.
+List all online players with their world positions. Each entry shows the
+actor ID (canonical, used by other commands like `wp.tp`) followed by the
+player's display name in parentheses when known.
 
 ```
 Usage: wp.players
@@ -138,8 +140,8 @@ Usage: wp.players
 ```
 > wp.players
 Online (2):
-  1. HumanGenome @ 14520, -8340, 150
-  2. CaptainMorgan @ 6200, 1100, 85
+  1. BP_R5Character_C_2147418445 (HumanGenome) @ 14520, -8340, 150
+  2. BP_R5Character_C_2147418362 (CaptainMorgan) @ 6200, 1100, 85
 ```
 
 ### wp.pos
