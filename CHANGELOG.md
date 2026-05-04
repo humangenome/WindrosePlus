@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.1.17] - 2026-05-04
+
 ### Added
 
 - **POIScan observability events.** `poiscan.gate`, `poiscan.scan.start`, `poiscan.scan.done`, and `poiscan.scan.fail` records are now written to the daily JSONL activity log so server admins can see whether the scheduled POI scan is firing and, if not, which gate is blocking it. Per-reason gate events are throttled to one per five minutes per reason, so an idle server logs roughly twelve `idle_no_players` lines per hour rather than one per tick. Lifecycle events (start / done / fail) are unthrottled because each scan is a 4-hour event under normal operation.
