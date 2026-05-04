@@ -1157,6 +1157,23 @@ function Admin._registerCommands()
     -- New Commands: Server Info
     -- =========================================
 
+    -- Keys whose PAK patch path is currently disabled in the open-source builder
+    -- (save-safety / engine-validator hazards). Mirrored from the wp.doctor
+    -- block below. Suffix `(disabled)` on the wp.config / wp.multipliers echo
+    -- when the customer has set a non-1 value, so the in-game output does not
+    -- mislead operators into thinking a value is being applied when it is not.
+    local _disabledMultiplierEcho = {
+        stack_size = true, weight = true, inventory_size = true,
+        points_per_level = true, crop_speed = true,
+    }
+    local function _fmtMultiplierLine(label, value, disabledKey)
+        local s = "  " .. label .. ": " .. tostring(value) .. "x"
+        if disabledKey and _disabledMultiplierEcho[disabledKey] and value ~= 1 then
+            s = s .. " (disabled)"
+        end
+        return s
+    end
+
     Admin._commands["wp.config"] = {
         description = "Show current config values",
         usage = "wp.config",
@@ -1164,12 +1181,12 @@ function Admin._registerCommands()
         examples = {"wp.config"},
         handler = function(args)
             local lines = {"WindrosePlus Config:"}
-            table.insert(lines, "  Loot: " .. Admin._config.getLootMultiplier() .. "x")
-            table.insert(lines, "  XP: " .. Admin._config.getXpMultiplier() .. "x")
-            table.insert(lines, "  Stack Size: " .. Admin._config.getStackSizeMultiplier() .. "x")
-            table.insert(lines, "  Craft Efficiency: " .. Admin._config.getCraftEfficiencyMultiplier() .. "x")
-            table.insert(lines, "  Crop Speed: " .. Admin._config.getCropSpeedMultiplier() .. "x")
-            table.insert(lines, "  Weight: " .. Admin._config.getWeightMultiplier() .. "x")
+            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
+            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"))
+            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"))
             table.insert(lines, "  RCON: " .. (Admin._config.isRconEnabled() and "enabled" or "disabled"))
             local mods = WindrosePlus._modules.Mods
             if mods then
@@ -1186,12 +1203,12 @@ function Admin._registerCommands()
         examples = {"wp.multipliers"},
         handler = function(args)
             local lines = {"Multipliers:"}
-            table.insert(lines, "  Loot: " .. Admin._config.getLootMultiplier() .. "x")
-            table.insert(lines, "  XP: " .. Admin._config.getXpMultiplier() .. "x")
-            table.insert(lines, "  Stack Size: " .. Admin._config.getStackSizeMultiplier() .. "x")
-            table.insert(lines, "  Craft Efficiency: " .. Admin._config.getCraftEfficiencyMultiplier() .. "x")
-            table.insert(lines, "  Crop Speed: " .. Admin._config.getCropSpeedMultiplier() .. "x")
-            table.insert(lines, "  Weight: " .. Admin._config.getWeightMultiplier() .. "x")
+            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
+            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"))
+            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"))
             return table.concat(lines, "\n")
         end
     }

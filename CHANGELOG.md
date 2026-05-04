@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`wp.config` and `wp.multipliers` now mark disabled multiplier keys as `(disabled)`** when the customer has set a non-default value. The PAK builder skips `stack_size`, `weight`, `inventory_size`, `points_per_level`, and `crop_speed` for save-safety reasons, but the in-game echo previously reported parsed values without indicating they were no-ops, leading to "I set stack_size=3 but in-game stacks are unchanged" reports (#70). The `wp.doctor` warning already surfaced this; the basic config readout now does too.
+
 ### Added
 
 - **Multiplier downgrade ratchet for `xp` (#69).** Lowering the `xp` multiplier under a saved character whose level / talent / stat allocations were earned at the higher value causes Windrose's save validator to reject the character on next login (`RewardLevel < CurrentLevel`), with no clean rollback path. The PAK builder now tracks the highest historically applied value of save-state-baking multipliers in `R5/Content/Paks/.windroseplus_multiplier_history.json` and refuses to rebuild with a lower value unless `WINDROSEPLUS_ALLOW_DOWNGRADE=1` is set in the environment. Mirrors the safety guard already present in panel-managed installs.
