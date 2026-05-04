@@ -97,7 +97,8 @@ $iniConfigPaths = @(
     (Join-Path $iniDir "windrose_plus.weapons.ini"),
     (Join-Path $iniDir "windrose_plus.food.ini"),
     (Join-Path $iniDir "windrose_plus.gear.ini"),
-    (Join-Path $iniDir "windrose_plus.entities.ini")
+    (Join-Path $iniDir "windrose_plus.entities.ini"),
+    (Join-Path $iniDir "windrose_plus.harvest.ini")
 )
 if (-not $DefaultPath) {
     $DefaultPath = Join-Path $ServerDir "windrose_plus\config\windrose_plus.default.ini"
@@ -304,6 +305,16 @@ $hasMultipliers = $false
 foreach ($prop in $multipliers.GetEnumerator()) {
     if ($prop.Key -eq "points_per_level") { continue }
     if ($prop.Value -ne 1.0) { $hasMultipliers = $true; break }
+}
+# windrose_plus.harvest.ini alone (no non-default value in windrose_plus.json)
+# also requires a Multipliers PAK. Read-HarvestIni is dot-sourced from
+# MultiplierPakBuilder.ps1.
+if (-not $hasMultipliers) {
+    $harvestIniPath = Join-Path $iniDir "windrose_plus.harvest.ini"
+    $perResourceHarvest = Read-HarvestIni -Path $harvestIniPath
+    foreach ($v in $perResourceHarvest.Values) {
+        if ($v -ne 1.0) { $hasMultipliers = $true; break }
+    }
 }
 $hasCT = ($ctConfig.Count -gt 0)
 
