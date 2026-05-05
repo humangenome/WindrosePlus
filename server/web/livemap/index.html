@@ -121,7 +121,12 @@
                 tileSize: 256,
                 noWrap: true,
                 bounds: L.latLngBounds([W.minY, W.minX], [W.maxY, W.maxX]),
-                errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=='
+                // Truly transparent 1×1 RGBA PNG. The previous literal here decoded to
+                // rgba(255,0,0,127), which Leaflet stretched into every missing tile slot
+                // — three big red squares appeared at the southern edge of the public
+                // Sea Chart whenever those tiles were not generated. Auth dashboard
+                // already fixed this in server/web/index.html; mirror the same PNG here.
+                errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg=='
             }).addTo(map);
 
             map.fitBounds(IB);
