@@ -200,13 +200,18 @@ function Read-HarvestIni {
     return $out
 }
 
-# Pull the resource family from a UE LootItem soft-object path.
-# `/R5BusinessRules/.../DA_DID_Resource_Wood_T01.DA_DID_Resource_Wood_T01`
-# -> "Wood". Returns $null when nothing matches.
+# Pull the resource family from a UE asset soft-object path. Matches both
+# loot-table item paths (`.../Resource_Wood_T01...`) and the BP_Mineral_*
+# blueprint paths used in ResourceSpawner Assets[]
+# (`/Game/.../BP_Mineral_Clay_T01_C`). Returns $null when nothing matches.
+#
+# Note: the Linux docker installer's sed pass rewrites `\<alnum>` between
+# alnum chars to `/<alnum>` (path-separator fixup for Windows literals),
+# which would mangle regex shorthand like `\d` to `/d`. Use [0-9] instead.
 function Get-ResourceFamily {
     param([string]$LootItemPath)
     if (-not $LootItemPath) { return $null }
-    if ($LootItemPath -match 'Resource_([A-Za-z][A-Za-z0-9]*)_T\d') {
+    if ($LootItemPath -match '(?:Resource|Mineral)_([A-Za-z][A-Za-z0-9]*)_T[0-9]') {
         return $Matches[1]
     }
     return $null
@@ -563,7 +568,16 @@ function Build-MultiplierPak {
                     foreach ($entry in $variant.Collection) {
                         if ($null -ne $entry.Amount -and $null -ne $entry.Amount.Min -and $null -ne $entry.Amount.Max) {
                             $resMult = 1.0
-                            $family = Get-ResourceFamily -LootItemPath $entry.ResourceParams
+                            # ResourceSpawner entries reference one or more BP
+                            # asset paths via Assets[] (e.g. BP_Mineral_Clay_T01).
+                            # Use the first that yields a family.
+                            $family = $null
+                            if ($entry.Assets) {
+                                foreach ($a in $entry.Assets) {
+                                    $f = Get-ResourceFamily -LootItemPath $a
+                                    if ($f) { $family = $f; break }
+                                }
+                            }
                             if ($family -and $perResource.ContainsKey($family)) {
                                 $resMult = $perResource[$family]
                                 if ($perFamilyApplied.ContainsKey($family)) { $perFamilyApplied[$family]++ }
