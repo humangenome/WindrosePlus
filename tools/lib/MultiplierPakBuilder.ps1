@@ -186,9 +186,15 @@ function Read-HarvestIni {
         $semi = $val.IndexOf(';')
         if ($semi -ge 0) { $val = $val.Substring(0, $semi) }
         $val = $val.Trim()
+        if (-not $val) {
+            Write-Warning "Read-HarvestIni: '$key =' has no value (line skipped)"
+            continue
+        }
         $d = 0.0
         if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d)) {
             $out[$key] = [Math]::Max(0.01, $d)
+        } else {
+            Write-Warning "Read-HarvestIni: '$key = $val' is not a number (expected e.g. '5.0', not '5x'); line skipped"
         }
     }
     return $out

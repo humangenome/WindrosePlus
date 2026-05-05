@@ -818,16 +818,24 @@ try {
                     $wrapper = Join-Path $gameDir "StartWindrosePlusServer.bat"
                     $jsonPath = Join-Path $gameDir "windrose_plus.json"
                     $iniPath  = Join-Path $gameDir "windrose_plus.ini"
-                    $iniPaths = @(
+                    # CurveTable-relevant INIs only — harvest is a
+                    # multipliers-only file and must NOT make ct_config_present
+                    # true on its own (would trigger spurious "Default INI
+                    # missing" status when no CT customization is in play).
+                    $ctIniPaths = @(
                         $iniPath,
                         (Join-Path $gameDir "windrose_plus.weapons.ini"),
                         (Join-Path $gameDir "windrose_plus.food.ini"),
                         (Join-Path $gameDir "windrose_plus.gear.ini"),
-                        (Join-Path $gameDir "windrose_plus.entities.ini"),
+                        (Join-Path $gameDir "windrose_plus.entities.ini")
+                    )
+                    # Full INI list (CT + multipliers) used for mtime / stale
+                    # detection so harvest edits still invalidate the build.
+                    $iniPaths = $ctIniPaths + @(
                         (Join-Path $gameDir "windrose_plus.harvest.ini")
                     )
                     $ctConfigPresent = $false
-                    foreach ($p in $iniPaths) {
+                    foreach ($p in $ctIniPaths) {
                         if (Test-Path -LiteralPath $p) {
                             $ctConfigPresent = $true
                             break

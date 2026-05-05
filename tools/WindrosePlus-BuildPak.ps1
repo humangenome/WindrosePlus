@@ -92,12 +92,19 @@ if ($ConfigPath) {
 }
 $iniDir = Split-Path -Parent $iniPath
 if (-not $iniDir) { $iniDir = $ServerDir }
-$iniConfigPaths = @(
+# CurveTable-relevant INIs (drive ct_config_present + parser load).
+# Harvest is a multipliers-only feature; keep it out of this set so a
+# harvest-only INI doesn't trigger CT parsing or "Default INI missing".
+$ctIniConfigPaths = @(
     $iniPath,
     (Join-Path $iniDir "windrose_plus.weapons.ini"),
     (Join-Path $iniDir "windrose_plus.food.ini"),
     (Join-Path $iniDir "windrose_plus.gear.ini"),
-    (Join-Path $iniDir "windrose_plus.entities.ini"),
+    (Join-Path $iniDir "windrose_plus.entities.ini")
+)
+# Full list (CT + multipliers) used for build-input hashing so any INI
+# edit invalidates the cache.
+$iniConfigPaths = $ctIniConfigPaths + @(
     (Join-Path $iniDir "windrose_plus.harvest.ini")
 )
 if (-not $DefaultPath) {
@@ -276,7 +283,7 @@ if ($blockedDowngrades.Count -gt 0) {
 # --- Read INI (CurveTables only) ---
 $iniConfig = $null
 $hasIniConfig = $false
-foreach ($path in $iniConfigPaths) {
+foreach ($path in $ctIniConfigPaths) {
     if (Test-Path -LiteralPath $path) {
         $hasIniConfig = $true
         break

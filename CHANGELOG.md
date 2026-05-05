@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.1.19] - 2026-05-04
+
+### Added
+
+- **Per-resource harvest yield via `windrose_plus.harvest.ini` (#53, #71).** Optional INI that adds per-resource multipliers stacking multiplicatively on top of `multipliers.harvest_yield`. Set `Wood = 5.0` + `harvest_yield = 1.0` to get 5x wood and 1x everything else; combine with a non-default `harvest_yield` to scale every resource by the base value and selected resources by an additional family-specific multiplier. Covers wood, bark, plant fiber, stone, clay, ash, sulfur, copper ore, iron, charcoal, and the foliage-table animal drops (feather, fat, leather, horns, bezoar). Family detection reads the `Resource_<Name>_T<digit>` token out of each loot entry's path and is case-insensitive. Contextual destroy scores (segmented trees → Wood, copper-cave digs → CopperOre, iron-cavern digs → Iron) are mapped to the same families so panel-driven harvest balance stays consistent across both loot tables and contextual spawners. Per-resource keys with zero matches surface a `Per-resource keys with zero matches` warning in BuildPak output so typos like `Wod = 5.0` don't silently no-op. Drops `windrose_plus.harvest.default.ini` as the template; rename to `.ini` to activate. Original implementation by @Nightreaver, follow-up patches and CT-list / diagnostic-warning fixes for shipping safety on top.
+
+### Fixed
+
+- **Harvest INI no longer trips the CurveTable parser.** The first cut of the per-resource harvest feature added `windrose_plus.harvest.ini` to the same INI list used to detect "is there CurveTable customization in play?" That made a harvest-only install (no entities/weapons/food/gear customization) report `ct_config_present = true` and emit a `Default INI missing; cannot evaluate CurveTable config` warning when `windrose_plus.default.ini` was absent. CT-relevant INIs and rebuild-input INIs are now tracked separately in both `WindrosePlus-BuildPak.ps1` and the `/api/pak-status` endpoint; harvest still invalidates the build hash so edits trigger a rebuild, but it no longer drives the CT detection path.
+- **`Read-HarvestIni` now warns on lines it can't parse.** A line like `Wood = 5x` (or any value that fails `[double]::TryParse`) used to be dropped silently, leaving customers wondering why their multiplier didn't take. The reader now emits a `Write-Warning` for both empty values (`Wood =`) and non-numeric values (`Wood = 5x`) so the misformatted line shows up in BuildPak's stderr output.
+
 ## [1.1.18] - 2026-05-04
 
 ### Added
