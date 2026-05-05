@@ -160,18 +160,46 @@ $historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
 $allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 function Save-MultiplierHistory {
-    param([hashtable]$History, [string]$Path)
+    param(
+        [hashtable]$History,
+        [string]$Path
+    )
+
     if (-not $History) { return }
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Multiplier history path is empty."
+    }
+
+    $dir = Split-Path -Parent $Path
+    if ([string]::IsNullOrWhiteSpace($dir)) {
+        throw "Could not resolve parent directory for path: $Path"
+    }
+
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+
     $tmp = "$Path.tmp"
+    $bak = "$Path.bak"
     $json = $History | ConvertTo-Json -Depth 2
-    Set-Content -LiteralPath $tmp -Value $json -Encoding UTF8
-    if (Test-Path -LiteralPath $Path) {
-        # Atomic replace on NTFS (and most POSIX filesystems pwsh supports).
-        # Move-Item -Force is NOT a documented atomic primitive in PowerShell;
-        # [IO.File]::Replace IS atomic on Windows, [IO.File]::Move on first create.
-        [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
-    } else {
-        [System.IO.File]::Move($tmp, $Path)
+
+    try {
+        Set-Content -LiteralPath $tmp -Value $json -Encoding UTF8
+
+        if (Test-Path -LiteralPath $Path) {
+            try {
+                [System.IO.File]::Replace($tmp, $Path, $bak, $true) | Out-Null
+                Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+            } catch {
+                Move-Item -LiteralPath $tmp -Destination $Path -Force
+            }
+        } else {
+            Move-Item -LiteralPath $tmp -Destination $Path -Force
+        }
+    } catch {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        throw
     }
 }
 
