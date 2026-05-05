@@ -8,7 +8,7 @@
 -- latest CHANGELOG entry between tagged releases — that's flagged as a
 -- non-blocking warning by .github/workflows/version-check.yml.
 WindrosePlus = {
-    VERSION = "1.0.16",
+    VERSION = "1.1.20",
     state = {
         playerCount = 0,
         mode = "boot",           -- starts as "boot", transitions to "idle" or "active"
@@ -98,6 +98,25 @@ end
 -- Game directory detection
 -- ------------
 
+-- Sentinel files used to confirm a candidate path is the Windrose game root.
+-- pakchunk0-WindowsServer.pak has been the dedicated-server pak filename
+-- across every Windrose engine version we have shipped against. The shipping
+-- exe is the next-most-stable check. ServerDescription.json existed on
+-- 0.10.0.3.104 and earlier and was removed by Facepunch in 0.10.0.5.120 — kept
+-- last as a legacy fallback so older self-hosted installs still match.
+local function _isGameRoot(root)
+    local sentinels = {
+        root .. "R5\\Content\\Paks\\pakchunk0-WindowsServer.pak",
+        root .. "R5\\Binaries\\Win64\\WindroseServer-Win64-Shipping.exe",
+        root .. "R5\\ServerDescription.json",
+    }
+    for _, p in ipairs(sentinels) do
+        local f = io.open(p, "r")
+        if f then f:close(); return true end
+    end
+    return false
+end
+
 local function detectGameDir()
     -- Get absolute path from Lua debug info (UE4SS provides full script path)
     local info = debug.getinfo(1, "S")
@@ -106,17 +125,15 @@ local function detectGameDir()
         -- Script is at: <game_root>/R5/Binaries/Win64/ue4ss/Mods/WindrosePlus/Scripts/main.lua
         -- Walk up 7 levels to get game root
         local gameRoot = src:match("^(.+)[/\\]R5[/\\]Binaries[/\\]Win64[/\\]ue4ss[/\\]Mods[/\\]WindrosePlus[/\\]Scripts[/\\]")
-        if gameRoot then
-            local f = io.open(gameRoot .. "\\R5\\ServerDescription.json", "r")
-            if f then f:close(); return gameRoot .. "\\" end
+        if gameRoot and _isGameRoot(gameRoot .. "\\") then
+            return gameRoot .. "\\"
         end
     end
 
     -- Fallback: probe relative paths
     local testPaths = { "..\\..\\..\\..\\", "..\\..\\..\\", "..\\..\\" }
     for _, rel in ipairs(testPaths) do
-        local f = io.open(rel .. "R5\\ServerDescription.json", "r")
-        if f then f:close(); return rel end
+        if _isGameRoot(rel) then return rel end
     end
     Log.warn("Core", "Could not detect game directory")
     return ".\\"
@@ -571,11 +588,42 @@ LoopAsync(30000, function() pcall(_writeTickBeat); return false end)
 -- file writes from the async driver on the next tick so disk I/O does not run on
 -- the simulation thread (#33).
 local function _readUe4ssSettings()
-    local path = gameDir .. "R5\\Binaries\\Win64\\ue4ss\\UE4SS-settings.ini"
-    local f = io.open(path, "r")
-    if not f then return nil end
-    local raw = f:read("*a")
-    f:close()
+    -- Derive the settings path from debug.getinfo INSTEAD of gameDir so that a
+    -- regression in game-dir detection (e.g. a future engine bump that
+    -- invalidates our sentinels) does not silently flip ExecuteInGameThread
+    -- detection from "hooks disabled" to "hooks unknown / assumed available".
+    -- That flip is dangerous: if hooks really are disabled, queued closures
+    -- never drain and every UObject-touching writer starves at #46.
+    local candidates = {}
+    local info = debug.getinfo(1, "S")
+    if info and info.source then
+        local src = info.source:gsub("^@", "")
+        -- Specific: standard layout, .../R5/Binaries/Win64/ue4ss/Mods/...
+        local ue4ssDir = src:match("^(.+[/\\]R5[/\\]Binaries[/\\]Win64[/\\]ue4ss)[/\\]Mods[/\\]")
+        if ue4ssDir then
+            candidates[#candidates + 1] = ue4ssDir .. "\\UE4SS-settings.ini"
+        end
+        -- Generic: covers any UE4SS install where the loader folder is named
+        -- something other than "ue4ss" (e.g. uppercase "UE4SS", or a future
+        -- rename). The settings file always lives next to the Mods folder.
+        local modsParent = src:match("^(.+)[/\\]Mods[/\\]")
+        if modsParent and modsParent ~= ue4ssDir then
+            candidates[#candidates + 1] = modsParent .. "\\UE4SS-settings.ini"
+        end
+    end
+    candidates[#candidates + 1] = gameDir .. "R5\\Binaries\\Win64\\ue4ss\\UE4SS-settings.ini"
+    candidates[#candidates + 1] = ".\\UE4SS-settings.ini"
+
+    local raw
+    for _, path in ipairs(candidates) do
+        local f = io.open(path, "r")
+        if f then
+            raw = f:read("*a")
+            f:close()
+            break
+        end
+    end
+    if not raw then return nil end
     local out = {}
     for line in raw:gmatch("[^\r\n]+") do
         local key, value = line:match("^%s*([%w_]+)%s*=%s*([^;]*)")

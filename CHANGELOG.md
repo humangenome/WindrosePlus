@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.1.20] - 2026-05-04
+
+### Fixed
+
+- **Game-directory detection on Windrose engine `0.10.0.5.120`.** Facepunch removed `R5\ServerDescription.json` from the dedicated server distribution in this update, which was the single sentinel WindrosePlus used to confirm a candidate path was the game root. Detection silently fell back to `.\` (process working directory), which on UE4SS sets `<gameRoot>\R5\Binaries\Win64\ue4ss\` — leaving every WindrosePlus path (`windrose_plus_data\`, RCON spool, status/livemap/POI writers) pointing inside `ue4ss\` where Apache's spawning user has no write permission. Symptom in `UE4SS.log`: `WARN: Could not detect game directory` followed by `windrose_plus_data not writable — activity log disabled`. The check now probes `R5\Content\Paks\pakchunk0-WindowsServer.pak` first and `R5\Binaries\Win64\WindroseServer-Win64-Shipping.exe` second; the legacy `ServerDescription.json` is kept as a third fallback so older self-hosted installs on `0.10.0.3.104` and earlier still match.
+- **`ExecuteInGameThread` queue starvation cascade triggered by the same engine update.** The `_readUe4ssSettings()` probe constructed its path as `gameDir + R5\Binaries\Win64\ue4ss\UE4SS-settings.ini`. When game-directory detection failed and `gameDir` was `.\`, that path resolved to a non-existent location nested two levels too deep — the read returned nil, `_detectExecuteInGameThread()` defaulted to "available", and dispatched closures piled up against `HookEngineTick = 0` / `HookUObjectProcessEvent = 0`. The queue starved at #46 and Query, LiveMap, and POIScan all dropped into degraded mode within ~24 seconds of boot. The settings probe now derives its absolute path from `debug.getinfo` so it stays decoupled from game-directory detection: a future engine bump that breaks the sentinels will not silently flip dispatcher detection from "hooks disabled" to "hooks unknown / assumed available".
+
+### Notes
+
+- PAK multipliers (loot, xp, harvest, inventory and friends) were unaffected by these bugs; the failure was localized to the Lua runtime layer.
+
 ## [1.1.19] - 2026-05-04
 
 ### Added
