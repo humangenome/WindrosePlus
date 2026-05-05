@@ -322,7 +322,7 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
                     state = "running"
                     ts = $started
                     script = $tileGenScript
-                } | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
                 $output = (& $tileGenScript -GameDir $gameDir 2>&1 | Out-String).Trim()
                 [System.IO.File]::WriteAllText($tileGenStatus, (@{
                     state = "complete"
@@ -330,7 +330,7 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
                     started_ts = $started
                     script = $tileGenScript
                     output = $output
-                } | ConvertTo-Json -Depth 4 -Compress), [System.Text.UTF8Encoding]::new($false))
+                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
                 Write-Host "Map tiles generated."
             } catch {
                 $msg = $_.Exception.Message
@@ -339,7 +339,7 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
                     ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
                     script = $tileGenScript
                     error = $msg
-                } | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
                 Write-Host "Tile generation failed: $msg"
             }
         } else {
@@ -348,14 +348,14 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
                 ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
                 script = $tileGenScript
                 error = "generateTiles.ps1 not found"
-            } | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+            } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
         }
     }
 } | Out-Null
 $tileGenTimer.Start()
 
 function Send-Json($context, $data, $statusCode = 200) {
-    $json = if ($null -eq $data) { '{}' } else { $data | ConvertTo-Json -Depth 10 -Compress }
+    $json = if ($null -eq $data) { '{}' } else { $data | ConvertTo-Json -Depth 100 -Compress }
     if ([string]::IsNullOrEmpty($json)) { $json = '{}' }
     $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
     $context.Response.StatusCode = $statusCode
@@ -368,7 +368,7 @@ function Send-Json($context, $data, $statusCode = 200) {
 
 function Write-AtomicUtf8Json($path, $data) {
     $tmpPath = "$path.tmp"
-    $json = $data | ConvertTo-Json -Depth 10 -Compress
+    $json = $data | ConvertTo-Json -Depth 100 -Compress
     [System.IO.File]::WriteAllText($tmpPath, $json, [System.Text.UTF8Encoding]::new($false))
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue

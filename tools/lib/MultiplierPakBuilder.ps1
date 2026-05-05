@@ -385,7 +385,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $lf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                 }
             }
@@ -414,7 +414,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $xf
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     Write-Host "    Modified $xf"
                 }
@@ -453,7 +453,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $rf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $recipeMod++
                 }
@@ -521,7 +521,7 @@ function Build-MultiplierPak {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     $modifiedCount++
                 }
-                [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                 $cookMod++
             }
             Write-Host "    Modified $cookMod recipes"
@@ -579,7 +579,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $hf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $harvMod++
                 }
@@ -625,7 +625,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     if (-not $existedBefore) { $modifiedCount++ }
                     $foliageMod++
                 }
@@ -671,7 +671,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     if (-not $existedBefore) { $modifiedCount++ }
                     $pickupMod++
                 }
@@ -721,7 +721,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     if (-not $existedBefore) { $modifiedCount++ }
                     $contextualMod++
                 }
