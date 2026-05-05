@@ -288,7 +288,12 @@ function Build-MultiplierPak {
     $craftEfficiency = if ($Config.ContainsKey("craft_efficiency")) { [double]$Config.craft_efficiency } else { 1.0 }
     $cropSpeed = if ($Config.ContainsKey("crop_speed")) { [double]$Config.crop_speed } else { 1.0 }
     $weight = if ($Config.ContainsKey("weight")) { [double]$Config.weight } else { 1.0 }
-    $invSize = if ($Config.ContainsKey("inventory_size")) { [double]$Config.inventory_size } else { 1.0 }
+    if ($disabledPakMultipliers -contains "inventory_size") {
+		# inventory_size is disabled/no-op — ignore config entirely
+		$invSize = 1.0
+	} else {
+		$invSize = if ($Config.ContainsKey("inventory_size")) { [double]$Config.inventory_size } else { 1.0 }
+	}
     $pointsPerLvl = if ($Config.ContainsKey("points_per_level")) { [double]$Config.points_per_level } else { 1.0 }
     $cookSpeed = if ($Config.ContainsKey("cooking_speed")) { [double]$Config.cooking_speed } else { 1.0 }
     $harvestYield = if ($Config.ContainsKey("harvest_yield")) { [double]$Config.harvest_yield } else { 1.0 }
@@ -328,7 +333,7 @@ function Build-MultiplierPak {
     $riskMultipliers = @()
     if ($stackSize -ne 1.0) { $riskMultipliers += "stack_size" }
     if ($weight -ne 1.0) { $riskMultipliers += "weight" }
-    if ($invSize -ne 1.0) { $riskMultipliers += "inventory_size" }
+    # inventory_size is disabled/no-op — do not include in risk checks
 
     if ($riskMultipliers.Count -gt 0) {
         $allow = "$env:WINDROSEPLUS_ALLOW_PAK_CONFLICTS".ToLowerInvariant()
@@ -475,7 +480,7 @@ function Build-MultiplierPak {
         # Keep disabled until a validator-aware patch path exists AND a character sanitizer
         # can safely restore save files after a rollback.
         if ($invSize -ne 1.0) {
-            Write-Host "  Skipping inventory_size (disabled due to engine validator crash + character-save time-bomb)"
+            Write-Host "  Ignoring inventory_size (disabled/no-op due to engine validator crash + character-save time-bomb)"
         }
 
         # points_per_level patching intentionally disabled.
