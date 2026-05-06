@@ -622,18 +622,19 @@ function Get-CachedLayoutRuntime($scan) {
             $fetchedFrom = "GET"
         }
     } catch {
-        # Only POST when the GET genuinely says "no such layout" (404).
-        # On 5xx / 429 / network timeout we serve stale cache or surface the
-        # error rather than amplifying upstream load.
+        # 4xx = upstream rejected our query for this fingerprint (404 not found,
+        # 400 bad-request, etc.) — POST our scan to seed it.
+        # 5xx / 429 / network timeout = upstream is degraded — fall through to
+        # stale cache rather than amplifying load.
         $statusCode = 0
         try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-        if ($statusCode -eq 404) { $shouldPost = $true }
+        if ($statusCode -ge 400 -and $statusCode -lt 500) { $shouldPost = $true }
         else {
             # serve stale cache if we have any
             if (Test-Path -LiteralPath $runtimeCachePath) {
                 try {
                     $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-                    if ($stale.runtime) {
+                    if ($stale.runtime -and $stale.layoutFingerprint -eq $fp) {
                         return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-upstream-fail" }
                     }
                 } catch {}
@@ -671,7 +672,7 @@ function Get-CachedLayoutRuntime($scan) {
             if (Test-Path -LiteralPath $runtimeCachePath) {
                 try {
                     $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-                    if ($stale.runtime) {
+                    if ($stale.runtime -and $stale.layoutFingerprint -eq $fp) {
                         return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-post-fail" }
                     }
                 } catch {}
@@ -973,6 +974,7 @@ try {
                         seed              = $scanResult.scan.seed
                         worldPreset       = $scanResult.scan.worldPreset
                         cached            = $runtimeResult.cached
+                        stale             = ($runtimeResult.stale -eq $true)
                         fetchedAt         = $runtimeResult.fetchedAt
                         fetchedFrom       = $runtimeResult.fetchedFrom
                         runtime           = $runtimeResult.runtime
