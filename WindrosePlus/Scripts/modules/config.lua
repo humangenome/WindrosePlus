@@ -160,6 +160,11 @@ function Config.getLootMultiplier()
     return Config._clampFloat(Config.get("multipliers", "loot"), 1.0, 0.1, 100.0, "loot")
 end
 
+-- Stacks on top of `loot` for LootTables/Ships/*.json only — see PAK builder.
+function Config.getShipLootMultiplier()
+    return Config._clampFloat(Config.get("multipliers", "ship_loot"), 1.0, 0.1, 100.0, "ship_loot")
+end
+
 function Config.getStackSizeMultiplier()
     return Config._clampFloat(Config.get("multipliers", "stack_size"), 1.0, 0.1, 100.0, "stack_size")
 end
@@ -222,7 +227,7 @@ function Config._defaults()
         livemap = { enabled = true, player_interval_ms = 5000, entity_interval_ms = 30000, public = { enabled = false, token = "" } },
         poiscan = { enabled = true, refresh_seconds = 4 * 60 * 60 },
         admin = { steam_ids = {} },
-        multipliers = { xp = 1.0, loot = 1.0, stack_size = 1.0, craft_efficiency = 1.0, crop_speed = 1.0, weight = 1.0, inventory_size = 1.0, cooking_speed = 1.0, harvest_yield = 1.0 },
+        multipliers = { xp = 1.0, loot = 1.0, ship_loot = 1.0, stack_size = 1.0, craft_efficiency = 1.0, crop_speed = 1.0, weight = 1.0, inventory_size = 1.0, cooking_speed = 1.0, harvest_yield = 1.0 },
         features = { unlock_all_recipes = false, unlock_all_ships = false },
         debug = { log_level = "info" }
     }

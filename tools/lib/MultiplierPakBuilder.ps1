@@ -224,9 +224,10 @@ function Build-MultiplierPak {
     and repacking.
 
     .PARAMETER Config
-    Hashtable with multiplier values: loot, xp, stack_size, craft_efficiency, crop_speed, weight.
-    Values of 1.0 are skipped (no change). The legacy key craft_cost is accepted with
-    identical semantics and normalized to craft_efficiency at function entry.
+    Hashtable with multiplier values: loot, xp, stack_size, craft_efficiency, crop_speed, weight,
+    ship_loot, harvest_yield, etc. Values of 1.0 are skipped (no change). The legacy key craft_cost
+    is accepted with identical semantics and normalized to craft_efficiency at function entry.
+    ship_loot scopes a second multiplier on top of loot for LootTables/Ships/*.json only.
 
     .PARAMETER AesKey
     The game's AES encryption key for pak access.
@@ -292,6 +293,10 @@ function Build-MultiplierPak {
     $pointsPerLvl = if ($Config.ContainsKey("points_per_level")) { [double]$Config.points_per_level } else { 1.0 }
     $cookSpeed = if ($Config.ContainsKey("cooking_speed")) { [double]$Config.cooking_speed } else { 1.0 }
     $harvestYield = if ($Config.ContainsKey("harvest_yield")) { [double]$Config.harvest_yield } else { 1.0 }
+    # Ship-loot multiplier — scopes the existing loot pass to LootTables/Ships/*.json
+    # only and stacks on top of $loot. Lets server admins tune ship-battle piastre
+    # / mob drops independently of foliage/chest loot.
+    $shipLoot = if ($Config.ContainsKey("ship_loot")) { [double]$Config.ship_loot } else { 1.0 }
 
     # Clamp to prevent div-by-zero / negative-duration math when the builder is
     # invoked standalone (Lua clamps, but the PS1 also runs from -BuildPak directly).
@@ -305,6 +310,7 @@ function Build-MultiplierPak {
     $pointsPerLvl = [Math]::Max(0.01, $pointsPerLvl)
     $cookSpeed = [Math]::Max(0.01, $cookSpeed)
     $harvestYield = [Math]::Max(0.01, $harvestYield)
+    $shipLoot = [Math]::Max(0.01, $shipLoot)
 
     # Per-resource harvest overrides from windrose_plus.harvest.ini
     # (optional). Stacks multiplicatively on $harvestYield.
@@ -313,7 +319,7 @@ function Build-MultiplierPak {
     $perResourceActive = $false
     foreach ($v in $perResource.Values) { if ($v -ne 1.0) { $perResourceActive = $true; break } }
 
-    $allDefault = ($loot -eq 1.0 -and $xp -eq 1.0 -and $stackSize -eq 1.0 -and $craftEfficiency -eq 1.0 -and $cropSpeed -eq 1.0 -and $weight -eq 1.0 -and $invSize -eq 1.0 -and $pointsPerLvl -eq 1.0 -and $cookSpeed -eq 1.0 -and $harvestYield -eq 1.0 -and -not $perResourceActive)
+    $allDefault = ($loot -eq 1.0 -and $xp -eq 1.0 -and $stackSize -eq 1.0 -and $craftEfficiency -eq 1.0 -and $cropSpeed -eq 1.0 -and $weight -eq 1.0 -and $invSize -eq 1.0 -and $pointsPerLvl -eq 1.0 -and $cookSpeed -eq 1.0 -and $harvestYield -eq 1.0 -and $shipLoot -eq 1.0 -and -not $perResourceActive)
     if ($allDefault) {
         $result.Error = "All multipliers are 1.0 (default). Nothing to build."
         return $result
@@ -367,13 +373,22 @@ function Build-MultiplierPak {
     try {
         $modifiedCount = 0
 
-        # Loot tables
-        if ($loot -ne 1.0) {
-            Write-Host "  Modifying loot tables (${loot}x)..."
+        # Loot tables. ship_loot scopes a second multiplier to LootTables/Ships/*.json
+        # only and stacks on top of $loot, so admins can tune ship piastre / ship-mob
+        # drops independently of foliage/chest loot. Effective multiplier per file is
+        # $loot for non-Ships files, $loot * $shipLoot for Ships files.
+        if ($loot -ne 1.0 -or $shipLoot -ne 1.0) {
+            $shipNote = if ($shipLoot -ne 1.0) { "; ship_loot=${shipLoot}x stacked on Ships/" } else { "" }
+            Write-Host "  Modifying loot tables (${loot}x${shipNote})..."
             $lootFiles = Invoke-RepakList -Repak $repak -AesKey $AesKey -PakPath $pak -Filter "LootTable"
             $lootMod = 0
+            $shipMod = 0
             foreach ($lf in $lootFiles) {
-                $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $lf.Trim()
+                $lfTrim = $lf.Trim()
+                $isShip = $lfTrim -like "*/LootTables/Ships/*"
+                $eff = if ($isShip) { $loot * $shipLoot } else { $loot }
+                if ($eff -eq 1.0) { continue }
+                $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $lfTrim
                 if (-not $json) { continue }
                 $data = $json | ConvertFrom-Json
                 if (-not $data.LootData) { continue }
@@ -383,22 +398,24 @@ function Build-MultiplierPak {
                     # gear stacks and breaks unique-item gameplay (issue #3).
                     if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
                     if ($null -ne $item.Min -and $null -ne $item.Max) {
-                        $item.Min = [Math]::Max(1, [int]($item.Min * $loot))
-                        $item.Max = [Math]::Max(1, [int]($item.Max * $loot))
+                        $item.Min = [Math]::Max(1, [int]($item.Min * $eff))
+                        $item.Max = [Math]::Max(1, [int]($item.Max * $eff))
                         $changed = $true
                     }
                 }
                 if ($changed) {
-                    $outPath = Join-Path $tmpDir $lf.Trim()
+                    $outPath = Join-Path $tmpDir $lfTrim
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
                     $lootMod++
+                    if ($isShip) { $shipMod++ }
                 }
             }
-            Write-Host "    Modified $lootMod loot tables"
+            $shipReport = if ($shipLoot -ne 1.0) { " (incl. $shipMod ship-loot files)" } else { "" }
+            Write-Host "    Modified $lootMod loot tables$shipReport"
             if ($lootMod -eq 0) {
-                Write-Warning "loot=${loot}x configured but zero loot tables matched — LootTable filter or LootData[].Min/Max schema may have been renamed by a recent engine update."
+                Write-Warning "loot=${loot}x / ship_loot=${shipLoot}x configured but zero loot tables matched — LootTable filter or LootData[].Min/Max schema may have been renamed by a recent engine update."
             }
         }
 

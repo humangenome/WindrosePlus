@@ -147,6 +147,7 @@ Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `loot` | `1` | Loot drop quantity from chests / containers / enemies. Equipment drops are excluded so gear can't be duplicated. Use `harvest_yield` for resource nodes. |
+| `ship_loot` | `1` | Stacks on top of `loot` for ship-related drops only (sea-battle piastre rewards, ship-mob drops, etc. — `LootTables/Ships/*.json`). `loot=2, ship_loot=2` → ship rewards 4×, everything else 2×. Equipment drops still excluded. |
 | `xp` | `1` | Experience gain. Faster leveling means more talent/stat point payouts; that's the natural game progression, not a separate multiplier. |
 | `stack_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item stacks. |
 | `craft_efficiency` | `1` | Crafting efficiency. Higher = cheaper recipes (`2.0` = half cost, `0.5` = double cost). The legacy key `craft_cost` is still accepted with identical semantics for backward compatibility. |

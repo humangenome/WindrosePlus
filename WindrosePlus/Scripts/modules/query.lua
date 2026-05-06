@@ -80,6 +80,7 @@ function Query._multipliers()
     return {
         xp = cfg.getXpMultiplier and cfg.getXpMultiplier() or 1,
         loot = cfg.getLootMultiplier and cfg.getLootMultiplier() or 1,
+        ship_loot = cfg.getShipLootMultiplier and cfg.getShipLootMultiplier() or 1,
         stack_size = cfg.getStackSizeMultiplier and cfg.getStackSizeMultiplier() or 1,
         craft_efficiency = cfg.getCraftEfficiencyMultiplier and cfg.getCraftEfficiencyMultiplier() or 1,
         craft_cost = cfg.getCraftEfficiencyMultiplier and cfg.getCraftEfficiencyMultiplier() or 1, -- DEPRECATED, removed in v1.2 (kept for old dashboards)
