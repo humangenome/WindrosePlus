@@ -519,6 +519,17 @@ function Get-LayoutCacheKey($worldFolder) {
     } finally { $sha.Dispose() }
 }
 
+# Strip Windows-style absolute paths from any string before it crosses the
+# unauthenticated /api/layout boundary. Used on every error message that may
+# include $layoutScannerPath, $worldFolder, scanner exceptions, etc. The
+# regex matches drive-letter paths with no path-separator backslash escaped:
+# in a PowerShell single-quoted string, '\\' is a literal two-char backslash
+# pair, which becomes a single '\' in the .NET regex (which matches one '\').
+function Sanitize-PathInMessage([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return $s }
+    return [regex]::Replace($s, '[A-Za-z]:\\[^\s,;)\]"]*', '<path>')
+}
+
 function Get-PublicScanView($scan) {
     if (-not $scan) { return $null }
     return [pscustomobject]@{
@@ -555,16 +566,14 @@ function Get-CachedLayoutScan {
     }
 
     if (-not $script:LayoutScannerLoaded) {
-        return @{ ok = $false; error = "Layout scanner not loaded: $script:LayoutScannerLoadError" }
+        return @{ ok = $false; error = "Layout scanner not loaded: " + (Sanitize-PathInMessage $script:LayoutScannerLoadError) }
     }
 
     try {
         $scan = Get-WindroseLayoutScan -Path $worldFolder
     } catch {
         # sanitize: scanner errors may include the on-disk path
-        $msg = $_.Exception.Message
-        $msg = [regex]::Replace($msg, '[A-Za-z]:\\\\[^\s,]*', '<path>')
-        return @{ ok = $false; error = "Scanner failed: $msg" }
+        return @{ ok = $false; error = "Scanner failed: " + (Sanitize-PathInMessage $_.Exception.Message) }
     }
 
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -656,11 +665,32 @@ function Get-CachedLayoutRuntime($scan) {
                 $fetchedFrom = "POST"
             }
         } catch {
-            return @{ ok = $false; error = "windrose.tools fetch failed: $($_.Exception.Message)" }
+            # POST also failed (5xx / 429 / timeout). Serve stale cache if we
+            # have any, else return a friendly error. This avoids hammering
+            # the upstream with POSTs every poll while it's degraded.
+            if (Test-Path -LiteralPath $runtimeCachePath) {
+                try {
+                    $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
+                    if ($stale.runtime) {
+                        return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-post-fail" }
+                    }
+                } catch {}
+            }
+            return @{ ok = $false; error = "windrose.tools POST failed (no stale cache): " + (Sanitize-PathInMessage $_.Exception.Message) }
         }
     }
 
     if (-not $runtime) {
+        # GET 404 + POST returned non-2xx without throwing. Treat same as POST
+        # failure: serve stale if available, else surface no-data.
+        if (Test-Path -LiteralPath $runtimeCachePath) {
+            try {
+                $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
+                if ($stale.runtime) {
+                    return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-no-data" }
+                }
+            } catch {}
+        }
         return @{ ok = $false; error = "windrose.tools returned no runtime data for fingerprint $fp" }
     }
 
