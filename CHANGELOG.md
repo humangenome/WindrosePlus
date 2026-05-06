@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.1.24] - 2026-05-05
+
+### Fixed
+
+- **53 orphan icon references in the bundled items catalog.** 13 unique icon basenames in `items_full.json` pointed to WebP files that don't exist (the upstream extraction missed them, and they don't exist on any public CDN either). Browser dev tools logged a 404 for each row that referenced one. The data fix sets `iconRef` to `null` for affected items so the row falls back to the empty-icon-slot path that the dashboard already handles cleanly. No more 404s in the network panel during the Items overlay flow.
+
 ## [1.1.23] - 2026-05-05
 
 ### Added
