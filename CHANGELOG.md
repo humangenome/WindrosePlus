@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.1.21] - 2026-05-05
+
+### Fixed
+
+- **CurveTable parser drift on engine `0.10.0.5.x`.** The recent Windrose engine update changed the `CurveTable` serialization layout: the `int32 numRows` field that used to follow the property-block-terminator `None` FName was dropped. The old parser was reading the first row's FName index as `numRows`, walking only that many rows out of the actual N rows present. Symptom on affected files (`CT_OtherGEValues`, `CT_CharactersAttributes`, `CT_Mob_StatCorrection_CoopBased`, `CT_RestGameplayEffectCurves`, `CT_Weapon_GE_Values`, `CT_Food_GE_Values`, and others): only the first 9 rows would parse, the rest silently dropped, so any CurveTable-driven multiplier (swim damage, bleed DPS, weakness duration, hearth regen, weapon shared values, food regen) silently failed to apply at runtime. The parser now probes both layouts and walks rows until exhausted, terminating only when the next FName fails row-name validation. Validated on AdminTest against engine `0.10.0.5.120`: `CT_OtherGEValues` now reports 51 rows (was 9) and all critical sliders parse with correct byte offsets and values.
+
 ## [1.1.20] - 2026-05-04
 
 ### Fixed
