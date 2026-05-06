@@ -145,9 +145,12 @@ function Parse-CurveTable {
     .DESCRIPTION
     Unlike heuristic approaches, this parser:
     1. Finds the name table structurally
-    2. Locates the row count after the first None FName terminator
-    3. Parses each row's curve structure (key count, interp mode, time/value pairs)
-    4. Records absolute byte offsets for every value
+    2. Locates the property-block-terminator None FName, supporting two layouts:
+       Layout A (older engines):  [None] [int32 numRows] [first row FName] ...
+       Layout B (engine 0.10.0.5.x+): [None] [first row FName] ...
+    3. Walks rows until the next FName fails row-name validation (no fixed row count)
+    4. Parses each row's curve structure (key count, interp mode, time/value pairs)
+    5. Records absolute byte offsets for every value
 
     The manifest enables safe in-place patching with full verification.
 
@@ -225,56 +228,109 @@ function Parse-CurveTable {
     [BitConverter]::GetBytes([uint32]$noneIdx).CopyTo($noneBytes, 0)
     # Second uint32 is already 0
 
-    # Find the first None FName in uexp (terminates the UObject property list)
-    # Then the next int32 should be the row count
-    $firstNone = Find-BytePattern -Data $uexp -Pattern $noneBytes -Start 0
+    # Names that indicate a UObject tagged-property block (NOT a CurveTable row name).
+    # If the FName immediately after a candidate None resolves to one of these, we are
+    # still inside the property block, not at the start of row data.
+    $propertyTypeNames = @(
+        'BoolProperty','ByteProperty','FloatProperty','DoubleProperty',
+        'IntProperty','UInt32Property','Int64Property','UInt64Property',
+        'NameProperty','StrProperty','TextProperty','ObjectProperty',
+        'StructProperty','EnumProperty','ArrayProperty','SetProperty','MapProperty',
+        'InterpMode','TangentMode','TangentWeightMode','RichCurveKey','None'
+    )
+
+    function _IsRowNameCandidate {
+        param([uint32]$Idx, [string[]]$NamesArr, [int]$NoneIdx, [string[]]$BadNames)
+        if ($Idx -ge $NamesArr.Length) { return $false }
+        if ($Idx -eq [uint32]$NoneIdx) { return $false }
+        $n = $NamesArr[$Idx]
+        if ([string]::IsNullOrEmpty($n)) { return $false }
+        if ($n.StartsWith('/Script/') -or $n.StartsWith('/Game/')) { return $false }
+        if ($BadNames -contains $n) { return $false }
+        return $true
+    }
+
+    # Find the property-block-terminator None: the FIRST None whose immediately following
+    # bytes parse as a valid row-name FName. Earlier engine versions placed an int32
+    # numRows here; engine 0.10.0.5.x dropped that field, so we accept either layout.
+    #
+    #   Layout A (old):  [None] [int32 numRows] [first row FName] [body] [None] ...
+    #   Layout B (new):  [None] [first row FName]                 [body] [None] ...
+    # FName.num for typical CurveTable row names is 0 (no _N suffix) or very small.
+    # We use numB <= $maxFNameNum as a tightness signal to disambiguate when both
+    # Layout A and Layout B otherwise both pass the basic checks.
+    $maxFNameNum = 16
+
+    $firstNone = -1
+    $skipRowCountField = $false
+    $searchPos = 0
+    while ($searchPos -le $uexp.Length - 16) {
+        $cand = Find-BytePattern -Data $uexp -Pattern $noneBytes -Start $searchPos
+        if ($cand -lt 0) { break }
+
+        # Layout B probe: FName starts immediately after the None (need 16 bytes after cand)
+        $isB = $false
+        $numB = [System.UInt32]::MaxValue
+        if ($cand + 16 -le $uexp.Length) {
+            $idxB = [BitConverter]::ToUInt32($uexp, $cand + 8)
+            $numB = [BitConverter]::ToUInt32($uexp, $cand + 12)
+            $isB = ((_IsRowNameCandidate -Idx $idxB -NamesArr $names -NoneIdx $noneIdx -BadNames $propertyTypeNames) -and $numB -le $maxFNameNum)
+        }
+
+        # Layout A probe: skip int32 numRows, FName at +12 (need 20 bytes after cand)
+        $isA = $false
+        $numA = [System.UInt32]::MaxValue
+        if ($cand + 20 -le $uexp.Length) {
+            $rcA  = [BitConverter]::ToInt32($uexp, $cand + 8)
+            $idxA = [BitConverter]::ToUInt32($uexp, $cand + 12)
+            $numA = [BitConverter]::ToUInt32($uexp, $cand + 16)
+            $isA = ($rcA -ge 1 -and $rcA -le 5000 -and (_IsRowNameCandidate -Idx $idxA -NamesArr $names -NoneIdx $noneIdx -BadNames $propertyTypeNames) -and $numA -le $maxFNameNum)
+        }
+
+        if ($isA -and $isB) {
+            # Both layouts match the basic shape. Prefer Layout A (back-compat with
+            # older engines that did emit an int32 numRows). For engine 0.10.0.5.x+
+            # Layout A is rejected upstream because its idxA at cand+12 typically
+            # decodes to /Script/Engine (FName.num field interpreted as idx=0).
+            $firstNone = $cand
+            $skipRowCountField = $true
+            break
+        }
+        if ($isB) {
+            $firstNone = $cand
+            $skipRowCountField = $false
+            break
+        }
+        if ($isA) {
+            $firstNone = $cand
+            $skipRowCountField = $true
+            break
+        }
+        $searchPos = $cand + 1
+    }
+
     if ($firstNone -lt 0) {
-        $result.Error = "No None FName found in uexp"
+        $result.Error = "Could not locate property-block terminator None followed by a valid row FName"
         return $result
     }
 
-    # After the first None FName (8 bytes), read the row count
-    $rowCountOffset = $firstNone + 8
-    if ($rowCountOffset + 4 -gt $uexp.Length) {
-        $result.Error = "Uexp too short after first None"
-        return $result
-    }
+    # Parse rows structurally. Walk-until-exhausted: we no longer trust an int32 numRows
+    # field. Loop terminates when next FName is not a valid row name (or bytes run out).
+    # Each row layout: [FName RowName (8 bytes)] [curve data] [None FName (8 bytes)]
+    $pos = $firstNone + 8
+    if ($skipRowCountField) { $pos += 4 }
 
-    $rowCount = [BitConverter]::ToInt32($uexp, $rowCountOffset)
-    if ($rowCount -le 0 -or $rowCount -gt 5000) {
-        # Not a valid row count at first None — scan for a better one
-        $searchPos = $firstNone + 1
-        $found = $false
-        while ($searchPos -lt $uexp.Length - 12) {
-            $nextNone = Find-BytePattern -Data $uexp -Pattern $noneBytes -Start $searchPos
-            if ($nextNone -lt 0) { break }
-            $rc = [BitConverter]::ToInt32($uexp, $nextNone + 8)
-            if ($rc -gt 0 -and $rc -lt 5000) {
-                $rowCountOffset = $nextNone + 8
-                $rowCount = $rc
-                $firstNone = $nextNone
-                $found = $true
-                break
-            }
-            $searchPos = $nextNone + 1
-        }
-        if (-not $found) {
-            $result.Error = "Could not find valid row count"
-            return $result
-        }
-    }
-
-    $result.RowCount = $rowCount
-
-    # Parse rows structurally
-    # Each row: FName RowName (8 bytes) + curve data
-    # Curve data: int32 curveType + ... keys
-    $pos = $rowCountOffset + 4
     $rows = [System.Collections.ArrayList]::new()
     $float1Bytes = [BitConverter]::GetBytes([float]1.0)
+    $rowSafetyLimit = 5000
 
-    for ($r = 0; $r -lt $rowCount; $r++) {
+    for ($r = 0; $r -lt $rowSafetyLimit; $r++) {
         if ($pos + 8 -gt $uexp.Length) { break }
+
+        $rowIdx = [BitConverter]::ToUInt32($uexp, $pos)
+        $rowNum = [BitConverter]::ToUInt32($uexp, $pos + 4)
+        if (-not (_IsRowNameCandidate -Idx $rowIdx -NamesArr $names -NoneIdx $noneIdx -BadNames $propertyTypeNames)) { break }
+        if ($rowNum -ge 65536) { break }
 
         $rowName = Read-FName -Data $uexp -Offset $pos -Names $names
         $nameOffset = $pos
@@ -282,10 +338,9 @@ function Parse-CurveTable {
 
         # Find the next None FName to determine row span
         $nextNone = Find-BytePattern -Data $uexp -Pattern $noneBytes -Start $pos
-        if ($nextNone -lt 0) { $nextNone = $uexp.Length }
+        if ($nextNone -lt 0) { break }
+        if ($nextNone - $pos -lt 8) { break }  # body too small to be a real row
 
-        $rowSpan = $uexp[$pos..($nextNone - 1)]
-        $rowDataStart = $pos
         $keys = [System.Collections.ArrayList]::new()
 
         # Parse curve keys within this row's data span
@@ -322,6 +377,7 @@ function Parse-CurveTable {
         $pos = $nextNone + 8
     }
 
+    $result.RowCount = $rows.Count
     $result.Rows = $rows.ToArray()
     return $result
 }
