@@ -192,10 +192,10 @@ function Save-MultiplierHistory {
                 [System.IO.File]::Replace($tmp, $Path, $bak, $true) | Out-Null
                 Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
             } catch {
-                Move-Item -LiteralPath $tmp -Destination $Path -Force
+                throw
             }
         } else {
-            Move-Item -LiteralPath $tmp -Destination $Path -Force
+            [System.IO.File]::Move($tmp, $Path)
         }
     } catch {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
