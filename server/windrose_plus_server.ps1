@@ -90,6 +90,24 @@ if (Test-Path -LiteralPath $iniParserPath) {
     Write-Host "WARN: IniConfigParser.ps1 not found at $iniParserPath. /api/pak-status CT detection degraded."
 }
 
+# Layout-fingerprint scanner. Used by /api/layout to surface the world's
+# layoutFingerprint, seed, worldPreset, and terrainPlacements.
+$script:LayoutScannerLoaded = $false
+$script:LayoutScannerLoadError = $null
+$layoutScannerPath = Join-Path $PSScriptRoot "lib\Get-LayoutFingerprint.ps1"
+if (Test-Path -LiteralPath $layoutScannerPath) {
+    try {
+        . $layoutScannerPath
+        $script:LayoutScannerLoaded = $true
+    } catch {
+        $script:LayoutScannerLoadError = $_.Exception.Message
+        Write-Host "WARN: Get-LayoutFingerprint.ps1 failed to load: $($_.Exception.Message). /api/layout unavailable."
+    }
+} else {
+    $script:LayoutScannerLoadError = "File not found: $layoutScannerPath"
+    Write-Host "WARN: Get-LayoutFingerprint.ps1 not found at $layoutScannerPath. /api/layout unavailable."
+}
+
 # Re-read the RCON password on every auth attempt instead of caching it at startup.
 # External writers (e.g. an orchestration panel) can overwrite windrose_plus.json
 # mid-session, and non-atomic writes can produce transient parse failures.
@@ -466,6 +484,168 @@ function Get-TerrainHeightAt($DataDir, [double]$WorldX, [double]$WorldY) {
     return $null
 }
 
+# --- Layout fingerprint discovery + cache ---
+# Find the leaf folder directly containing the most .sst files (the active
+# RocksDB world dir). Walks SaveProfiles recursively because the path layout
+# varies by Windrose version (e.g. <profile>\Worlds\<id>\RocksDB\0.10.0\Players).
+function Find-ActiveWorldFolder {
+    $saveRoot = Join-Path $gameDir "R5\Saved\SaveProfiles"
+    if (-not (Test-Path -LiteralPath $saveRoot)) { return $null }
+
+    $byDir = @{}
+    Get-ChildItem -LiteralPath $saveRoot -Recurse -Filter '*.sst' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $d = $_.DirectoryName
+        if ($byDir.ContainsKey($d)) { $byDir[$d] = $byDir[$d] + 1 } else { $byDir[$d] = 1 }
+    }
+    if ($byDir.Count -eq 0) { return $null }
+
+    $best = $byDir.GetEnumerator() | Sort-Object -Property Value -Descending | Select-Object -First 1
+    return $best.Key
+}
+
+# Fast manifest hash that captures only file names + mtimes, used to invalidate
+# the cached layout scan when RocksDB compaction changes the .sst file set.
+function Get-LayoutCacheKey($worldFolder) {
+    if (-not $worldFolder -or -not (Test-Path -LiteralPath $worldFolder)) { return $null }
+    $entries = Get-ChildItem -LiteralPath $worldFolder -Recurse -Filter '*.sst' -ErrorAction SilentlyContinue -File |
+        Sort-Object FullName |
+        ForEach-Object { "{0}|{1}|{2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }
+    if (-not $entries) { return $null }
+    $joined = ($entries -join "`n")
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($joined))
+        return -join ($bytes | ForEach-Object { $_.ToString('x2') })
+    } finally { $sha.Dispose() }
+}
+
+function Get-CachedLayoutScan {
+    $worldFolder = Find-ActiveWorldFolder
+    if (-not $worldFolder) {
+        return @{ ok = $false; error = "No SaveProfiles world folder with .sst files found yet. Join the server once so it writes a save." }
+    }
+
+    $cacheKey = Get-LayoutCacheKey $worldFolder
+    if (-not $cacheKey) {
+        return @{ ok = $false; error = "World folder has no .sst files yet. Join the server once so it writes a save." }
+    }
+
+    $cachePath = Join-Path $dataDir "layout_scan.json"
+    if (Test-Path -LiteralPath $cachePath) {
+        try {
+            $cached = Get-Content -LiteralPath $cachePath -Raw -ErrorAction Stop | ConvertFrom-Json
+            if ($cached.cacheKey -eq $cacheKey -and $cached.scan) {
+                return @{ ok = $true; cached = $true; scan = $cached.scan; cachedAt = $cached.cachedAt }
+            }
+        } catch {
+            # fall through and re-scan
+        }
+    }
+
+    if (-not $script:LayoutScannerLoaded) {
+        return @{ ok = $false; error = "Layout scanner not loaded: $script:LayoutScannerLoadError" }
+    }
+
+    try {
+        $scan = Get-WindroseLayoutScan -Path $worldFolder
+    } catch {
+        return @{ ok = $false; error = "Scanner failed: $($_.Exception.Message)" }
+    }
+
+    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $envelope = [pscustomobject]@{
+        cacheKey = $cacheKey
+        cachedAt = $now
+        scan     = $scan
+    }
+    try {
+        Write-AtomicUtf8Json $cachePath $envelope
+    } catch {
+        Write-Host "WARN: failed to write layout_scan.json cache: $($_.Exception.Message)"
+    }
+    return @{ ok = $true; cached = $false; scan = $scan; cachedAt = $now }
+}
+
+# POST the local scan to windrose.tools so they index it, then GET the runtime
+# overlay (markers, biome polygons, manual POIs, quest popups). Cached locally
+# keyed off layoutFingerprint so we only hit the upstream once per world layout.
+function Get-CachedLayoutRuntime($scan) {
+    if (-not $scan -or -not $scan.layoutFingerprint) {
+        return @{ ok = $false; error = "Scanner result missing layoutFingerprint" }
+    }
+    $fp = [string]$scan.layoutFingerprint
+    $runtimeCachePath = Join-Path $dataDir "layout_runtime.json"
+
+    if (Test-Path -LiteralPath $runtimeCachePath) {
+        try {
+            $cached = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
+            if ($cached.layoutFingerprint -eq $fp -and $cached.runtime) {
+                return @{ ok = $true; cached = $true; runtime = $cached.runtime; fetchedAt = $cached.fetchedAt }
+            }
+        } catch {
+            # fall through and re-fetch
+        }
+    }
+
+    $runtime = $null
+    $fetchedFrom = $null
+    try {
+        $resp = Invoke-WebRequest -Uri ("https://windrose.tools/api/map/runtime?layout={0}" -f $fp) `
+            -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
+        if ($resp.StatusCode -eq 200 -and $resp.Content) {
+            $runtime = $resp.Content | ConvertFrom-Json
+            $fetchedFrom = "GET"
+        }
+    } catch {
+        # 404 => not yet indexed; we'll POST our scan to seed it
+    }
+
+    if (-not $runtime) {
+        try {
+            $body = ([pscustomobject]@{
+                layoutFingerprint = $fp
+                seed              = $scan.seed
+                worldPreset       = $scan.worldPreset
+                terrainPlacements = $scan.terrainPlacements
+            }) | ConvertTo-Json -Depth 10 -Compress
+            $resp = Invoke-WebRequest -Uri "https://windrose.tools/api/map/runtime" -Method Post `
+                -Body $body -ContentType "application/json" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
+            if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 201) {
+                if ($resp.Content) {
+                    $runtime = $resp.Content | ConvertFrom-Json
+                } else {
+                    $resp2 = Invoke-WebRequest -Uri ("https://windrose.tools/api/map/runtime?layout={0}" -f $fp) `
+                        -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
+                    if ($resp2.StatusCode -eq 200 -and $resp2.Content) {
+                        $runtime = $resp2.Content | ConvertFrom-Json
+                    }
+                }
+                $fetchedFrom = "POST"
+            }
+        } catch {
+            return @{ ok = $false; error = "windrose.tools fetch failed: $($_.Exception.Message)" }
+        }
+    }
+
+    if (-not $runtime) {
+        return @{ ok = $false; error = "windrose.tools returned no runtime data for fingerprint $fp" }
+    }
+
+    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $envelope = [pscustomobject]@{
+        layoutFingerprint = $fp
+        fetchedAt         = $now
+        fetchedFrom       = $fetchedFrom
+        runtime           = $runtime
+    }
+    try {
+        Write-AtomicUtf8Json $runtimeCachePath $envelope
+    } catch {
+        Write-Host "WARN: failed to write layout_runtime.json cache: $($_.Exception.Message)"
+    }
+    return @{ ok = $true; cached = $false; runtime = $runtime; fetchedAt = $now; fetchedFrom = $fetchedFrom }
+}
+
 function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
     $statusPath = Join-Path $dataDir "rcon_status.json"
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -696,6 +876,51 @@ try {
             # API health endpoint — no auth (used for monitoring)
             if ($path -eq "/api/health") {
                 Send-Json $context @{ status = "ok"; version = $Version; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
+                continue
+            }
+
+            # Layout fingerprint + windrose.tools runtime overlay — no auth.
+            # Output is identical to what windrose.tools serves publicly for
+            # any matching world layout (no player or server identifying info).
+            if ($path -eq "/api/layout") {
+                $r = Get-CachedLayoutScan
+                if ($r.ok) {
+                    Send-Json $context @{
+                        ok       = $true
+                        cached   = $r.cached
+                        cachedAt = $r.cachedAt
+                        scan     = $r.scan
+                    }
+                } else {
+                    Send-Json $context @{ ok = $false; error = $r.error } 503
+                }
+                continue
+            }
+            if ($path -eq "/api/layout/runtime") {
+                $scanResult = Get-CachedLayoutScan
+                if (-not $scanResult.ok) {
+                    Send-Json $context @{ ok = $false; error = $scanResult.error } 503
+                    continue
+                }
+                $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
+                if ($runtimeResult.ok) {
+                    Send-Json $context @{
+                        ok                = $true
+                        layoutFingerprint = $scanResult.scan.layoutFingerprint
+                        seed              = $scanResult.scan.seed
+                        worldPreset       = $scanResult.scan.worldPreset
+                        cached            = $runtimeResult.cached
+                        fetchedAt         = $runtimeResult.fetchedAt
+                        fetchedFrom       = $runtimeResult.fetchedFrom
+                        runtime           = $runtimeResult.runtime
+                    }
+                } else {
+                    Send-Json $context @{
+                        ok                = $false
+                        layoutFingerprint = $scanResult.scan.layoutFingerprint
+                        error             = $runtimeResult.error
+                    } 503
+                }
                 continue
             }
 

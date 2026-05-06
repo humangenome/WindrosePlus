@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)]
     [string]$WorldFolder,
 
     [switch]$EmitJson
@@ -301,10 +300,12 @@ function Get-WindroseLayoutScan {
     }
 }
 
-$result = Get-WindroseLayoutScan -Path $WorldFolder
+if ($WorldFolder) {
+    $result = Get-WindroseLayoutScan -Path $WorldFolder
 
-if ($EmitJson) {
-    $result | ConvertTo-Json -Depth 10 -Compress
-} else {
-    Write-Output $result
+    if ($EmitJson) {
+        $result | ConvertTo-Json -Depth 10 -Compress
+    } else {
+        Write-Output $result
+    }
 }
