@@ -371,6 +371,7 @@ function Build-MultiplierPak {
         if ($loot -ne 1.0) {
             Write-Host "  Modifying loot tables (${loot}x)..."
             $lootFiles = Invoke-RepakList -Repak $repak -AesKey $AesKey -PakPath $pak -Filter "LootTable"
+            $lootMod = 0
             foreach ($lf in $lootFiles) {
                 $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $lf.Trim()
                 if (-not $json) { continue }
@@ -392,9 +393,13 @@ function Build-MultiplierPak {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
+                    $lootMod++
                 }
             }
-            Write-Host "    Modified $modifiedCount loot tables"
+            Write-Host "    Modified $lootMod loot tables"
+            if ($lootMod -eq 0) {
+                Write-Warning "loot=${loot}x configured but zero loot tables matched — LootTable filter or LootData[].Min/Max schema may have been renamed by a recent engine update."
+            }
         }
 
         # XP tables
@@ -404,6 +409,7 @@ function Build-MultiplierPak {
                 "R5/Plugins/R5BusinessRules/Content/EntityProgression/DA_HeroLevels.json",
                 "R5/Plugins/R5BusinessRules/Content/EntityProgression/Ship/DA_ShipLevels.json"
             )
+            $xpMod = 0
             foreach ($xf in $xpFiles) {
                 $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $xf
                 if (-not $json) { continue }
@@ -421,8 +427,12 @@ function Build-MultiplierPak {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     $modifiedCount++
+                    $xpMod++
                     Write-Host "    Modified $xf"
                 }
+            }
+            if ($xpMod -eq 0) {
+                Write-Warning "xp=${xp}x configured but zero XP tables matched — DA_HeroLevels / DA_ShipLevels paths or Levels[].Exp schema may have been renamed by a recent engine update."
             }
         }
 
@@ -464,6 +474,9 @@ function Build-MultiplierPak {
                 }
             }
             Write-Host "    Modified $recipeMod recipes"
+            if ($recipeMod -eq 0) {
+                Write-Warning "craft_efficiency=${craftEfficiency}x configured but zero recipes matched — Recipes/ filter or RecipeCost[].Count schema may have been renamed by a recent engine update."
+            }
         }
 
         # inventory_size patching intentionally disabled (v1.0.14).
@@ -530,6 +543,9 @@ function Build-MultiplierPak {
                 $cookMod++
             }
             Write-Host "    Modified $cookMod recipes"
+            if ($cookMod -eq 0) {
+                Write-Warning "cooking_speed=${cookSpeed}x configured but zero recipes had a CookingProcessDuration to scale — Recipes/ filter or CookingProcessDuration field may have been renamed by a recent engine update."
+            }
         }
 
         # Harvest yield (gatherable resource spawn amounts: berries, ore, wood, etc.)
@@ -707,7 +723,6 @@ function Build-MultiplierPak {
                 $cfResMult = 1.0
                 if ($cfEntry.Family -and $perResource.ContainsKey($cfEntry.Family)) {
                     $cfResMult = $perResource[$cfEntry.Family]
-                    if ($perFamilyApplied.ContainsKey($cfEntry.Family)) { $perFamilyApplied[$cfEntry.Family]++ }
                 }
                 $cfEff = $harvestYield * $cfResMult
                 if ($cfEff -eq 1.0) { continue }
@@ -734,6 +749,12 @@ function Build-MultiplierPak {
                     }
                 }
                 if ($changed) {
+                    # Only credit the per-resource family AFTER a real patch landed.
+                    # Pre-incrementing on entry suppressed the unmatched-keys warning
+                    # when an engine update moved the contextual path or schema.
+                    if ($cfEntry.Family -and $perFamilyApplied.ContainsKey($cfEntry.Family)) {
+                        $perFamilyApplied[$cfEntry.Family]++
+                    }
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
                     if (-not $existedBefore) { $modifiedCount++ }
@@ -750,10 +771,26 @@ function Build-MultiplierPak {
                     Write-Warning "Per-resource keys with zero matches (typo or unsupported family?): $($unmatched -join ', ')"
                 }
             }
+
+            # If a base harvest_yield multiplier was requested but every harvest pass
+            # came back empty, that's an engine-rename signature (ResourcesSpawners/,
+            # LootTables/Foliage/, LootTables/PickupResource/, ContextualSpawners/
+            # paths or their inner schemas changed). Per-resource-only configs with
+            # all-zero matches already surface via the unmatched-keys warning above.
+            if ($harvestYield -ne 1.0 -and ($harvMod + $foliageMod + $pickupMod + $contextualMod) -eq 0) {
+                Write-Warning "harvest_yield=${harvestYield}x configured but zero harvest files matched across resource spawners, foliage loot, pickup loot, and contextual destroy scores — one or more harvest paths/schemas may have been renamed by a recent engine update."
+            }
         }
 
         if ($modifiedCount -eq 0) {
-            if ($effectiveNonDefaultMultipliers -eq 0) {
+            # Only treat zero-modifications as a clean no-op when there was
+            # nothing to apply in the first place. A per-resource-only config
+            # (harvestYield=1.0, Wood=5.0 in harvest.ini) has
+            # effectiveNonDefaultMultipliers=0, so without the perResourceActive
+            # check below, an engine-renamed harvest path or schema would mask
+            # itself as "no work to do" and return success. With it, the build
+            # raises "No files were modified" and the caller can act.
+            if ($effectiveNonDefaultMultipliers -eq 0 -and -not $perResourceActive) {
                 Write-Host "  No active multiplier files were modified; removing stale $outPakPath if present"
                 if (Test-Path -LiteralPath $outPakPath) {
                     Remove-Item -LiteralPath $outPakPath -Force
