@@ -320,7 +320,7 @@ function Build-MultiplierPak {
     $perResourceActive = $false
     foreach ($v in $perResource.Values) { if ($v -ne 1.0) { $perResourceActive = $true; break } }
 
-    $allDefault = ($loot -eq 1.0 -and $xp -eq 1.0 -and $stackSize -eq 1.0 -and $craftEfficiency -eq 1.0 -and $cropSpeed -eq 1.0 -and $weight -eq 1.0 -and $invSize -eq 1.0 -and $pointsPerLvl -eq 1.0 -and $cookSpeed -eq 1.0 -and $harvestYield -eq 1.0 -and -not $perResourceActive)
+    $allDefault = ($effectiveNonDefaultMultipliers -eq 0 -and -not $perResourceActive)
     if ($allDefault) {
         $result.Error = "All multipliers are 1.0 (default). Nothing to build."
         return $result
