@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-06
+
+### Added
+
+- **`/api/layout` and `/api/layout/runtime` endpoints on the WP+ HTTP server.** `/api/layout` runs the new `Get-LayoutFingerprint.ps1` scanner against `R5\Saved\SaveProfiles\<world>\` and returns the layout fingerprint (SHA-256 of the .sst manifest), seed, world preset, and terrain placements (52 entries on a typical world, with center x/y/z and bounds). `/api/layout/runtime` POSTs that scan to windrose.tools' public layout API to seed it (HTTP 201 on first call), then GETs the curated overlay (nodes, manualPoiMarkers, biomes, top-level markers) and serves a fingerprint-scoped on-disk cache. On upstream 5xx / 429 / network error the route falls through to the cached payload (`stale: true`) instead of failing the page. Hosting panels and integrators consume this to render windrose.tools-style POI / quest / biome / shipwreck / camp / dungeon overlays in their own map UIs.
+- **`Get-LayoutFingerprint.ps1` scanner library** (`server/lib/`). Pure-PowerShell port of windrose.tools' client-side `.sst` byte parser. Walks the RocksDB save tree and emits the same `layoutFingerprint` and `terrainPlacements` shape the upstream JS worker produces, byte-for-byte compatible with their POST contract. No native dependencies, no Node, no Chromium relay.
+
+### Fixed
+
+- **Sea Chart loaded blank until hard-refresh.** The page used to fetch `/api/mapinfo` once and give up if the response wasn't ready yet, so anyone watching the dashboard while a fresh world was still generating tiles saw an empty Leaflet canvas with no recovery. The manifest fetch now retries every 3 seconds for up to 3 minutes, and after the layer is mounted a 10-second interval calls `tileLayer.redraw()` until generation reports complete (or 10 minutes elapse), so newly written tiles paint without a manual refresh. Both the authenticated dashboard map and the public `/public-map` livemap got the same treatment.
+
 ## [1.1.24] - 2026-05-05
 
 ### Fixed

@@ -147,12 +147,24 @@
                 return url + (url.indexOf('?') === -1 ? '?' : '&') + 'token=' + encodeURIComponent(publicToken);
             }
 
-            // Fetch map manifest from HTTP server API
-            try {
-                var mapInfoUrl = isPublicMap ? '/api/public/mapinfo' : '/api/mapinfo';
-                var res = await fetch(withPublicToken(mapInfoUrl));
-                if (res.ok) manifest = await res.json();
-            } catch (e) {}
+            // Fetch map manifest with retry — first connect is often a race against
+            // tile generation finishing, so poll every 3s instead of giving up after one try.
+            var mapInfoUrl = isPublicMap ? '/api/public/mapinfo' : '/api/mapinfo';
+            var manifestAttempts = 0;
+            var manifestMaxAttempts = 60; // ~3 min budget
+            while (manifestAttempts < manifestMaxAttempts) {
+                manifestAttempts++;
+                try {
+                    var res = await fetch(withPublicToken(mapInfoUrl));
+                    if (res.ok) {
+                        var body = await res.json();
+                        if (body && !body.error) { manifest = body; break; }
+                        if (body && body.generation && body.generation.state === 'error') { manifest = body; break; }
+                    }
+                } catch (e) {}
+                loadEl.textContent = 'Loading map… (attempt ' + manifestAttempts + ')';
+                await new Promise(function(r){ setTimeout(r, 3000); });
+            }
 
             if (!manifest || manifest.error) {
                 var msg = 'Map not ready yet. Join the server once — the map generates automatically on first player connection.';
@@ -207,7 +219,7 @@
 
             var tileBase = window.location.origin;
             var tilePath = isPublicMap ? '/public-map/tiles/{z}/{x}-{y}.png' : '/livemap/tiles/{z}/{x}-{y}.png';
-            L.tileLayer(tileBase + withPublicToken(tilePath), {
+            var tiles = L.tileLayer(tileBase + withPublicToken(tilePath), {
                 minZoom: 0,
                 maxZoom: maxZoom + 2,
                 maxNativeZoom: maxZoom,
@@ -220,7 +232,31 @@
                 // Sea Chart whenever those tiles were not generated. Auth dashboard
                 // already fixed this in server/web/index.html; mirror the same PNG here.
                 errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg=='
-            }).addTo(map);
+            });
+            tiles.addTo(map);
+
+            // Tile generation may finish AFTER initial layer mount on a fresh world —
+            // poll mapinfo and redraw the layer until generation reports complete.
+            (function() {
+                var ticks = 0;
+                var maxTicks = 60; // ~10 min budget at 10s cadence
+                var iv = setInterval(async function() {
+                    ticks++;
+                    try {
+                        var r = await fetch(withPublicToken(mapInfoUrl));
+                        if (r.ok) {
+                            var m = await r.json();
+                            if (m && m.generation && m.generation.state === 'complete') {
+                                tiles.redraw();
+                                clearInterval(iv);
+                                return;
+                            }
+                        }
+                    } catch (e) {}
+                    tiles.redraw();
+                    if (ticks >= maxTicks) clearInterval(iv);
+                }, 10000);
+            })();
 
             map.fitBounds(IB);
 

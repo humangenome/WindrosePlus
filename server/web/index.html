@@ -1941,8 +1941,48 @@
             });
         });
 
+        var seachartInitializing = false;
         function initSeaChart() {
-            fetch("/api/mapinfo", {credentials: "same-origin"}).then(function(r) { return r.json(); }).then(function(mapInfo) {
+            // Reentrancy guard: a second tab click during the retry window would otherwise
+            // start a parallel fetch chain, duplicate the Leaflet map mount, and leak intervals.
+            if (seachartInitializing || seachartInitialized) return;
+            seachartInitializing = true;
+            // Manifest fetch with retry — first connect can race tile generation.
+            // Poll every 3s for up to 3 minutes before showing the not-ready notice.
+            var attempts = 0, maxAttempts = 60;
+            function fetchManifest() {
+                fetch("/api/mapinfo", {credentials: "same-origin"})
+                    .then(function(r) { return r.json(); })
+                    .then(function(mapInfo) {
+                        attempts++;
+                        var stillRunning = mapInfo && mapInfo.error && mapInfo.generation && mapInfo.generation.state === 'running';
+                        if (stillRunning && attempts < maxAttempts) {
+                            var holder = document.getElementById('seachart-map');
+                            if (holder && !holder.dataset.waitNotice) {
+                                holder.innerHTML = '';
+                                var notice = document.createElement('div');
+                                notice.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:Cormorant Garamond,serif;font-size:1.2rem;text-align:center;padding:20px;';
+                                notice.textContent = 'Generating map tiles…';
+                                holder.appendChild(notice);
+                                holder.dataset.waitNotice = '1';
+                            }
+                            setTimeout(fetchManifest, 3000);
+                            return;
+                        }
+                        renderSeaChart(mapInfo);
+                    })
+                    .catch(function() {
+                        attempts++;
+                        if (attempts < maxAttempts) setTimeout(fetchManifest, 3000);
+                        else renderSeaChart({ error: 'Map not ready yet.' });
+                    });
+            }
+            fetchManifest();
+
+            function renderSeaChart(mapInfo) {
+                seachartInitializing = false;
+                var holder0 = document.getElementById('seachart-map');
+                if (holder0) delete holder0.dataset.waitNotice;
                 if (mapInfo.error) {
                     seachartInitialized = false;
                     var msg = mapInfo.error;
@@ -1988,7 +2028,7 @@
                 });
 
                 var tileBase = window.location.origin;
-                L.tileLayer(tileBase + '/livemap/tiles/{z}/{x}-{y}.png', {
+                var tiles = L.tileLayer(tileBase + '/livemap/tiles/{z}/{x}-{y}.png', {
                     minZoom: 0,
                     maxZoom: maxZoom + 2,
                     maxNativeZoom: maxZoom,
@@ -1999,7 +2039,31 @@
                     // rgba(255,0,0,127) — Leaflet stretched it to fill every missing tile slot,
                     // turning the whole map crimson whenever a zoom level had no rendered tiles.
                     errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg=='
-                }).addTo(seachartMap);
+                });
+                tiles.addTo(seachartMap);
+
+                // Tile generation may finish AFTER initial layer mount on a fresh world.
+                // Poll mapinfo every 10s, redrawing the layer until generation reports complete.
+                (function() {
+                    var ticks = 0, maxTicks = 60;
+                    var iv = setInterval(function() {
+                        ticks++;
+                        fetch('/api/mapinfo', {credentials: 'same-origin'})
+                            .then(function(r) { return r.ok ? r.json() : null; })
+                            .then(function(m) {
+                                if (m && m.generation && m.generation.state === 'complete') {
+                                    tiles.redraw();
+                                    clearInterval(iv);
+                                    return;
+                                }
+                                tiles.redraw();
+                                if (ticks >= maxTicks) clearInterval(iv);
+                            })
+                            .catch(function() {
+                                if (ticks >= maxTicks) clearInterval(iv);
+                            });
+                    }, 10000);
+                })();
 
                 seachartMap.fitBounds(IB);
 
@@ -2106,9 +2170,7 @@
 
                 fetchMapEntities();
                 setInterval(fetchMapEntities, 5000);
-            }).catch(function(e) {
-                document.getElementById('seachart-map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:Cormorant Garamond,serif;font-size:1.2rem;">Map not ready yet. Join the server once — the map generates automatically on first player connection.</div>';
-            });
+            }
         }
     </script>
 
