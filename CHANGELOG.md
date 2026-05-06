@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.1.23] - 2026-05-05
+
+### Added
+
+- **Items catalog overlay on the embedded Sea Chart.** A new "Items" button on the dashboard's Sea Chart opens a slide-in panel listing every item in the game (378 entries) with name, rarity, stack size, drop-source count, and icon. Search by name / id / category / rarity. Click any item to drill into a detail view that shows the description and every drop source (NPC or chest, drop chance, quantity range). The catalog (1.3 MB JSON + 227 WebP icons, ~14 MB total) ships in `WindrosePlus.zip` under `server/web/catalog/v1/`, so the overlay works on offline / firewalled servers — no third-party CDN dependency. The catalog is generic Windrose game data, identical on every server.
+- **`/catalog/*` static-file route on the dashboard HTTP server.** Catalog assets serve without authentication so public Sea Chart viewers (`/public-map?token=...`) can browse the catalog too. The route uses canonical-path containment (`Path.GetFullPath` + ordinal-case `StartsWith` on the resolved catalog root) so a hostile request can't escape the catalog dir.
+
+### Notes
+
+- 53 items reference 14 icon basenames that don't ship with v1.1.23. Affected items still render in the list (with an empty icon slot); only the icon is missing. Will be filled in as the catalog re-extraction sweeps additional asset paths.
+- The `_summary.json` file in the catalog dir documents what was extracted and how many of each kind.
+
 ## [1.1.22] - 2026-05-05
 
 ### Fixed

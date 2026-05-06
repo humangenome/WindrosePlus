@@ -1,0 +1,13 @@
+{
+  "items_total": 378,
+  "items_with_full_catalog_record": 365,
+  "items_synthesized_stubs": 13,
+  "items_with_drop_records": 378,
+  "plan_items_DA_DID": 647,
+  "quest_references_total": 208,
+  "quest_references_resolved": 18,
+  "quest_references_unresolved": 190,
+  "poi_instances": 1173,
+  "poi_unique_asset_types": 34,
+  "icon_asset_paths": 6
+}

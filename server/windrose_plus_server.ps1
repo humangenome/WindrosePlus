@@ -528,7 +528,7 @@ function Send-File($context, $filePath) {
     $mimeTypes = @{
         ".html" = "text/html"; ".css" = "text/css"; ".js" = "application/javascript"
         ".json" = "application/json"; ".png" = "image/png"; ".jpg" = "image/jpeg"
-        ".svg" = "image/svg+xml"; ".ico" = "image/x-icon"
+        ".svg" = "image/svg+xml"; ".ico" = "image/x-icon"; ".webp" = "image/webp"
     }
     $mime = if ($mimeTypes[$ext]) { $mimeTypes[$ext] } else { "application/octet-stream" }
     $context.Response.ContentType = $mime
@@ -696,6 +696,23 @@ try {
             # API health endpoint — no auth (used for monitoring)
             if ($path -eq "/api/health") {
                 Send-Json $context @{ status = "ok"; version = $Version; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
+                continue
+            }
+
+            # Static game-catalog assets (item metadata + icons) — no auth.
+            # This is generic Windrose game data, identical on every server,
+            # no player or server identifying information. Letting public
+            # Sea Chart viewers see the catalog overlay is the whole point.
+            if ($path.StartsWith("/catalog/")) {
+                $catalogRoot = [System.IO.Path]::GetFullPath((Join-Path $webDir "catalog"))
+                $candidate   = [System.IO.Path]::GetFullPath((Join-Path $webDir ($path.TrimStart("/").Replace("/", "\"))))
+                $sep         = [System.IO.Path]::DirectorySeparatorChar
+                if (-not $candidate.StartsWith($catalogRoot + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $context.Response.StatusCode = 403
+                    $context.Response.Close()
+                    continue
+                }
+                Send-File $context $candidate
                 continue
             }
 
