@@ -152,6 +152,48 @@ do.
 
 ---
 
+## windrose_plus.loot.ini (Per-Scope / Per-Resource Loot)
+
+Optional file. Adds path-scoped and per-resource multipliers to the
+loot pass on top of `multipliers.loot` from `windrose_plus.json`:
+
+```text
+final_drop = loot * <scope value> * <per-resource value>
+```
+
+Two sections:
+
+- `[Scopes]` — path-scoped multipliers per loot-table directory. Today
+  only `chest` is supported (scopes `LootTables/Chests/*.json`). The
+  ship-loot scope still lives in `windrose_plus.json` as
+  `multipliers.ship_loot`.
+- `[Resources]` — per-resource family multiplier for any LootData entry
+  whose `LootItem` path matches `Resource_<Name>_T<digit>`. Stacks on
+  top of the file's effective scope. Use the same casing as the asset
+  family name (e.g. `TumbagoIngot`).
+
+Combined example (`multipliers.loot = 1.0`):
+
+```ini
+[Scopes]
+chest = 2.0
+
+[Resources]
+TumbagoIngot = 5.0
+```
+
+- Non-Tumbago drops in any chest: `1 * 2 = 2x`
+- Tumbago drops outside a chest: `1 * 1 * 5 = 5x` (none today — only loot
+  source is the Swamp Senkamati Pot pickup, which is itself a chest)
+- Tumbago drops inside a chest: `1 * 2 * 5 = 10x`
+
+Equipment drops are excluded from every multiplier in this file (same
+issue #3 dupe-stack guard as the global `loot` multiplier).
+
+Edits trigger a PAK rebuild on the next launch.
+
+---
+
 ## windrose_plus.ini (Main Config)
 
 ### [Server]
