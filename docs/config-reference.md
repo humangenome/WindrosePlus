@@ -96,14 +96,22 @@ CopperOre   = 0.5   ; copper drops 2.0 * 0.5 = 1x (back to vanilla)
 ### [Resources]
 
 Keys are UE asset family names. The matcher reads the
-`Resource_<Name>_T<digit>` token from each loot entry's path
-(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Case-insensitive — `Wood`,
-`wood`, and `WOOD` all match.
+`Resource_<Name>_T<digit>` (or `Mineral_<Name>_T<digit>` for spawner
+asset paths) token from each loot entry's path
+(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Lookup is case-insensitive —
+`Wood`, `wood`, and `WOOD` all match.
+
+The PAK builder walks five scopes for every multiplier above:
+
+- `LootTables/Foliage/*.json` — burnt trees, debris, mineral nodes
+- `LootTables/Crop/*.json` — coconut palm, ficus, lime tree, vegetables
+- `LootTables/PickupResource/*.json` — sulfur, salt, mushrooms, eggs
+- `ResourcesSpawners/*.json` — Amount.Min/Max per spawner entry
+- `ContextualSpawners/*.json` — segmented-tree / dig-volume destroy scores
 
 | Key | Default | Where it applies |
 |-----|---------|------------------|
-| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores |
-| `Bark` | `1.0` | Higher-tier tree drops |
+| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores. Also scales the wood-class aliased children (see below) unless those are explicitly listed in this file. |
 | `FiberPlant` | `1.0` | Grasses, agave, hemp, flax bushes |
 | `Stone` | `1.0` | Stone outcrops |
 | `Clay` | `1.0` | Clay deposits |
@@ -113,6 +121,27 @@ Keys are UE asset family names. The matcher reads the
 | `Iron` | `1.0` | `IronCaverns_DigVolumesDestroy` |
 | `Charcoal` | `1.0` | Coal nodes |
 | `Feather`, `Fat`, `Leather`, `GoatHorn`, `Bezoar` | `1.0` | Animal-derived. Mostly creature drops (not affected); foliage tables that include them are scaled here. |
+
+#### Wood-family aliases
+
+Some wood-class drops are extracted as their own family name by the
+asset-path matcher but should follow `Wood` by default — otherwise an
+admin who writes `Wood = 5.0` would be surprised to find their Hardwood,
+Bark, etc. still vanilla. The PAK builder applies the parent's
+multiplier to these children unless the child is listed explicitly in
+this file:
+
+| Child family | Inherits from |
+|---|---|
+| `Hardwood` | `Wood` |
+| `Bark` | `Wood` |
+| `SticksWood` | `Wood` |
+| `Mahogany` | `Wood` |
+| `EnchantedWood` | `Wood` |
+
+To opt a child out of the alias, add a line for it explicitly — `Bark = 1.0`
+keeps Bark vanilla even when `Wood = 5.0`. To set a different value,
+`Bark = 2.0` overrides the alias for Bark only.
 
 Unknown family names in the INI are silently ignored. Unknown families on
 in-game loot entries fall through to `harvest_yield` only.
