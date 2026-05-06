@@ -177,7 +177,7 @@ function Save-MultiplierHistory {
     }
 
     if (-not (Test-Path -LiteralPath $dir)) {
-        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        New-Item -ItemType Directory -Force -LiteralPath $dir | Out-Null
     }
 
     $tmp = "$Path.tmp"
@@ -189,7 +189,7 @@ function Save-MultiplierHistory {
 
         if (Test-Path -LiteralPath $Path) {
             try {
-                [System.IO.File]::Replace($tmp, $Path, $bak, $true) | Out-Null
+                [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
                 Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
             } catch {
                 throw
