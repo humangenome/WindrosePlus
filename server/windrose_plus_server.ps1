@@ -519,6 +519,18 @@ function Get-LayoutCacheKey($worldFolder) {
     } finally { $sha.Dispose() }
 }
 
+function Get-PublicScanView($scan) {
+    if (-not $scan) { return $null }
+    return [pscustomobject]@{
+        layoutFingerprint      = $scan.layoutFingerprint
+        shortLayoutFingerprint = $scan.shortLayoutFingerprint
+        seed                   = $scan.seed
+        worldPreset            = $scan.worldPreset
+        terrainPlacements      = $scan.terrainPlacements
+        sstFileCount           = $scan.sstFileCount
+    }
+}
+
 function Get-CachedLayoutScan {
     $worldFolder = Find-ActiveWorldFolder
     if (-not $worldFolder) {
@@ -549,7 +561,10 @@ function Get-CachedLayoutScan {
     try {
         $scan = Get-WindroseLayoutScan -Path $worldFolder
     } catch {
-        return @{ ok = $false; error = "Scanner failed: $($_.Exception.Message)" }
+        # sanitize: scanner errors may include the on-disk path
+        $msg = $_.Exception.Message
+        $msg = [regex]::Replace($msg, '[A-Za-z]:\\\\[^\s,]*', '<path>')
+        return @{ ok = $false; error = "Scanner failed: $msg" }
     }
 
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -589,6 +604,7 @@ function Get-CachedLayoutRuntime($scan) {
 
     $runtime = $null
     $fetchedFrom = $null
+    $shouldPost = $false
     try {
         $resp = Invoke-WebRequest -Uri ("https://windrose.tools/api/map/runtime?layout={0}" -f $fp) `
             -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
@@ -597,10 +613,27 @@ function Get-CachedLayoutRuntime($scan) {
             $fetchedFrom = "GET"
         }
     } catch {
-        # 404 => not yet indexed; we'll POST our scan to seed it
+        # Only POST when the GET genuinely says "no such layout" (404).
+        # On 5xx / 429 / network timeout we serve stale cache or surface the
+        # error rather than amplifying upstream load.
+        $statusCode = 0
+        try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+        if ($statusCode -eq 404) { $shouldPost = $true }
+        else {
+            # serve stale cache if we have any
+            if (Test-Path -LiteralPath $runtimeCachePath) {
+                try {
+                    $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
+                    if ($stale.runtime) {
+                        return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-upstream-fail" }
+                    }
+                } catch {}
+            }
+            return @{ ok = $false; error = "windrose.tools GET failed (HTTP $statusCode); no stale cache available" }
+        }
     }
 
-    if (-not $runtime) {
+    if (-not $runtime -and $shouldPost) {
         try {
             $body = ([pscustomobject]@{
                 layoutFingerprint = $fp
@@ -889,7 +922,7 @@ try {
                         ok       = $true
                         cached   = $r.cached
                         cachedAt = $r.cachedAt
-                        scan     = $r.scan
+                        scan     = (Get-PublicScanView $r.scan)
                     }
                 } else {
                     Send-Json $context @{ ok = $false; error = $r.error } 503

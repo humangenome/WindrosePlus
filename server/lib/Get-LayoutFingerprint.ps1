@@ -5,8 +5,6 @@ param(
     [switch]$EmitJson
 )
 
-$ErrorActionPreference = 'Stop'
-
 # --- byte-array helpers -------------------------------------------------------
 
 function ConvertTo-BytesAscii {
@@ -218,6 +216,8 @@ function Parse-AllTerrainPlacements {
 
 function Get-WindroseLayoutScan {
     param([Parameter(Mandatory=$true)][string]$Path)
+
+    $ErrorActionPreference = 'Stop'
 
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
         throw "World folder not found: $Path"
