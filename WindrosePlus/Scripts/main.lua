@@ -8,7 +8,7 @@
 -- latest CHANGELOG entry between tagged releases — that's flagged as a
 -- non-blocking warning by .github/workflows/version-check.yml.
 WindrosePlus = {
-    VERSION = "1.1.21",
+    VERSION = "1.1.22",
     state = {
         playerCount = 0,
         mode = "boot",           -- starts as "boot", transitions to "idle" or "active"
