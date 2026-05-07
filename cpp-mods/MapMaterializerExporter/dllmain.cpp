@@ -1,21 +1,24 @@
 #define NOMINMAX
-// MapMaterializerExporter v2.0 — engine-side dumper for the WP+ map materializer.
+// MapMaterializerExporter v2.1 — engine-side dumper for the WP+ map materializer.
 //
 // Two phases gated by sentinel files in windrose_plus_data/:
 //   export_mapmat_discovery_trigger -> mapmat_discovery.json (UClass survey + UFunction list)
 //   export_mapmat_extract_trigger   -> mapmat_extract.json   (typed reads of every live R5* instance)
 //
-// v2.0 changes vs v1.0:
+// v2.1 changes vs v2.1:
+//   * StructProperty: read fixed-layout structs by name (Vector, Vector2D, Rotator, Guid,
+//     IntPoint, IntVector, Quat). Emits {x,y,z} / {a,b,c,d} / etc inline.
+//   * ArrayProperty<StructProperty>: walks elements with the same struct dispatch — needed
+//     for Models[] / IslandGenerators[] payloads where the inner is FVector / FGuid embedded.
+//   * Float/Double/Int/Bool scalar reads (was kind-only in v2.1).
+//
+// v2.1 changes vs v1.0:
 //   * Exact FProperty subclass match (was substring "ObjectProperty" which also matched
 //     SoftObjectProperty / WeakObjectProperty -> wrong layout -> crash on deref).
 //   * CDO + pending-destroy + Unreachable lifecycle skip on every UObject we touch.
 //   * Discovery emits TWO counts: total + live (post-CDO skip), and prefers a LIVE sample.
 //   * Discovery emits UFunction list per interesting class (name + flags + numparms + return type).
-//   * Extract reads typed scalar values: ObjectProperty, StrProperty, NameProperty, BoolProperty,
-//     numeric properties (Int/Float/Double/Byte), and walks ArrayProperty<ObjectProperty/StrProperty/NameProperty>.
 //   * Extract caps per-class instance count to keep JSON bounded.
-//   * Every typed read is wrapped — if a property class is unknown or the read would be unsafe,
-//     the value is skipped (kind name still emitted).
 //
 // Outputs:
 //   <gameroot>/windrose_plus_data/mapmat_discovery.json
@@ -32,6 +35,7 @@
 #include <Unreal/UnrealFlags.hpp>
 #include <Unreal/FString.hpp>
 #include <Unreal/NameTypes.hpp>
+#include <Unreal/UScriptStruct.hpp>
 #include <windows.h>
 #include <fstream>
 #include <vector>
@@ -186,6 +190,59 @@ static UObject* read_object_ref(FProperty* p, UObject* o) {
     return *pp;
 }
 
+// ---------- struct readers ----------
+//
+// Layouts assume UE5 (TVector<double>, TRotator<double>). All struct payloads
+// here are POD with deterministic offsets. We emit the struct kind name in the
+// returned blob so consumers can branch.
+
+static std::string fmt_double(double d) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.9g", d);
+    return buf;
+}
+
+// Returns a JSON snippet (no leading separator). Empty string -> caller should
+// skip the value (unknown / unsafe layout).
+static std::string read_struct_value(const std::wstring& sname, const uint8_t* base) {
+    if (!base) return {};
+    auto d = [&](size_t off) { return *reinterpret_cast<const double*>(base + off); };
+    auto i32 = [&](size_t off) { return *reinterpret_cast<const int32_t*>(base + off); };
+    auto u32 = [&](size_t off) { return *reinterpret_cast<const uint32_t*>(base + off); };
+
+    if (sname == STR("Vector")) {
+        return "{\"x\":" + fmt_double(d(0)) + ",\"y\":" + fmt_double(d(8)) + ",\"z\":" + fmt_double(d(16)) + "}";
+    }
+    if (sname == STR("Vector2D")) {
+        return "{\"x\":" + fmt_double(d(0)) + ",\"y\":" + fmt_double(d(8)) + "}";
+    }
+    if (sname == STR("Vector4")) {
+        return "{\"x\":" + fmt_double(d(0)) + ",\"y\":" + fmt_double(d(8)) +
+               ",\"z\":" + fmt_double(d(16)) + ",\"w\":" + fmt_double(d(24)) + "}";
+    }
+    if (sname == STR("Rotator")) {
+        return "{\"pitch\":" + fmt_double(d(0)) + ",\"yaw\":" + fmt_double(d(8)) +
+               ",\"roll\":" + fmt_double(d(16)) + "}";
+    }
+    if (sname == STR("Quat")) {
+        return "{\"x\":" + fmt_double(d(0)) + ",\"y\":" + fmt_double(d(8)) +
+               ",\"z\":" + fmt_double(d(16)) + ",\"w\":" + fmt_double(d(24)) + "}";
+    }
+    if (sname == STR("Guid")) {
+        char hex[40];
+        std::snprintf(hex, sizeof(hex), "%08X-%08X-%08X-%08X", u32(0), u32(4), u32(8), u32(12));
+        return std::string("\"") + hex + "\"";
+    }
+    if (sname == STR("IntPoint")) {
+        return "{\"x\":" + std::to_string(i32(0)) + ",\"y\":" + std::to_string(i32(4)) + "}";
+    }
+    if (sname == STR("IntVector")) {
+        return "{\"x\":" + std::to_string(i32(0)) + ",\"y\":" + std::to_string(i32(4)) +
+               ",\"z\":" + std::to_string(i32(8)) + "}";
+    }
+    return {};
+}
+
 // ---------- DISCOVERY PHASE ----------
 
 struct DiscoveryBucket {
@@ -248,7 +305,7 @@ static void emit_class_funcs(std::ofstream& out, UClass* c) {
 }
 
 static void run_discovery(const std::filesystem::path& outDir) {
-    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 discovery start\n"));
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.1 discovery start\n"));
     std::map<std::wstring, DiscoveryBucket> buckets;
 
     UObjectGlobals::ForEachUObject([&](UObject* o, int32, int32) -> RC::LoopAction {
@@ -290,7 +347,7 @@ static void run_discovery(const std::filesystem::path& outDir) {
     }
     out << "\n  ]\n}\n";
     out.close();
-    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 discovery wrote {} classes\n"), (int)buckets.size());
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.1 discovery wrote {} classes\n"), (int)buckets.size());
 }
 
 // ---------- EXTRACTION PHASE ----------
@@ -329,12 +386,69 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
         std::string s = read_fname(p, o, ok);
         if (ok) out << ",\"value\":\"" << json_escape(s) << "\"";
     }
+    else if (kind == STR("StructProperty")) {
+        try {
+            auto* sp = static_cast<FStructProperty*>(p);
+            auto& sref = sp->GetStruct();
+            UScriptStruct* ss = sref.Get();
+            std::wstring sname = ss ? ss->GetName() : STR("");
+            out << ",\"structName\":\"" << json_escape(wide_to_utf8(sname)) << "\"";
+            const uint8_t* base = p->ContainerPtrToValuePtr<uint8_t>(o);
+            std::string blob = read_struct_value(sname, base);
+            if (!blob.empty()) {
+                out << ",\"value\":" << blob;
+            }
+        } catch (...) {
+            out << ",\"err\":\"struct_read_failed\"";
+        }
+    }
+    else if (kind == STR("BoolProperty")) {
+        try {
+            auto* bp = static_cast<FBoolProperty*>(p);
+            void* container = p->ContainerPtrToValuePtr<void>(o);
+            bool v = container ? bp->GetPropertyValue(container) : false;
+            out << ",\"value\":" << (v ? "true" : "false");
+        } catch (...) {}
+    }
+    else if (kind == STR("FloatProperty")) {
+        try {
+            const float* fp = p->ContainerPtrToValuePtr<float>(o);
+            if (fp) out << ",\"value\":" << fmt_double((double)*fp);
+        } catch (...) {}
+    }
+    else if (kind == STR("DoubleProperty")) {
+        try {
+            const double* dp = p->ContainerPtrToValuePtr<double>(o);
+            if (dp) out << ",\"value\":" << fmt_double(*dp);
+        } catch (...) {}
+    }
+    else if (kind == STR("IntProperty") || kind == STR("Int32Property")) {
+        try {
+            const int32* ip = p->ContainerPtrToValuePtr<int32>(o);
+            if (ip) out << ",\"value\":" << *ip;
+        } catch (...) {}
+    }
+    else if (kind == STR("Int64Property")) {
+        try {
+            const int64* ip = p->ContainerPtrToValuePtr<int64>(o);
+            if (ip) out << ",\"value\":" << *ip;
+        } catch (...) {}
+    }
     else if (kind == STR("ArrayProperty")) {
         try {
             auto* ap = static_cast<FArrayProperty*>(p);
             FProperty* inner = ap->GetInner();
             std::wstring innerKind = inner ? prop_kind(inner) : STR("");
             out << ",\"innerKind\":\"" << json_escape(wide_to_utf8(innerKind)) << "\"";
+            // For inner StructProperty, also emit struct name.
+            std::wstring innerStruct;
+            if (innerKind == STR("StructProperty") && inner) {
+                auto* sp = static_cast<FStructProperty*>(inner);
+                auto& sref = sp->GetStruct();
+                UScriptStruct* ss = sref.Get();
+                if (ss) innerStruct = ss->GetName();
+                out << ",\"innerStruct\":\"" << json_escape(wide_to_utf8(innerStruct)) << "\"";
+            }
             void* container = ap->ContainerPtrToValuePtr<void>(o);
             if (!container) {
                 out << ",\"items\":null";
@@ -384,6 +498,17 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
                     }
                     out << "]";
                     if (num > limit) out << ",\"truncated\":true";
+                } else if (innerKind == STR("StructProperty")) {
+                    out << ",\"items\":[";
+                    for (int32 i = 0; i < limit; i++) {
+                        if (i > 0) out << ", ";
+                        const uint8_t* base = (const uint8_t*)helper.GetRawPtr(i);
+                        std::string blob = read_struct_value(innerStruct, base);
+                        if (!blob.empty()) out << blob;
+                        else out << "null";
+                    }
+                    out << "]";
+                    if (num > limit) out << ",\"truncated\":true";
                 } else {
                     // Inner kind not yet handled — record count only.
                 }
@@ -414,11 +539,17 @@ static void emit_object_full(std::ofstream& out, UObject* o, bool& first) {
         for (FProperty* p : TFieldRange<FProperty>(c, EFieldIterationFlags::IncludeSuper)) {
             auto kind = prop_kind(p);
             // Only emit properties whose value we can read or whose ref is informative.
-            // For now: ObjectProperty, StrProperty, NameProperty, ArrayProperty.
             if (kind == STR("ObjectProperty") ||
                 kind == STR("StrProperty") ||
                 kind == STR("NameProperty") ||
-                kind == STR("ArrayProperty")) {
+                kind == STR("ArrayProperty") ||
+                kind == STR("StructProperty") ||
+                kind == STR("BoolProperty") ||
+                kind == STR("FloatProperty") ||
+                kind == STR("DoubleProperty") ||
+                kind == STR("IntProperty") ||
+                kind == STR("Int32Property") ||
+                kind == STR("Int64Property")) {
                 if (!pfirst) out << ", ";
                 pfirst = false;
                 emit_property_value(out, p, o);
@@ -437,7 +568,7 @@ struct ExtractBucket {
 static constexpr int kPerClassLimit = 500;
 
 static void run_extract(const std::filesystem::path& outDir) {
-    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 extract start\n"));
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.1 extract start\n"));
 
     // Bucket every live interest object by class.
     std::map<std::wstring, ExtractBucket> buckets;
@@ -471,7 +602,7 @@ static void run_extract(const std::filesystem::path& outDir) {
     }
     out << "\n  ]\n}\n";
     out.close();
-    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 extract wrote {} classes\n"), (int)buckets.size());
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.1 extract wrote {} classes\n"), (int)buckets.size());
 }
 
 // ---------- DRIVER ----------
@@ -480,12 +611,12 @@ class MapMaterializerExporter : public CppUserModBase {
 public:
     MapMaterializerExporter() : CppUserModBase() {
         ModName = STR("MapMaterializerExporter");
-        ModVersion = STR("2.0.0");
+        ModVersion = STR("2.1.0");
     }
     ~MapMaterializerExporter() override {}
 
     auto on_unreal_init() -> void override {
-        Output::send<LogLevel::Verbose>(STR("[MME] v2.0 init\n"));
+        Output::send<LogLevel::Verbose>(STR("[MME] v2.1 init\n"));
     }
 
     auto on_update() -> void override {
