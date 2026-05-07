@@ -945,7 +945,7 @@ try {
                                     $t = (Get-Item $multPak).LastWriteTimeUtc.Ticks
                                     if ($t -lt $pakMtime) { $pakMtime = $t }
                                 } else {
-                                    $stale = $true; $reason = "Multipliers PAK missing but config requires one"
+                                    $stale = $true; $reason = "Multiplier PAK generation disabled or missing while multiplier config is non-default"
                                 }
                             }
                             if ($expectCtPak -and -not $stale) {
