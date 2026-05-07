@@ -15,7 +15,7 @@
 
     Both use the _P suffix so UE5 loads them as priority overrides over base assets.
 
-    Hash cache at R5\Content\Paks\.windroseplus_build.hash lets repeat invocations
+    Hash cache at .windroseplus_build.hash lets repeat invocations
     exit quickly when inputs haven't changed.
 
     If a [Multipliers] section is found in windrose_plus.ini it is ignored with a
@@ -83,6 +83,23 @@ if (-not $ServerDir -or -not (Test-Path -LiteralPath (Join-Path $ServerDir "R5\C
 
 $paksDir = Join-Path $ServerDir "R5\Content\Paks"
 $binDir  = Join-Path $PSScriptRoot "bin"
+
+# Migrate legacy state files from the old Paks-dir location
+foreach ($legacyName in @(".windroseplus_build.hash", ".windroseplus_multiplier_history.json")) {
+    $legacyPath = Join-Path $paksDir $legacyName
+    if (Test-Path -LiteralPath $legacyPath) {
+        $newPath = Join-Path $ServerDir $legacyName
+        try {
+            if (Test-Path -LiteralPath $newPath) {
+                Remove-Item -LiteralPath $legacyPath -Force -ErrorAction Stop
+            } else {
+                Move-Item -LiteralPath $legacyPath -Destination $newPath -Force -ErrorAction Stop
+            }
+        } catch {
+            [Console]::Error.WriteLine("WARNING: failed to migrate legacy state file ${legacyPath}: $_")
+        }
+    }
+}
 
 $jsonPath = Join-Path $ServerDir "windrose_plus.json"
 if ($ConfigPath) {
@@ -156,7 +173,7 @@ if ($multipliers.ContainsKey("craft_cost")) {
 # History is written ATOMICALLY at the end of the script after the PAK build
 # succeeds — never on dry runs, never on failed builds.
 $ratchetKeys = @("xp")
-$historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+$historyFile = Join-Path $ServerDir ".windroseplus_multiplier_history.json"
 $allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 function Save-MultiplierHistory {
@@ -448,7 +465,7 @@ function Get-BuildInputHash {
     return [System.BitConverter]::ToString($hash).Replace('-','').ToLower()
 }
 
-$hashFile = Join-Path $paksDir ".windroseplus_build.hash"
+$hashFile = Join-Path $ServerDir ".windroseplus_build.hash"
 $currentHash = Get-BuildInputHash -ServerDir $ServerDir -ScriptRoot $PSScriptRoot -IniConfigPaths $iniConfigPaths
 
 $expectedPaks = @()
