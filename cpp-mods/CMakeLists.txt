@@ -3,3 +3,4 @@ project(WindrosePlusCppMods)
 
 add_subdirectory(RE-UE4SS)
 add_subdirectory(HeightmapExporter)
+add_subdirectory(MapMaterializerExporter)
