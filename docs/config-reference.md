@@ -96,14 +96,22 @@ CopperOre   = 0.5   ; copper drops 2.0 * 0.5 = 1x (back to vanilla)
 ### [Resources]
 
 Keys are UE asset family names. The matcher reads the
-`Resource_<Name>_T<digit>` token from each loot entry's path
-(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Case-insensitive — `Wood`,
-`wood`, and `WOOD` all match.
+`Resource_<Name>_T<digit>` (or `Mineral_<Name>_T<digit>` for spawner
+asset paths) token from each loot entry's path
+(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Lookup is case-insensitive —
+`Wood`, `wood`, and `WOOD` all match.
+
+The PAK builder walks five scopes for every multiplier above:
+
+- `LootTables/Foliage/*.json` — burnt trees, debris, mineral nodes
+- `LootTables/Crop/*.json` — coconut palm, ficus, lime tree, vegetables
+- `LootTables/PickupResource/*.json` — sulfur, salt, mushrooms, eggs
+- `ResourcesSpawners/*.json` — Amount.Min/Max per spawner entry
+- `ContextualSpawners/*.json` — segmented-tree / dig-volume destroy scores
 
 | Key | Default | Where it applies |
 |-----|---------|------------------|
-| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores |
-| `Bark` | `1.0` | Higher-tier tree drops |
+| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores. Also scales the wood-class aliased children (see below) unless those are explicitly listed in this file. |
 | `FiberPlant` | `1.0` | Grasses, agave, hemp, flax bushes |
 | `Stone` | `1.0` | Stone outcrops |
 | `Clay` | `1.0` | Clay deposits |
@@ -114,12 +122,75 @@ Keys are UE asset family names. The matcher reads the
 | `Charcoal` | `1.0` | Coal nodes |
 | `Feather`, `Fat`, `Leather`, `GoatHorn`, `Bezoar` | `1.0` | Animal-derived. Mostly creature drops (not affected); foliage tables that include them are scaled here. |
 
+#### Wood-family aliases
+
+Some wood-class drops are extracted as their own family name by the
+asset-path matcher but should follow `Wood` by default — otherwise an
+admin who writes `Wood = 5.0` would be surprised to find their Hardwood,
+Bark, etc. still vanilla. The PAK builder applies the parent's
+multiplier to these children unless the child is listed explicitly in
+this file:
+
+| Child family | Inherits from |
+|---|---|
+| `Hardwood` | `Wood` |
+| `Bark` | `Wood` |
+| `SticksWood` | `Wood` |
+| `Mahogany` | `Wood` |
+| `EnchantedWood` | `Wood` |
+
+To opt a child out of the alias, add a line for it explicitly — `Bark = 1.0`
+keeps Bark vanilla even when `Wood = 5.0`. To set a different value,
+`Bark = 2.0` overrides the alias for Bark only.
+
 Unknown family names in the INI are silently ignored. Unknown families on
 in-game loot entries fall through to `harvest_yield` only.
 
 Edits to this file trigger a PAK rebuild on the next launch via
 `StartWindrosePlusServer.bat`, the same way the other type-specific INIs
 do.
+
+---
+
+## windrose_plus.loot.ini (Per-Scope / Per-Resource Loot)
+
+Optional file. Adds path-scoped and per-resource multipliers to the
+loot pass on top of `multipliers.loot` from `windrose_plus.json`:
+
+```text
+final_drop = loot * <scope value> * <per-resource value>
+```
+
+Two sections:
+
+- `[Scopes]` — path-scoped multipliers per loot-table directory. Today
+  only `chest` is supported (scopes `LootTables/Chests/*.json`). The
+  ship-loot scope still lives in `windrose_plus.json` as
+  `multipliers.ship_loot`.
+- `[Resources]` — per-resource family multiplier for any LootData entry
+  whose `LootItem` path matches `Resource_<Name>_T<digit>`. Stacks on
+  top of the file's effective scope. Use the same casing as the asset
+  family name (e.g. `TumbagoIngot`).
+
+Combined example (`multipliers.loot = 1.0`):
+
+```ini
+[Scopes]
+chest = 2.0
+
+[Resources]
+TumbagoIngot = 5.0
+```
+
+- Non-Tumbago drops in any chest: `1 * 2 = 2x`
+- Tumbago drops outside a chest: `1 * 1 * 5 = 5x` (none today — only loot
+  source is the Swamp Senkamati Pot pickup, which is itself a chest)
+- Tumbago drops inside a chest: `1 * 2 * 5 = 10x`
+
+Equipment drops are excluded from every multiplier in this file (same
+issue #3 dupe-stack guard as the global `loot` multiplier).
+
+Edits trigger a PAK rebuild on the next launch.
 
 ---
 
@@ -147,6 +218,7 @@ Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `loot` | `1` | Loot drop quantity from chests / containers / enemies. Equipment drops are excluded so gear can't be duplicated. Use `harvest_yield` for resource nodes. |
+| `ship_loot` | `1` | Stacks on top of `loot` for ship-related drops only (sea-battle piastre rewards, ship-mob drops, etc. — `LootTables/Ships/*.json`). `loot=2, ship_loot=2` → ship rewards 4×, everything else 2×. Equipment drops still excluded. |
 | `xp` | `1` | Experience gain. Faster leveling means more talent/stat point payouts; that's the natural game progression, not a separate multiplier. |
 | `stack_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item stacks. |
 | `craft_efficiency` | `1` | Crafting efficiency. Higher = cheaper recipes (`2.0` = half cost, `0.5` = double cost). The legacy key `craft_cost` is still accepted with identical semantics for backward compatibility. |

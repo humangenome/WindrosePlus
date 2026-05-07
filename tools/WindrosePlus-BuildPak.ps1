@@ -156,7 +156,38 @@ if ($multipliers.ContainsKey("craft_cost")) {
 # History is written ATOMICALLY at the end of the script after the PAK build
 # succeeds — never on dry runs, never on failed builds.
 $ratchetKeys = @("xp")
-$historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+# Keep this OUT of `R5\Content\Paks\` — UE5's R5JsonAssets module scans the
+# Paks dir for any `.json` file at startup and tries to deserialize it as an
+# R5JsonAsset. Our history JSON has no `$type`/`NativeClass`, so the engine
+# logs `Class of type ''`, then `[json.exception.type_error.302] type must
+# be string, but is null`, then `Data inconsistent` — and the cascade
+# silently knocks unrelated systems (e.g. backpack slot count modifiers)
+# into degraded state for the whole session.
+# `windrose_plus_data\` is the canonical state dir per CLAUDE.md.
+$wpDataDir = Join-Path $ServerDir "windrose_plus_data"
+if (-not (Test-Path -LiteralPath $wpDataDir)) {
+    New-Item -ItemType Directory -Force -Path $wpDataDir | Out-Null
+}
+$historyFile = Join-Path $wpDataDir "multiplier_history.json"
+# Migrate any stale copy from the old location. Fail loudly if the legacy
+# file survives the migration — leaving it in Paks reproduces the original
+# inventory-corruption cascade silently, which is far worse than aborting.
+$legacyHistory = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+if (Test-Path -LiteralPath $legacyHistory) {
+    if (-not (Test-Path -LiteralPath $historyFile)) {
+        try { Move-Item -LiteralPath $legacyHistory -Destination $historyFile -Force }
+        catch { Remove-Item -LiteralPath $legacyHistory -Force -ErrorAction SilentlyContinue }
+    } else {
+        Remove-Item -LiteralPath $legacyHistory -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $legacyHistory) {
+        Write-Error "Could not relocate legacy $legacyHistory out of R5\Content\Paks\. UE5 will scan this .json at startup and trigger Class of type '' / type_error.302 / Data inconsistent, which silently degrades unrelated systems (e.g. backpack slot count modifiers). Delete the file manually and rebuild."
+        exit 1
+    }
+}
+foreach ($sidecar in @("$legacyHistory.tmp", "$legacyHistory.bak")) {
+    if (Test-Path -LiteralPath $sidecar) { Remove-Item -LiteralPath $sidecar -Force -ErrorAction SilentlyContinue }
+}
 $allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 function Save-MultiplierHistory {

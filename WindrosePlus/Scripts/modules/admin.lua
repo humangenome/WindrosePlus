@@ -139,6 +139,7 @@ function Admin._registerCommands()
             local lines = {
                 "Players: " .. playerCount,
                 "Loot: " .. Admin._config.getLootMultiplier() .. "x",
+                "Ship Loot: " .. Admin._config.getShipLootMultiplier() .. "x",
                 "XP: " .. Admin._config.getXpMultiplier() .. "x",
                 "Stack Size: " .. Admin._config.getStackSizeMultiplier() .. "x",
                 "Craft Efficiency: " .. Admin._config.getCraftEfficiencyMultiplier() .. "x",
@@ -1182,6 +1183,7 @@ function Admin._registerCommands()
         handler = function(args)
             local lines = {"WindrosePlus Config:"}
             table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Ship Loot", Admin._config.getShipLootMultiplier()))
             table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
             table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
             table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
@@ -1204,6 +1206,7 @@ function Admin._registerCommands()
         handler = function(args)
             local lines = {"Multipliers:"}
             table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
+            table.insert(lines, _fmtMultiplierLine("Ship Loot", Admin._config.getShipLootMultiplier()))
             table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
             table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
             table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
