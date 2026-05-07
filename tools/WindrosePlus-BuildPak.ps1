@@ -157,6 +157,8 @@ if ($multipliers.ContainsKey("craft_cost")) {
 # succeeds — never on dry runs, never on failed builds.
 $ratchetKeys = @("xp")
 $historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+$multiplierPakFile = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
+$disableMultiplierPak = "$env:WINDROSEPLUS_DISABLE_MULTIPLIER_PAK".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 $allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 function Save-MultiplierHistory {
@@ -189,8 +191,10 @@ function Save-MultiplierHistory {
 
         if (Test-Path -LiteralPath $Path) {
             try {
-                [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
-                Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+                [System.IO.File]::Replace($tmp, $Path, $bak, $true) | Out-Null
+                if (Test-Path -LiteralPath $bak) {
+                    Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+                }
             } catch {
                 throw
             }
@@ -351,6 +355,16 @@ if (-not $hasMultipliers) {
         if ($v -ne 1.0) { $hasMultipliers = $true; break }
     }
 }
+
+if ($disableMultiplierPak -and $hasMultipliers) {
+    Write-Warning "WINDROSEPLUS_DISABLE_MULTIPLIER_PAK enabled. Removing/skipping multiplier PAK generation."
+
+    Remove-Item -LiteralPath $multiplierPakFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $historyFile -Force -ErrorAction SilentlyContinue
+
+    $hasMultipliers = $false
+}
+
 $hasCT = ($ctConfig.Count -gt 0)
 
 # --- No-op path ---
@@ -715,7 +729,7 @@ if ($hasCT) {
 # history. Hard fail if we cannot persist — without this file the next
 # downgrade is unprotected, which is exactly the failure mode the ratchet
 # exists to prevent (issue #69).
-if (-not $DryRun) {
+if ($hasMultipliers -and -not $DryRun) {
     try {
         Save-MultiplierHistory -History $plannedHistory -Path $historyFile
     } catch {
