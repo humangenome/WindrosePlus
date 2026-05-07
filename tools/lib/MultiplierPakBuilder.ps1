@@ -106,17 +106,12 @@ function Get-WindrosePlusThirdPartyPaks {
 
 function Format-PakJson {
     # Re-indent a compact JSON string to match the source pak's formatting:
-    # tab indent, CRLF line breaks, single space after `:`, inline `[]`/`{}`.
-    # The engine's JSON-driven asset loader is stricter than spec — both
-    # PowerShell's HTML escapes (', <, >, &) and its quirky pretty-printing
-    # (4-space indent, double-space after colon, blank lines inside empty
-    # arrays) cause it to fail. The cascade is:
-    #   1. `Class of type '' doesnt exists. Asset: /Temp/Untitled_0`
-    #   2. `Cannot create asset: ''`
-    #   3. `[json.exception.type_error.302] type must be string, but is null`
-    #   4. `Data inconsistent`
-    # Step 4 puts the whole session into degraded-data mode and knocks
-    # unrelated systems (e.g. backpack slot count modifiers) offline.
+    # tab indent, CRLF line breaks, single space after `:`, inline `[]`/`{}`,
+    # literal `'` instead of `'`. Source JSONs in pakchunk0 ship in this
+    # exact style; PowerShell 5.1's ConvertTo-Json defaults diverge in every
+    # one of those dimensions. Defensive — RFC 8259 says any of the variants
+    # is valid JSON and our overrides did load — but matching source style
+    # avoids future surprises if the engine's parser is ever tightened.
     # Walks chars instead of regex because depth tracking inside nested
     # arrays is cleaner imperatively. String content is passed through
     # untouched so structural delimiters embedded in values are unaffected.
@@ -1026,17 +1021,18 @@ function Build-MultiplierPak {
                     }
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     Save-PakJson -Path $outPath -Data $data
-                    # The source schema declares MaxScore and EventHandlers[].
-                    # Score.{Min,Max} as floats. PowerShell's ConvertTo-Json
-                    # drops the trailing `.0` from whole-number doubles (e.g.
-                    # 1.2 * 5 = 6.0 serialised as `6`). The engine's
-                    # nlohmann::json parser is strict-typed:
-                    # `j.get<float>()` on an int_t throws type_error.302,
-                    # which cascades into `Cannot create asset`, `Class of
-                    # type ''` and finally `Data inconsistent` — killing
-                    # unrelated systems (e.g. backpack slot count modifiers)
-                    # for the whole session. Force a `.0` suffix on any
-                    # whole-number numeric in those fields.
+                    # The source schema declares MaxScore and
+                    # EventHandlers[].Score.{Min,Max} as floats. PowerShell's
+                    # ConvertTo-Json drops the trailing `.0` from whole-number
+                    # doubles (e.g. 1.2 * 5 = 6.0 serialised as `6`). nlohmann
+                    # ::json — which the engine uses elsewhere — is
+                    # strict-typed about int vs float, so an int_t value
+                    # where a float was declared can throw type_error.302.
+                    # Defensive: force a `.0` suffix on any whole-number
+                    # numeric in those fields so source schema is preserved
+                    # byte-for-byte. Not load-bearing for the
+                    # inventory-corruption cascade (see history-file relocate
+                    # in WindrosePlus-BuildPak.ps1 for that fix).
                     # `[0-9]` instead of `\d` to dodge the docker-installer
                     # sed-rewrite hazard (see Get-ResourceFamily comment).
                     $text = [System.IO.File]::ReadAllText($outPath, [System.Text.UTF8Encoding]::new($false))
