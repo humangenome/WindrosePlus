@@ -104,6 +104,68 @@ function Get-WindrosePlusThirdPartyPaks {
     return @($paks)
 }
 
+function Format-PakJson {
+    # Re-indent a compact JSON string to match the source pak's formatting:
+    # tab indent, CRLF line breaks, single space after `:`, inline `[]`/`{}`.
+    # The engine's JSON-driven asset loader is stricter than spec — both
+    # PowerShell's HTML escapes (', <, >, &) and its quirky pretty-printing
+    # (4-space indent, double-space after colon, blank lines inside empty
+    # arrays) cause it to fail. The cascade is:
+    #   1. `Class of type '' doesnt exists. Asset: /Temp/Untitled_0`
+    #   2. `Cannot create asset: ''`
+    #   3. `[json.exception.type_error.302] type must be string, but is null`
+    #   4. `Data inconsistent`
+    # Step 4 puts the whole session into degraded-data mode and knocks
+    # unrelated systems (e.g. backpack slot count modifiers) offline.
+    # Walks chars instead of regex because depth tracking inside nested
+    # arrays is cleaner imperatively. String content is passed through
+    # untouched so structural delimiters embedded in values are unaffected.
+    param([string]$Compact)
+    $sb = [System.Text.StringBuilder]::new()
+    $depth = 0
+    $inString = $false
+    $escape = $false
+    $crlf = "`r`n"
+    for ($i = 0; $i -lt $Compact.Length; $i++) {
+        $c = $Compact[$i]
+        if ($escape)        { [void]$sb.Append($c); $escape = $false; continue }
+        if ($c -eq '\')     { [void]$sb.Append($c); $escape = $true;  continue }
+        if ($c -eq '"')     { [void]$sb.Append($c); $inString = -not $inString; continue }
+        if ($inString)      { [void]$sb.Append($c); continue }
+        $next = if (($i + 1) -lt $Compact.Length) { $Compact[$i + 1] } else { [char]0 }
+        switch ($c) {
+            '{' {
+                if ($next -eq '}') { [void]$sb.Append('{}'); $i++ }
+                else { [void]$sb.Append('{'); $depth++; [void]$sb.Append($crlf); [void]$sb.Append("`t" * $depth) }
+            }
+            '[' {
+                if ($next -eq ']') { [void]$sb.Append('[]'); $i++ }
+                else { [void]$sb.Append('['); $depth++; [void]$sb.Append($crlf); [void]$sb.Append("`t" * $depth) }
+            }
+            '}' { $depth--; [void]$sb.Append($crlf); [void]$sb.Append("`t" * $depth); [void]$sb.Append('}') }
+            ']' { $depth--; [void]$sb.Append($crlf); [void]$sb.Append("`t" * $depth); [void]$sb.Append(']') }
+            ',' { [void]$sb.Append(','); [void]$sb.Append($crlf); [void]$sb.Append("`t" * $depth) }
+            ':' { [void]$sb.Append(': ') }
+            default { [void]$sb.Append($c) }
+        }
+    }
+    return $sb.ToString()
+}
+
+function Save-PakJson {
+    param([string]$Path, $Data)
+    $compact = $Data | ConvertTo-Json -Depth 100 -Compress
+    # Build the backslash via char code so the script source itself can't be
+    # mangled by editors / merge tools that auto-collapse \uXXXX sequences.
+    $bs = [char]0x5C
+    $compact = $compact.Replace($bs + 'u0027', "'")
+    $compact = $compact.Replace($bs + 'u003c', '<')
+    $compact = $compact.Replace($bs + 'u003e', '>')
+    $compact = $compact.Replace($bs + 'u0026', '&')
+    $json = Format-PakJson -Compact $compact
+    [System.IO.File]::WriteAllText($Path, $json, [System.Text.UTF8Encoding]::new($false))
+}
+
 function Test-WindrosePlusPakConflicts {
     param(
         [string]$Repak,
@@ -533,7 +595,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $lfTrim
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     $modifiedCount++
                     $lootMod++
                     if ($isShip)  { $shipMod++ }
@@ -581,7 +643,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $xf
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     $modifiedCount++
                     $xpMod++
                     Write-Host "    Modified $xf"
@@ -624,7 +686,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $rf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     $modifiedCount++
                     $recipeMod++
                 }
@@ -695,7 +757,7 @@ function Build-MultiplierPak {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
                     $modifiedCount++
                 }
-                [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                Save-PakJson -Path $outPath -Data $data
                 $cookMod++
             }
             Write-Host "    Modified $cookMod recipes"
@@ -783,7 +845,7 @@ function Build-MultiplierPak {
                 if ($changed) {
                     $outPath = Join-Path $tmpDir $hf.Trim()
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     $modifiedCount++
                     $harvMod++
                 }
@@ -826,7 +888,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     if (-not $existedBefore) { $modifiedCount++ }
                     $foliageMod++
                 }
@@ -869,7 +931,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     if (-not $existedBefore) { $modifiedCount++ }
                     $pickupMod++
                 }
@@ -911,7 +973,7 @@ function Build-MultiplierPak {
                 }
                 if ($changed) {
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
                     if (-not $existedBefore) { $modifiedCount++ }
                     $cropMod++
                 }
@@ -963,7 +1025,30 @@ function Build-MultiplierPak {
                         $perFamilyApplied[$cfEntry.Family]++
                     }
                     New-Item -ItemType Directory -Force -Path (Split-Path $outPath) | Out-Null
-                    [System.IO.File]::WriteAllText($outPath, ($data | ConvertTo-Json -Depth 100), [System.Text.UTF8Encoding]::new($false))
+                    Save-PakJson -Path $outPath -Data $data
+                    # The source schema declares MaxScore and EventHandlers[].
+                    # Score.{Min,Max} as floats. PowerShell's ConvertTo-Json
+                    # drops the trailing `.0` from whole-number doubles (e.g.
+                    # 1.2 * 5 = 6.0 serialised as `6`). The engine's
+                    # nlohmann::json parser is strict-typed:
+                    # `j.get<float>()` on an int_t throws type_error.302,
+                    # which cascades into `Cannot create asset`, `Class of
+                    # type ''` and finally `Data inconsistent` — killing
+                    # unrelated systems (e.g. backpack slot count modifiers)
+                    # for the whole session. Force a `.0` suffix on any
+                    # whole-number numeric in those fields.
+                    # `[0-9]` instead of `\d` to dodge the docker-installer
+                    # sed-rewrite hazard (see Get-ResourceFamily comment).
+                    $text = [System.IO.File]::ReadAllText($outPath, [System.Text.UTF8Encoding]::new($false))
+                    $text = [regex]::Replace($text, '("MaxScore":\s*)(-?[0-9]+)([,\s}])', '${1}${2}.0${3}')
+                    $text = [regex]::Replace($text, '("Score":\s*\{[^{}]*?\})', {
+                        param($m)
+                        $b = $m.Value
+                        $b = [regex]::Replace($b, '("Min":\s*)(-?[0-9]+)([,\s}])', '${1}${2}.0${3}')
+                        $b = [regex]::Replace($b, '("Max":\s*)(-?[0-9]+)([,\s}])', '${1}${2}.0${3}')
+                        return $b
+                    })
+                    [System.IO.File]::WriteAllText($outPath, $text, [System.Text.UTF8Encoding]::new($false))
                     if (-not $existedBefore) { $modifiedCount++ }
                     $contextualMod++
                 }
