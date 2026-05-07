@@ -1,48 +1,57 @@
 #define NOMINMAX
-// MapMaterializerExporter v1.0 — engine-side dumper for FT->POI registry and post-rule terrain grids.
+// MapMaterializerExporter v2.0 — engine-side dumper for the WP+ map materializer.
 //
 // Two phases gated by sentinel files in windrose_plus_data/:
-//   export_mapmat_discovery_trigger -> dumps UClass survey (classes, sample objects, property metadata)
-//   export_mapmat_extract_trigger   -> dumps focused per-class data (object paths of every Object property,
-//                                       plus class+path of all R5TerrainSettings/FoliageType/MarkerModel/Spawner/Subsystem instances).
+//   export_mapmat_discovery_trigger -> mapmat_discovery.json (UClass survey + UFunction list)
+//   export_mapmat_extract_trigger   -> mapmat_extract.json   (typed reads of every live R5* instance)
+//
+// v2.0 changes vs v1.0:
+//   * Exact FProperty subclass match (was substring "ObjectProperty" which also matched
+//     SoftObjectProperty / WeakObjectProperty -> wrong layout -> crash on deref).
+//   * CDO + pending-destroy + Unreachable lifecycle skip on every UObject we touch.
+//   * Discovery emits TWO counts: total + live (post-CDO skip), and prefers a LIVE sample.
+//   * Discovery emits UFunction list per interesting class (name + flags + numparms + return type).
+//   * Extract reads typed scalar values: ObjectProperty, StrProperty, NameProperty, BoolProperty,
+//     numeric properties (Int/Float/Double/Byte), and walks ArrayProperty<ObjectProperty/StrProperty/NameProperty>.
+//   * Extract caps per-class instance count to keep JSON bounded.
+//   * Every typed read is wrapped — if a property class is unknown or the read would be unsafe,
+//     the value is skipped (kind name still emitted).
 //
 // Outputs:
-//   windrose_plus_data/mapmat_discovery.json
-//   windrose_plus_data/mapmat_extract.json
-//   windrose_plus_data/export_mapmat_done       (one of: discovery|extract)
-//
-// Notes
-// -----
-// * Discovery is the "find me class names" phase. It lists every UObject class whose name contains an
-//   interest token (Foliage / POI / Terrain / Marker / Scenario / Subsystem / Quest / R5 / Island / Biome / Spawner)
-//   along with the count of live objects, a sample object's path, and the names+types of properties on its class.
-// * Extract pulls the actual data once we know which classes hold the FT<->POI mapping. Initial implementation
-//   dumps every Object reference on every R5TerrainSettings / FoliageType / MarkerModel / Spawner / Subsystem instance.
-//   That should expose the cross-references the engine actually maintains at runtime (e.g. a subsystem's TMap of
-//   FoliageType to POI map).
-// * String/Name property values are intentionally NOT read in v1.0. v2.0 will add typed reads for FString and
-//   FName once we know which property names matter. UObject pointers via ContainerPtrToValuePtr<UObject*> are safe.
+//   <gameroot>/windrose_plus_data/mapmat_discovery.json
+//   <gameroot>/windrose_plus_data/mapmat_extract.json
+//   <gameroot>/windrose_plus_data/export_mapmat_done
 
 #include <Mod/CppUserModBase.hpp>
 #include <DynamicOutput/DynamicOutput.hpp>
 #include <Unreal/UObjectGlobals.hpp>
 #include <Unreal/UObject.hpp>
 #include <Unreal/UClass.hpp>
+#include <Unreal/UFunction.hpp>
 #include <Unreal/CoreUObject/UObject/UnrealType.hpp>
+#include <Unreal/UnrealFlags.hpp>
+#include <Unreal/FString.hpp>
+#include <Unreal/NameTypes.hpp>
 #include <windows.h>
 #include <fstream>
 #include <vector>
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <string>
+#include <string_view>
+#include <utility>
 
 using namespace RC;
 using namespace RC::Unreal;
 
+// ---------- string helpers ----------
+
 static std::string wide_to_utf8(std::wstring_view w) {
     if (w.empty()) return {};
     int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    if (n <= 0) return {};
     std::string s(n, 0);
     WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
     return s;
@@ -78,30 +87,22 @@ static std::string obj_path(UObject* o) {
     return wide_to_utf8(o->GetPathName());
 }
 
-static std::filesystem::path resolve_data_dir() {
-    std::filesystem::path candidates[] = {
-        "../../../windrose_plus_data",
-        "windrose_plus_data",
-    };
-    for (auto& p : candidates) {
-        try { if (std::filesystem::exists(p)) return p; } catch (...) {}
-    }
-    try { std::filesystem::create_directories("windrose_plus_data"); } catch (...) {}
-    return "windrose_plus_data";
+// ---------- lifecycle / CDO safety ----------
+
+static bool is_skippable(UObject* o) {
+    if (!o) return true;
+    // CDO
+    if (o->HasAnyFlags(static_cast<EObjectFlags>(RF_ClassDefaultObject))) return true;
+    if (o->HasAnyFlags(static_cast<EObjectFlags>(RF_BeginDestroyed | RF_FinishDestroyed))) return true;
+    return false;
 }
 
+// ---------- interest matching ----------
+
 static const std::vector<std::wstring> kInterestTokens = {
-    STR("Foliage"),
-    STR("POI"),
-    STR("Terrain"),
-    STR("Marker"),
-    STR("Scenario"),
-    STR("Subsystem"),
-    STR("Quest"),
-    STR("R5"),
-    STR("Island"),
-    STR("Biome"),
-    STR("Spawner"),
+    STR("Foliage"), STR("POI"), STR("Terrain"), STR("Marker"), STR("Scenario"),
+    STR("Subsystem"), STR("Quest"), STR("R5"), STR("Island"), STR("Biome"),
+    STR("Spawner"), STR("Capture"), STR("WorldGenerator"), STR("MapController"),
 };
 
 static bool name_matches_interest(const std::wstring& n) {
@@ -116,16 +117,138 @@ static bool class_name_contains(UObject* o, const std::wstring& tok) {
     return c && c->GetName().find(tok) != std::wstring::npos;
 }
 
+// Suppress per-extract noisy classes (FoliageInstance has tens of thousands).
+static const std::vector<std::wstring> kExtractDeny = {
+    STR("FoliageInstance"),
+    STR("FoliageMesh"),
+    STR("HierarchicalInstancedStaticMesh"),
+};
+
+static bool class_in_extract_denylist(const std::wstring& cn) {
+    for (auto& tok : kExtractDeny) {
+        if (cn.find(tok) != std::wstring::npos) return true;
+    }
+    return false;
+}
+
+// ---------- output dir ----------
+
+static std::filesystem::path resolve_data_dir() {
+    std::filesystem::path candidates[] = {
+        "../../../windrose_plus_data",
+        "windrose_plus_data",
+    };
+    for (auto& p : candidates) {
+        try { if (std::filesystem::exists(p)) return p; } catch (...) {}
+    }
+    try { std::filesystem::create_directories("windrose_plus_data"); } catch (...) {}
+    return "windrose_plus_data";
+}
+
+// ---------- typed property reads ----------
+
+// Returns the FProperty class kind name (e.g. "ObjectProperty", "StrProperty", "ArrayProperty").
+static std::wstring prop_kind(FProperty* p) {
+    auto fc = p->GetClass();
+    return fc.GetFName().ToString();
+}
+
+// Read FString property safely. Returns utf8.
+static std::string read_fstring(FProperty* p, UObject* o, bool& ok) {
+    ok = false;
+    auto* fs = p->ContainerPtrToValuePtr<FString>(o);
+    if (!fs) return {};
+    const auto& arr = fs->GetCharArray();
+    int32 num = arr.Num();
+    if (num <= 1) { ok = true; return {}; }
+    const TCHAR* data = arr.GetData();
+    if (!data) return {};
+    // arr is null-terminated; len = num - 1
+    std::wstring_view sv(data, static_cast<size_t>(num - 1));
+    ok = true;
+    return wide_to_utf8(sv);
+}
+
+// Read FName property safely. Returns utf8.
+static std::string read_fname(FProperty* p, UObject* o, bool& ok) {
+    ok = false;
+    auto* fn = p->ContainerPtrToValuePtr<FName>(o);
+    if (!fn) return {};
+    auto wstr = fn->ToString();
+    ok = true;
+    return wide_to_utf8(wstr);
+}
+
+// Read raw UObject* from an FObjectProperty. Returns nullptr if null or unsafe.
+static UObject* read_object_ref(FProperty* p, UObject* o) {
+    auto** pp = p->ContainerPtrToValuePtr<UObject*>(o);
+    if (!pp) return nullptr;
+    return *pp;
+}
+
 // ---------- DISCOVERY PHASE ----------
 
 struct DiscoveryBucket {
     std::wstring class_name;
-    int count = 0;
-    UObject* sample = nullptr;
+    int total = 0;
+    int live = 0;
+    UObject* sampleLive = nullptr;
+    UObject* sampleAny = nullptr;
 };
 
+// Emit property metadata. Walks superchain.
+static void emit_class_props(std::ofstream& out, UClass* c) {
+    out << "[";
+    bool pfirst = true;
+    try {
+        for (FProperty* p : TFieldRange<FProperty>(c, EFieldIterationFlags::IncludeSuper)) {
+            if (!pfirst) out << ", ";
+            pfirst = false;
+            auto kind = prop_kind(p);
+            int32 offset = (int32)p->GetOffset_Internal();
+            int32 size = (int32)p->GetElementSize();
+            out << "{\"name\":\"" << json_escape(wide_to_utf8(p->GetName()))
+                << "\",\"type\":\"" << json_escape(wide_to_utf8(kind))
+                << "\",\"offset\":" << offset
+                << ",\"size\":" << size << "}";
+        }
+    } catch (...) {}
+    out << "]";
+}
+
+// Emit UFunction metadata for a class.
+static void emit_class_funcs(std::ofstream& out, UClass* c) {
+    out << "[";
+    bool ffirst = true;
+    try {
+        for (UFunction* f : TFieldRange<UFunction>(c, EFieldIterationFlags::IncludeSuper)) {
+            if (!ffirst) out << ", ";
+            ffirst = false;
+            uint32 flags = 0;
+            try { flags = f->GetFunctionFlags(); } catch (...) {}
+            out << "{\"name\":\"" << json_escape(wide_to_utf8(f->GetName()))
+                << "\",\"flags\":" << flags;
+            // Parameter list — names + kinds, in declaration order.
+            out << ",\"params\":[";
+            bool prfirst = true;
+            try {
+                for (FProperty* p : TFieldRange<FProperty>(f, EFieldIterationFlags::None)) {
+                    if (!prfirst) out << ", ";
+                    prfirst = false;
+                    auto kind = prop_kind(p);
+                    out << "{\"name\":\"" << json_escape(wide_to_utf8(p->GetName()))
+                        << "\",\"type\":\"" << json_escape(wide_to_utf8(kind))
+                        << "\"}";
+                }
+            } catch (...) {}
+            out << "]}";
+        }
+    } catch (...) {}
+    out << "]";
+}
+
 static void run_discovery(const std::filesystem::path& outDir) {
-    Output::send<LogLevel::Verbose>(STR("[MME] discovery start\n"));
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 discovery start\n"));
     std::map<std::wstring, DiscoveryBucket> buckets;
 
     UObjectGlobals::ForEachUObject([&](UObject* o, int32, int32) -> RC::LoopAction {
@@ -135,107 +258,220 @@ static void run_discovery(const std::filesystem::path& outDir) {
         if (!name_matches_interest(cn)) return RC::LoopAction::Continue;
         auto& b = buckets[cn];
         if (b.class_name.empty()) b.class_name = cn;
-        b.count++;
-        if (!b.sample) b.sample = o;
+        b.total++;
+        if (!b.sampleAny) b.sampleAny = o;
+        if (!is_skippable(o)) {
+            b.live++;
+            if (!b.sampleLive) b.sampleLive = o;
+        }
         return RC::LoopAction::Continue;
     });
 
     std::ofstream out(outDir / "mapmat_discovery.json");
-    out << "{\n  \"version\": 1,\n  \"classes\": [\n";
+    out << "{\n  \"version\": 2,\n  \"classes\": [\n";
     bool first = true;
     for (auto& [_, b] : buckets) {
         if (!first) out << ",\n";
         first = false;
+        UObject* s = b.sampleLive ? b.sampleLive : b.sampleAny;
+        UClass* sc = s ? s->GetClassPrivate() : nullptr;
         out << "    {\"class\":\"" << json_escape(wide_to_utf8(b.class_name))
-            << "\",\"count\":" << b.count;
-        if (b.sample) {
-            out << ",\"samplePath\":\"" << json_escape(obj_path(b.sample)) << "\"";
-            // Property metadata via TFieldRange
-            out << ",\"props\":[";
-            bool pfirst = true;
-            for (FProperty* p : TFieldRange<FProperty>(b.sample->GetClassPrivate(),
-                                                       EFieldIterationFlags::IncludeSuper | EFieldIterationFlags::IncludeDeprecated)) {
-                if (!pfirst) out << ", ";
-                pfirst = false;
-                auto fc = p->GetClass();
-                out << "{\"name\":\"" << json_escape(wide_to_utf8(p->GetName()))
-                    << "\",\"type\":\"" << json_escape(wide_to_utf8(fc.GetFName().ToString()))
-                    << "\",\"offset\":" << (int)p->GetOffset_Internal() << "}";
-            }
-            out << "]";
+            << "\",\"countTotal\":" << b.total
+            << ",\"countLive\":" << b.live;
+        if (s) {
+            out << ",\"samplePath\":\"" << json_escape(obj_path(s)) << "\"";
+            out << ",\"sampleIsCDO\":" << (b.sampleLive ? "false" : "true");
+        }
+        if (sc) {
+            out << ",\"props\":";  emit_class_props(out, sc);
+            out << ",\"funcs\":";  emit_class_funcs(out, sc);
         }
         out << "}";
     }
     out << "\n  ]\n}\n";
     out.close();
-    Output::send<LogLevel::Verbose>(STR("[MME] discovery wrote {} classes\n"), (int)buckets.size());
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 discovery wrote {} classes\n"), (int)buckets.size());
 }
 
 // ---------- EXTRACTION PHASE ----------
 
-// Walk every Object property on |o| and emit each non-null reference as JSON.
-static void emit_object_refs(std::ofstream& out, UObject* o, bool& first) {
-    auto* sc = o->GetClassPrivate();
-    if (!sc) return;
-    for (FProperty* p : TFieldRange<FProperty>(sc,
-                                               EFieldIterationFlags::IncludeSuper | EFieldIterationFlags::IncludeDeprecated)) {
-        auto fc = p->GetClass();
-        auto type_name = fc.GetFName().ToString();
-        if (type_name.find(STR("ObjectProperty")) == std::wstring::npos) continue;
-        // Read UObject** at the property's offset.
-        auto** pp = p->ContainerPtrToValuePtr<UObject*>(o);
-        if (!pp || !*pp) continue;
-        if (!first) out << ", ";
-        first = false;
-        out << "{\"prop\":\"" << json_escape(wide_to_utf8(p->GetName()))
-            << "\",\"path\":\"" << json_escape(obj_path(*pp))
-            << "\",\"class\":\"" << json_escape(class_name_str(*pp))
-            << "\"}";
+// Per-property emission:
+//   - ObjectProperty: object path + class
+//   - StrProperty: utf8 string
+//   - NameProperty: utf8 name
+//   - BoolProperty: not yet (UE4SS API differs)
+//   - NumericProperty subclasses: read raw bytes by offset+size
+//   - ArrayProperty<ObjectProperty/StrProperty/NameProperty>: walk via FScriptArrayHelper
+//   - Other: emit kind name only
+static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
+    auto kind = prop_kind(p);
+    auto kind_u8 = wide_to_utf8(kind);
+
+    out << "{\"name\":\"" << json_escape(wide_to_utf8(p->GetName()))
+        << "\",\"kind\":\"" << json_escape(kind_u8) << "\"";
+
+    if (kind == STR("ObjectProperty")) {
+        UObject* ref = read_object_ref(p, o);
+        if (ref) {
+            out << ",\"path\":\"" << json_escape(obj_path(ref)) << "\""
+                << ",\"refClass\":\"" << json_escape(class_name_str(ref)) << "\"";
+        } else {
+            out << ",\"path\":null";
+        }
     }
+    else if (kind == STR("StrProperty")) {
+        bool ok = false;
+        std::string s = read_fstring(p, o, ok);
+        if (ok) out << ",\"value\":\"" << json_escape(s) << "\"";
+    }
+    else if (kind == STR("NameProperty")) {
+        bool ok = false;
+        std::string s = read_fname(p, o, ok);
+        if (ok) out << ",\"value\":\"" << json_escape(s) << "\"";
+    }
+    else if (kind == STR("ArrayProperty")) {
+        try {
+            auto* ap = static_cast<FArrayProperty*>(p);
+            FProperty* inner = ap->GetInner();
+            std::wstring innerKind = inner ? prop_kind(inner) : STR("");
+            out << ",\"innerKind\":\"" << json_escape(wide_to_utf8(innerKind)) << "\"";
+            void* container = ap->ContainerPtrToValuePtr<void>(o);
+            if (!container) {
+                out << ",\"items\":null";
+            } else {
+                FScriptArrayHelper helper(ap, container);
+                int32 num = helper.Num();
+                out << ",\"count\":" << num;
+                // Cap walk to first 256 items per array (defensive).
+                int32 limit = num > 256 ? 256 : num;
+                if (innerKind == STR("ObjectProperty")) {
+                    out << ",\"items\":[";
+                    for (int32 i = 0; i < limit; i++) {
+                        if (i > 0) out << ", ";
+                        UObject** pp = (UObject**)helper.GetRawPtr(i);
+                        UObject* ref = pp ? *pp : nullptr;
+                        if (ref) {
+                            out << "{\"path\":\"" << json_escape(obj_path(ref))
+                                << "\",\"refClass\":\"" << json_escape(class_name_str(ref)) << "\"}";
+                        } else {
+                            out << "null";
+                        }
+                    }
+                    out << "]";
+                    if (num > limit) out << ",\"truncated\":true";
+                } else if (innerKind == STR("StrProperty")) {
+                    out << ",\"items\":[";
+                    for (int32 i = 0; i < limit; i++) {
+                        if (i > 0) out << ", ";
+                        FString* fs = (FString*)helper.GetRawPtr(i);
+                        if (!fs) { out << "null"; continue; }
+                        const auto& arr = fs->GetCharArray();
+                        int32 ln = arr.Num();
+                        if (ln <= 1) { out << "\"\""; continue; }
+                        std::wstring_view sv(arr.GetData(), static_cast<size_t>(ln - 1));
+                        out << "\"" << json_escape(wide_to_utf8(sv)) << "\"";
+                    }
+                    out << "]";
+                    if (num > limit) out << ",\"truncated\":true";
+                } else if (innerKind == STR("NameProperty")) {
+                    out << ",\"items\":[";
+                    for (int32 i = 0; i < limit; i++) {
+                        if (i > 0) out << ", ";
+                        FName* fn = (FName*)helper.GetRawPtr(i);
+                        if (!fn) { out << "null"; continue; }
+                        auto wstr = fn->ToString();
+                        out << "\"" << json_escape(wide_to_utf8(wstr)) << "\"";
+                    }
+                    out << "]";
+                    if (num > limit) out << ",\"truncated\":true";
+                } else {
+                    // Inner kind not yet handled — record count only.
+                }
+            }
+        } catch (...) {
+            out << ",\"err\":\"array_walk_failed\"";
+        }
+    }
+    else {
+        // Unhandled kind — emit metadata only (no value read).
+    }
+
+    out << "}";
 }
 
-static void emit_object_with_refs(std::ofstream& out, UObject* o, bool& first) {
+static void emit_object_full(std::ofstream& out, UObject* o, bool& first) {
+    if (is_skippable(o)) return;
+    auto* c = o->GetClassPrivate();
+    if (!c) return;
+
     if (!first) out << ",\n";
     first = false;
     out << "    {\"class\":\"" << json_escape(class_name_str(o))
-        << "\",\"path\":\"" << json_escape(obj_path(o)) << "\""
-        << ",\"refs\":[";
-    bool rfirst = true;
-    emit_object_refs(out, o, rfirst);
+        << "\",\"path\":\"" << json_escape(obj_path(o))
+        << "\",\"props\":[";
+    bool pfirst = true;
+    try {
+        for (FProperty* p : TFieldRange<FProperty>(c, EFieldIterationFlags::IncludeSuper)) {
+            auto kind = prop_kind(p);
+            // Only emit properties whose value we can read or whose ref is informative.
+            // For now: ObjectProperty, StrProperty, NameProperty, ArrayProperty.
+            if (kind == STR("ObjectProperty") ||
+                kind == STR("StrProperty") ||
+                kind == STR("NameProperty") ||
+                kind == STR("ArrayProperty")) {
+                if (!pfirst) out << ", ";
+                pfirst = false;
+                emit_property_value(out, p, o);
+            }
+        }
+    } catch (...) {}
     out << "]}";
 }
 
-static void run_extract(const std::filesystem::path& outDir) {
-    Output::send<LogLevel::Verbose>(STR("[MME] extract start\n"));
+struct ExtractBucket {
+    std::wstring class_name;
+    std::vector<UObject*> objs;
+};
 
-    std::vector<UObject*> terrains, foliages, markers, spawners, subsystems;
+// Per-class instance cap for the live walk.
+static constexpr int kPerClassLimit = 500;
+
+static void run_extract(const std::filesystem::path& outDir) {
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 extract start\n"));
+
+    // Bucket every live interest object by class.
+    std::map<std::wstring, ExtractBucket> buckets;
     UObjectGlobals::ForEachUObject([&](UObject* o, int32, int32) -> RC::LoopAction {
-        if      (class_name_contains(o, STR("TerrainSettings"))) terrains.push_back(o);
-        else if (class_name_contains(o, STR("FoliageType")))     foliages.push_back(o);
-        else if (class_name_contains(o, STR("MarkerModel")))     markers.push_back(o);
-        else if (class_name_contains(o, STR("Spawner")) || class_name_contains(o, STR("FoliageInstance"))) spawners.push_back(o);
-        else if (class_name_contains(o, STR("Subsystem")))       subsystems.push_back(o);
+        if (is_skippable(o)) return RC::LoopAction::Continue;
+        auto* c = o->GetClassPrivate();
+        if (!c) return RC::LoopAction::Continue;
+        auto cn = c->GetName();
+        if (!name_matches_interest(cn)) return RC::LoopAction::Continue;
+        if (class_in_extract_denylist(cn)) return RC::LoopAction::Continue;
+        auto& b = buckets[cn];
+        if (b.class_name.empty()) b.class_name = cn;
+        if ((int)b.objs.size() < kPerClassLimit) b.objs.push_back(o);
         return RC::LoopAction::Continue;
     });
 
     std::ofstream out(outDir / "mapmat_extract.json");
-    out << "{\n  \"version\": 1";
-    auto emit_section = [&](const char* name, std::vector<UObject*>& v) {
-        out << ",\n  \"" << name << "\": [\n";
-        bool f = true;
-        for (auto* o : v) emit_object_with_refs(out, o, f);
-        out << "\n  ]";
-    };
-    emit_section("terrainSettings", terrains);
-    emit_section("foliageTypes",    foliages);
-    emit_section("markerModels",    markers);
-    emit_section("foliageSpawners", spawners);
-    emit_section("subsystems",      subsystems);
-    out << "\n}\n";
+    out << "{\n  \"version\": 2,\n  \"perClassLimit\": " << kPerClassLimit << ",\n  \"classes\": [\n";
+    bool cfirst = true;
+    for (auto& [_, b] : buckets) {
+        if (!cfirst) out << ",\n";
+        cfirst = false;
+        out << "  {\"class\":\"" << json_escape(wide_to_utf8(b.class_name))
+            << "\",\"count\":" << (int)b.objs.size()
+            << ",\"instances\":[\n";
+        bool ifirst = true;
+        for (UObject* o : b.objs) {
+            emit_object_full(out, o, ifirst);
+        }
+        out << "\n  ]}";
+    }
+    out << "\n  ]\n}\n";
     out.close();
-
-    Output::send<LogLevel::Verbose>(STR("[MME] extract wrote terrains={} foliages={} markers={} spawners={} subsystems={}\n"),
-        (int)terrains.size(), (int)foliages.size(), (int)markers.size(), (int)spawners.size(), (int)subsystems.size());
+    Output::send<LogLevel::Verbose>(STR("[MME] v2.0 extract wrote {} classes\n"), (int)buckets.size());
 }
 
 // ---------- DRIVER ----------
@@ -244,12 +480,12 @@ class MapMaterializerExporter : public CppUserModBase {
 public:
     MapMaterializerExporter() : CppUserModBase() {
         ModName = STR("MapMaterializerExporter");
-        ModVersion = STR("1.0.0");
+        ModVersion = STR("2.0.0");
     }
     ~MapMaterializerExporter() override {}
 
     auto on_unreal_init() -> void override {
-        Output::send<LogLevel::Verbose>(STR("[MME] v1.0 init\n"));
+        Output::send<LogLevel::Verbose>(STR("[MME] v2.0 init\n"));
     }
 
     auto on_update() -> void override {
