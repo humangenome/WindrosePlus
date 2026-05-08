@@ -112,6 +112,17 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 .wpitems-filter{width:100%;background:rgba(20,24,32,.9);border:1px solid rgba(200,170,90,.25);color:#ede0cc;padding:5px 6px;font:10px monospace;border-radius:2px;outline:none}
 .wpitems-filter:focus{border-color:rgba(200,170,90,.6)}
 .wpitems-filter option{background:#141820;color:#ede0cc}
+.wpitems-native-filter{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+.wpitems-select{position:relative;min-width:0}
+.wpitems-select-btn{width:100%;height:29px;display:flex;align-items:center;gap:7px;background:rgba(20,24,32,.9);border:1px solid rgba(200,170,90,.25);color:#ede0cc;padding:4px 7px;font:10px monospace;border-radius:2px;outline:none;text-align:left;cursor:pointer}
+.wpitems-select-btn:after{content:"";margin-left:auto;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #ede0cc;opacity:.9}
+.wpitems-select.open .wpitems-select-btn,.wpitems-select-btn:focus{border-color:rgba(200,170,90,.62);box-shadow:0 0 0 2px rgba(201,169,89,.08)}
+.wpitems-select-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wpitems-select-menu{display:none;position:absolute;top:31px;left:0;right:0;max-height:230px;overflow:auto;background:#141820;border:1px solid rgba(200,170,90,.35);box-shadow:0 8px 20px rgba(0,0,0,.55);z-index:1120}
+.wpitems-select.open .wpitems-select-menu{display:block}
+.wpitems-select-option{width:100%;display:flex;align-items:center;gap:7px;background:transparent;border:0;color:#ede0cc;text-align:left;font:10px monospace;padding:6px 7px;cursor:pointer}
+.wpitems-select-option:hover,.wpitems-select-option.active{background:rgba(201,169,89,.16)}
+.wpitems-select-count{margin-left:auto;color:#8f775d;font-size:9px}
 #wpitems-list{flex:1;overflow-y:auto;overflow-x:hidden}
 #wpitems-list,#wpitems-detail{scrollbar-color:#6b552b rgba(14,18,24,.95);scrollbar-width:thin}
 #wpitems-list::-webkit-scrollbar,#wpitems-detail::-webkit-scrollbar{width:9px}
@@ -134,7 +145,15 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 .wpitem-rarity-rare{color:#7eb6ff}
 .wpitem-rarity-epic{color:#bf80ff}
 .wpitem-rarity-legendary{color:#e0a040}
-.wpfilter-icon{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-right:5px;border:1px solid rgba(200,170,90,.18);border-radius:3px;background:rgba(20,24,32,.72);color:#c9a959;font-size:10px;line-height:1;vertical-align:-3px}
+.wpfilter-icon{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-right:5px;border:1px solid rgba(200,170,90,.18);border-radius:3px;background:rgba(20,24,32,.72);background-size:contain;background-position:center;background-repeat:no-repeat;line-height:1;vertical-align:-4px;flex-shrink:0}
+.wpitems-select .wpfilter-icon{margin-right:0}
+.wpfilter-icon-img{background-color:rgba(10,14,20,.9)}
+.wpfilter-swatch{border-radius:50%;box-shadow:inset 0 0 0 3px rgba(10,14,20,.65)}
+.wpfilter-rarity-common{background:#b6b6b6}.wpfilter-rarity-uncommon{background:#42d66b}.wpfilter-rarity-rare{background:#4aa3ff}.wpfilter-rarity-epic{background:#a678ff}.wpfilter-rarity-legendary{background:#f3bd4d}
+.wpfilter-tier{position:relative;background:linear-gradient(180deg,rgba(201,169,89,.35),rgba(20,24,32,.85))}
+.wpfilter-tier:before,.wpfilter-tier:after{content:"";position:absolute;left:4px;right:4px;height:2px;background:#c9a959;border-radius:2px}
+.wpfilter-tier:before{top:5px}.wpfilter-tier:after{bottom:5px}
+.wpfilter-generic{background:radial-gradient(circle at center,#c9a959 0 38%,rgba(20,24,32,.72) 42%)}
 .wpfilter-group{color:#e0a040}.wpfilter-type{color:#7eb6ff}.wpfilter-rarity{color:#bf80ff}.wpfilter-tier{color:#bdaa92}.wpfilter-stack{color:#a4d96c}
 #wpitems-detail{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(14,18,24,.99);padding:14px;overflow-y:auto;display:none}
 #wpitems-detail.open{display:block}
@@ -210,10 +229,10 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
   <div id="wpitems-search-wrap">
     <input id="wpitems-search" type="search" placeholder="Search 840 items…" autocomplete="off">
     <div id="wpitems-filters">
-      <select id="wpitems-category" class="wpitems-filter" aria-label="Category"><option value="">All groups</option></select>
-      <select id="wpitems-type" class="wpitems-filter" aria-label="Type"><option value="">All types</option></select>
-      <select id="wpitems-rarity" class="wpitems-filter" aria-label="Rarity"><option value="">All rarities</option></select>
-      <select id="wpitems-tier" class="wpitems-filter" aria-label="Tier"><option value="">All tiers</option></select>
+      <select id="wpitems-category" class="wpitems-filter wpitems-native-filter" aria-label="Category"><option value="">All groups</option></select><div class="wpitems-select" data-select="wpitems-category"></div>
+      <select id="wpitems-type" class="wpitems-filter wpitems-native-filter" aria-label="Type"><option value="">All types</option></select><div class="wpitems-select" data-select="wpitems-type"></div>
+      <select id="wpitems-rarity" class="wpitems-filter wpitems-native-filter" aria-label="Rarity"><option value="">All rarities</option></select><div class="wpitems-select" data-select="wpitems-rarity"></div>
+      <select id="wpitems-tier" class="wpitems-filter wpitems-native-filter" aria-label="Tier"><option value="">All tiers</option></select><div class="wpitems-select" data-select="wpitems-tier"></div>
     </div>
   </div>
   <div id="wpitems-list"><div id="wpitems-loading">Click Items to load catalog…</div></div>
@@ -459,6 +478,54 @@ var STATIC_CATALOG='/catalog/v1';
     // short-circuit on a matching fingerprint when the previous render was empty,
     // otherwise the empty→hydrated transition is invisible until full reload.
     var lastWtHadData = false;
+    var currentLayoutNodes = [];
+    function pointInPoly(x, y, poly) {
+        var inside = false;
+        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            var xi = poly[i].x, yi = poly[i].y;
+            var xj = poly[j].x, yj = poly[j].y;
+            var intersects = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi) / ((yj - yi) || 1e-9)) + xi);
+            if (intersects) inside = !inside;
+        }
+        return inside;
+    }
+    function distToSegment(px, py, ax, ay, bx, by) {
+        var vx = bx - ax, vy = by - ay;
+        var wx = px - ax, wy = py - ay;
+        var c1 = vx * wx + vy * wy;
+        if (c1 <= 0) return Math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
+        var c2 = vx * vx + vy * vy;
+        if (c2 <= c1) return Math.sqrt((px - bx) * (px - bx) + (py - by) * (py - by));
+        var t = c1 / c2;
+        var qx = ax + t * vx, qy = ay + t * vy;
+        return Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+    }
+    function distToPoly(x, y, poly) {
+        var d = Infinity;
+        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            d = Math.min(d, distToSegment(x, y, poly[j].x, poly[j].y, poly[i].x, poly[i].y));
+        }
+        return d;
+    }
+    function layoutContextForPoint(x, y) {
+        var best = null;
+        (currentLayoutNodes || []).forEach(function(n) {
+            (n.polygons || []).forEach(function(poly) {
+                if (!Array.isArray(poly) || poly.length < 3) return;
+                var inside = pointInPoly(x, y, poly);
+                var dist = inside ? 0 : distToPoly(x, y, poly);
+                if (!best || inside || dist < best.dist) {
+                    best = {
+                        nodeId: n.nodeId || n.id || '',
+                        template: n.terrainTemplateId || n.primaryBiomeLabel || n.tag || 'island',
+                        inside: inside,
+                        dist: dist
+                    };
+                }
+            });
+        });
+        return best;
+    }
     var itemSourceLayer = L.layerGroup().addTo(map);
     var itemSourceCount = 0;
     var searchResultMarker = null;
@@ -1195,6 +1262,7 @@ var STATIC_CATALOG='/catalog/v1';
                 // Golden contract: manualPoiMarkers and polygons live under layout.nodes[*],
                 // not at rt-level. Polygons are bare arrays of {x, y} points.
                 var nodes = Array.isArray(layout.nodes) ? layout.nodes : (Array.isArray(rt.nodes) ? rt.nodes : []);
+                currentLayoutNodes = nodes;
                 nodes.forEach(function(n) {
                     // node debug dot
                     var nx = (typeof n.worldX === 'number') ? n.worldX : n.x;
@@ -1691,6 +1759,7 @@ var STATIC_CATALOG='/catalog/v1';
     var typeEl = document.getElementById('wpitems-type');
     var rarityEl = document.getElementById('wpitems-rarity');
     var tierEl = document.getElementById('wpitems-tier');
+    var filterEls = [categoryEl, typeEl, rarityEl, tierEl];
     var countEl = document.getElementById('wpitems-count');
     var detailEl = document.getElementById('wpitems-detail');
     var CDN = '/catalog/v1';
@@ -1777,36 +1846,45 @@ var STATIC_CATALOG='/catalog/v1';
     function itemType(it) {
         return (it && (it.sourceCategoryLabel || it.sourceCategory || it.category)) || 'Other';
     }
-    function filterGlyph(kind, label) {
-        var v = String(label || '').toLowerCase();
-        if (kind === 'rarity') {
-            if (v.indexOf('legend') >= 0) return 'L';
-            if (v.indexOf('epic') >= 0) return 'E';
-            if (v.indexOf('rare') >= 0) return 'R';
-            if (v.indexOf('uncommon') >= 0) return 'U';
-            return 'C';
-        }
-        if (kind === 'tier') return 'T';
-        if (v.indexOf('alchemy') >= 0 || v.indexOf('medicine') >= 0) return 'A';
-        if (v.indexOf('ammo') >= 0) return 'M';
-        if (v.indexOf('armor') >= 0) return 'A';
-        if (v.indexOf('backpack') >= 0) return 'B';
-        if (v.indexOf('food') >= 0) return 'F';
-        if (v.indexOf('weapon') >= 0 || v.indexOf('melee') >= 0 || v.indexOf('range') >= 0) return 'W';
-        if (v.indexOf('resource') >= 0 || v.indexOf('metal') >= 0) return 'R';
-        if (v.indexOf('ship') >= 0) return 'S';
-        if (v.indexOf('tool') >= 0) return 'T';
-        if (v.indexOf('ring') >= 0 || v.indexOf('necklace') >= 0) return 'J';
-        return '?';
-    }
-    function filterIconHtml(kind, label) {
-        return '<span class="wpfilter-icon wpfilter-' + escAttr(kind || 'group') + '">' + escHtml(filterGlyph(kind, label)) + '</span>';
-    }
     function iconUrl(it) {
         var iconRef = (it && (it.iconRef || it.icon)) || '';
         if (!iconRef) return '';
         var base = iconRef.split('/').pop().replace(/\.webp$/i, '');
         return CDN + '/icons/items/' + base + '.webp';
+    }
+    function filterMatchesItem(kind, value, label, it) {
+        if (!it || !isKnown(value)) return false;
+        value = String(value);
+        if (kind === 'group') return String(it.topLevelCategoryId || itemGroup(it)) === value || itemGroup(it) === label;
+        if (kind === 'type') return String(it.sourceCategory || itemType(it)) === value || itemType(it) === label;
+        if (kind === 'rarity') return itemRarity(it) === value;
+        if (kind === 'tier') return itemTier(it) === value;
+        return false;
+    }
+    function representativeIconUrl(kind, value, label) {
+        if (!items || !isKnown(value)) return '';
+        for (var i = 0; i < items.length; i++) {
+            if (filterMatchesItem(kind, value, label, items[i])) {
+                var url = iconUrl(items[i]);
+                if (url) return url;
+            }
+        }
+        return '';
+    }
+    function filterIconHtml(kind, label, value) {
+        kind = kind || 'group';
+        var url = representativeIconUrl(kind, isKnown(value) ? value : label, label);
+        if (url) {
+            return '<span class="wpfilter-icon wpfilter-icon-img wpfilter-' + escAttr(kind) + '" style="background-image:url(' + escAttr(url) + ')"></span>';
+        }
+        if (kind === 'rarity') {
+            var rarity = String(value || label || 'common').toLowerCase();
+            return '<span class="wpfilter-icon wpfilter-swatch wpfilter-rarity-' + escAttr(rarity) + '"></span>';
+        }
+        if (kind === 'tier') {
+            return '<span class="wpfilter-icon wpfilter-tier"></span>';
+        }
+        return '<span class="wpfilter-icon wpfilter-generic wpfilter-' + escAttr(kind) + '"></span>';
     }
     function normalizeCatalog(d) {
         if (Array.isArray(d)) return d;
@@ -1851,10 +1929,68 @@ var STATIC_CATALOG='/catalog/v1';
         var current = el.value || '';
         var html = '<option value="">' + escHtml(label) + '</option>';
         values.forEach(function(v) {
-            html += '<option value="' + escAttr(v.value) + '">' + escHtml(filterGlyph(kind, v.label) + '  ' + v.label + ' (' + v.count + ')') + '</option>';
+            html += '<option value="' + escAttr(v.value) + '">' + escHtml(v.label + ' (' + v.count + ')') + '</option>';
         });
         el.innerHTML = html;
         el.value = values.some(function(v) { return v.value === current; }) ? current : '';
+        el.__wpFilterLabel = label;
+        el.__wpFilterValues = values;
+        el.__wpFilterKind = kind;
+        renderCustomSelect(el);
+    }
+    function customSelectFor(el) {
+        return el ? document.querySelector('.wpitems-select[data-select="' + el.id + '"]') : null;
+    }
+    function closeCustomSelects(except) {
+        document.querySelectorAll('.wpitems-select.open').forEach(function(sel) {
+            if (sel !== except) sel.classList.remove('open');
+        });
+    }
+    function renderCustomSelect(el) {
+        var host = customSelectFor(el);
+        if (!host) return;
+        var values = el.__wpFilterValues || [];
+        var kind = el.__wpFilterKind || 'group';
+        var emptyLabel = el.__wpFilterLabel || 'All';
+        var selected = values.filter(function(v) { return v.value === el.value; })[0] || null;
+        var buttonLabel = selected ? selected.label : emptyLabel;
+        var buttonIcon = selected ? filterIconHtml(kind, selected.label, selected.value) : filterIconHtml(kind, emptyLabel, '');
+        var html = '<button type="button" class="wpitems-select-btn" aria-haspopup="listbox" aria-expanded="false">'
+            + buttonIcon + '<span class="wpitems-select-label">' + escHtml(buttonLabel) + '</span></button>';
+        html += '<div class="wpitems-select-menu" role="listbox">';
+        html += '<button type="button" class="wpitems-select-option' + (!el.value ? ' active' : '') + '" data-value="">'
+            + filterIconHtml(kind, emptyLabel, '') + '<span>' + escHtml(emptyLabel) + '</span></button>';
+        values.forEach(function(v) {
+            html += '<button type="button" class="wpitems-select-option' + (v.value === el.value ? ' active' : '') + '" data-value="' + escAttr(v.value) + '">'
+                + filterIconHtml(kind, v.label, v.value)
+                + '<span class="wpitems-select-label">' + escHtml(v.label) + '</span>'
+                + '<span class="wpitems-select-count">' + escHtml(v.count) + '</span>'
+                + '</button>';
+        });
+        html += '</div>';
+        host.innerHTML = html;
+        var btn = host.querySelector('.wpitems-select-btn');
+        var menu = host.querySelector('.wpitems-select-menu');
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var open = !host.classList.contains('open');
+            closeCustomSelects(host);
+            host.classList.toggle('open', open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        menu.addEventListener('click', function(e) {
+            var opt = e.target;
+            while (opt && opt !== menu && !(opt.classList && opt.classList.contains('wpitems-select-option'))) opt = opt.parentNode;
+            if (!opt || opt === menu) return;
+            el.value = opt.getAttribute('data-value') || '';
+            host.classList.remove('open');
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            renderCustomSelect(el);
+        });
+    }
+    function syncCustomSelects() {
+        filterEls.forEach(function(el) { if (el) renderCustomSelect(el); });
     }
     function optionCounts(list, valueFn, labelFn) {
         var by = {};
@@ -2164,11 +2300,11 @@ var STATIC_CATALOG='/catalog/v1';
             + '<div class="wpitems-hero-icon" style="' + (iconUrl_ ? 'background-image:url(' + escAttr(iconUrl_) + ')' : '') + '"></div>'
             + '<div><h3>' + escHtml(itemName(it)) + '</h3>'
             + '<div class="wpitems-chipline">'
-            + '<button type="button" class="wpitems-chip" data-filter="category" data-value="' + escAttr(it.topLevelCategoryId || itemGroup(it)) + '">' + filterIconHtml('group', itemGroup(it)) + escHtml(itemGroup(it)) + '</button>'
-            + '<button type="button" class="wpitems-chip" data-filter="type" data-value="' + escAttr(it.sourceCategory || itemType(it)) + '">' + filterIconHtml('type', itemType(it)) + escHtml(itemType(it)) + '</button>'
-            + '<button type="button" class="wpitems-chip wpitem-rarity-' + escAttr(itemRarity(it)) + '" data-filter="rarity" data-value="' + escAttr(itemRarity(it)) + '">' + filterIconHtml('rarity', itemRarityLabel(it)) + escHtml(itemRarityLabel(it)) + '</button>'
-            + (itemTier(it) ? '<button type="button" class="wpitems-chip" data-filter="tier" data-value="' + escAttr(itemTier(it)) + '">' + filterIconHtml('tier', itemTier(it)) + 'Tier ' + escHtml(itemTier(it)) + '</button>' : '')
-            + '<span class="wpitems-chip">' + filterIconHtml('stack', 'stack') + 'Stack ' + itemStack(it) + '</span>'
+            + '<button type="button" class="wpitems-chip" data-filter="category" data-value="' + escAttr(it.topLevelCategoryId || itemGroup(it)) + '">' + filterIconHtml('group', itemGroup(it), it.topLevelCategoryId || itemGroup(it)) + escHtml(itemGroup(it)) + '</button>'
+            + '<button type="button" class="wpitems-chip" data-filter="type" data-value="' + escAttr(it.sourceCategory || itemType(it)) + '">' + filterIconHtml('type', itemType(it), it.sourceCategory || itemType(it)) + escHtml(itemType(it)) + '</button>'
+            + '<button type="button" class="wpitems-chip wpitem-rarity-' + escAttr(itemRarity(it)) + '" data-filter="rarity" data-value="' + escAttr(itemRarity(it)) + '">' + filterIconHtml('rarity', itemRarityLabel(it), itemRarity(it)) + escHtml(itemRarityLabel(it)) + '</button>'
+            + (itemTier(it) ? '<button type="button" class="wpitems-chip" data-filter="tier" data-value="' + escAttr(itemTier(it)) + '">' + filterIconHtml('tier', itemTier(it), itemTier(it)) + 'Tier ' + escHtml(itemTier(it)) + '</button>' : '')
+            + '<span class="wpitems-chip">' + filterIconHtml('stack', 'stack', '') + 'Stack ' + itemStack(it) + '</span>'
             + '</div>'
             + '<div class="wpitems-id">' + escHtml(it.id) + copyButton(it.id) + '</div>'
             + '</div></div>';
@@ -2306,7 +2442,13 @@ var STATIC_CATALOG='/catalog/v1';
     });
     searchEl.addEventListener('input', applyFilter);
     [categoryEl, typeEl, rarityEl, tierEl].forEach(function(el) {
-        if (el) el.addEventListener('change', applyFilter);
+        if (el) el.addEventListener('change', function() {
+            renderCustomSelect(el);
+            applyFilter();
+        });
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target || !e.target.closest || !e.target.closest('.wpitems-select')) closeCustomSelects();
     });
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && panel.classList.contains('open')) setOpen(false);
@@ -2345,6 +2487,7 @@ var STATIC_CATALOG='/catalog/v1';
             if (filter === 'rarity' && rarityEl) rarityEl.value = value;
             if (filter === 'tier' && tierEl) tierEl.value = value;
             detailEl.classList.remove('open');
+            syncCustomSelects();
             applyFilter();
             return;
         }
