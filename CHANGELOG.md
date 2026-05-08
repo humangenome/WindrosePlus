@@ -9,6 +9,10 @@
 - **Linked Sea Chart item drops back to the map when the layout runtime is available.** The item detail view now uses `/api/layout/runtime` marker/manual-POI data to show mapped loot-source buttons and highlight matching POI locations directly on the Sea Chart.
 - **Added windrose.tools resource hint data to the Sea Chart.** The dashboard now ships 13 resource types and 63 terrain-template resource zones in `server/web/catalog/v1/resource_zones.json`; when `/api/layout/runtime` is available, the map layer control exposes those hints by resource type. They are terrain-zone hints from authored cluster/resource-node data, not live harvested-state markers.
 
+### Fixed
+
+- **Moved WindrosePlus PAK-builder state files out of `R5\Content\Paks`.** `.windroseplus_build.hash` and `.windroseplus_multiplier_history.json` now live under `windrose_plus_data\` instead of the game content tree, and the builder migrates/removes legacy copies on the next run. This avoids current Windrose builds trying to parse WindrosePlus dotfiles as game JSON assets during startup.
+
 ## [1.2.0] - 2026-05-06
 
 ### Added

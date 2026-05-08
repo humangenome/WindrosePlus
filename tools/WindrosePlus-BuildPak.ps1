@@ -15,7 +15,7 @@
 
     Both use the _P suffix so UE5 loads them as priority overrides over base assets.
 
-    Hash cache at R5\Content\Paks\.windroseplus_build.hash lets repeat invocations
+    Hash cache at windrose_plus_data\.windroseplus_build.hash lets repeat invocations
     exit quickly when inputs haven't changed.
 
     If a [Multipliers] section is found in windrose_plus.ini it is ignored with a
@@ -82,7 +82,39 @@ if (-not $ServerDir -or -not (Test-Path -LiteralPath (Join-Path $ServerDir "R5\C
 }
 
 $paksDir = Join-Path $ServerDir "R5\Content\Paks"
+$stateDir = Join-Path $ServerDir "windrose_plus_data"
 $binDir  = Join-Path $PSScriptRoot "bin"
+
+if (-not (Test-Path -LiteralPath $stateDir) -and -not $DryRun) {
+    New-Item -ItemType Directory -Force -LiteralPath $stateDir | Out-Null
+}
+
+# Older builds wrote state dotfiles into R5\Content\Paks. Current Windrose
+# scans JSON files under the content tree as assets, so keep WP+ state outside
+# that tree and migrate/remove legacy copies before a server start can see them.
+foreach ($legacyName in @(".windroseplus_build.hash", ".windroseplus_multiplier_history.json")) {
+    $legacyPath = Join-Path $paksDir $legacyName
+    if (-not (Test-Path -LiteralPath $legacyPath)) { continue }
+    $newPath = Join-Path $stateDir $legacyName
+    if ($DryRun) {
+        Write-Host "  [DRY RUN] Would migrate legacy state file: $legacyPath -> $newPath" -ForegroundColor DarkGray
+        continue
+    }
+    try {
+        if (-not (Test-Path -LiteralPath $stateDir)) {
+            New-Item -ItemType Directory -Force -LiteralPath $stateDir | Out-Null
+        }
+        if (Test-Path -LiteralPath $newPath) {
+            Remove-Item -LiteralPath $legacyPath -Force -ErrorAction Stop
+        } else {
+            Move-Item -LiteralPath $legacyPath -Destination $newPath -Force -ErrorAction Stop
+        }
+    } catch {
+        [Console]::Error.WriteLine("FAILED to migrate legacy WindrosePlus state file out of R5\Content\Paks: ${legacyPath}: $_")
+        [Console]::Error.WriteLine("Leaving this file in the Paks directory can make Windrose parse it as game content on startup.")
+        exit 4
+    }
+}
 
 $jsonPath = Join-Path $ServerDir "windrose_plus.json"
 if ($ConfigPath) {
@@ -156,7 +188,7 @@ if ($multipliers.ContainsKey("craft_cost")) {
 # History is written ATOMICALLY at the end of the script after the PAK build
 # succeeds — never on dry runs, never on failed builds.
 $ratchetKeys = @("xp")
-$historyFile = Join-Path $paksDir ".windroseplus_multiplier_history.json"
+$historyFile = Join-Path $stateDir ".windroseplus_multiplier_history.json"
 $allowDowngrade = "$env:WINDROSEPLUS_ALLOW_DOWNGRADE".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 function Save-MultiplierHistory {
@@ -448,7 +480,7 @@ function Get-BuildInputHash {
     return [System.BitConverter]::ToString($hash).Replace('-','').ToLower()
 }
 
-$hashFile = Join-Path $paksDir ".windroseplus_build.hash"
+$hashFile = Join-Path $stateDir ".windroseplus_build.hash"
 $currentHash = Get-BuildInputHash -ServerDir $ServerDir -ScriptRoot $PSScriptRoot -IniConfigPaths $iniConfigPaths
 
 $expectedPaks = @()
