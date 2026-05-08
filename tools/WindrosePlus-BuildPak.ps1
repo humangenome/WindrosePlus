@@ -173,6 +173,8 @@ if ($multipliers.ContainsKey("craft_cost")) {
     $null = $multipliers.Remove("craft_cost")
 }
 
+$disabledPakMultipliers = @("points_per_level", "stack_size", "weight", "inventory_size", "crop_speed")
+
 # Save-state corruption guard. The xp multiplier rebuilds DA_HeroLevels /
 # EntityProgression PAK overrides; once a character has logged in and saved
 # with xp > 1, lowering it shrinks the active reward curve under the persisted
@@ -378,7 +380,7 @@ $ctConfig = if ($iniConfig -and $iniConfig.CurveTables) { $iniConfig.CurveTables
 # Expected PAK set (derived from actual config state)
 $hasMultipliers = $false
 foreach ($prop in $multipliers.GetEnumerator()) {
-    if ($prop.Key -eq "points_per_level") { continue }
+    if ($disabledPakMultipliers -contains $prop.Key) { continue }
     if ($prop.Value -ne 1.0) { $hasMultipliers = $true; break }
 }
 # windrose_plus.harvest.ini alone (no non-default value in windrose_plus.json)
@@ -565,7 +567,8 @@ if (Test-Path -LiteralPath $bundledRetoc) {
 if ($hasMultipliers) {
     Write-Host ""
     Write-Host "=== Multipliers PAK ===" -ForegroundColor Yellow
-    $multStr = ($multipliers.GetEnumerator() | Where-Object { $_.Value -ne 1.0 } | ForEach-Object { "$($_.Key)=$($_.Value)x" }) -join ", "
+    $multStr = ($multipliers.GetEnumerator() | Where-Object { $_.Value -ne 1.0 -and $disabledPakMultipliers -notcontains $_.Key } | ForEach-Object { "$($_.Key)=$($_.Value)x" }) -join ", "
+    if (-not $multStr) { $multStr = "windrose_plus.harvest.ini overrides" }
     Write-Host "  Active: $multStr"
 
     if ($DryRun) {

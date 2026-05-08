@@ -1208,13 +1208,14 @@ try {
                         }
 
                         # Does the current config *require* a Multipliers PAK?
+                        $disabledPakMultipliers = @("points_per_level", "stack_size", "weight", "inventory_size", "crop_speed")
                         $expectMultPak = $false
                         if ($status.json_present) {
                             try {
                                 $j = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
                                 if ($j.multipliers) {
                                     foreach ($p in $j.multipliers.PSObject.Properties) {
-                                        if ($p.Name -eq "points_per_level") { continue }
+                                        if ($disabledPakMultipliers -contains $p.Name) { continue }
                                         if ([double]$p.Value -ne 1.0) { $expectMultPak = $true; break }
                                     }
                                 }

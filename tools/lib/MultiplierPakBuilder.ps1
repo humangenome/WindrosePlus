@@ -295,16 +295,28 @@ function Build-MultiplierPak {
         return $result
     }
 
-    $loot = if ($Config.ContainsKey("loot")) { [double]$Config.loot } else { 1.0 }
-    $xp = if ($Config.ContainsKey("xp")) { [double]$Config.xp } else { 1.0 }
-    $stackSize = if ($Config.ContainsKey("stack_size")) { [double]$Config.stack_size } else { 1.0 }
-    $craftEfficiency = if ($Config.ContainsKey("craft_efficiency")) { [double]$Config.craft_efficiency } else { 1.0 }
-    $cropSpeed = if ($Config.ContainsKey("crop_speed")) { [double]$Config.crop_speed } else { 1.0 }
-    $weight = if ($Config.ContainsKey("weight")) { [double]$Config.weight } else { 1.0 }
-    $invSize = if ($Config.ContainsKey("inventory_size")) { [double]$Config.inventory_size } else { 1.0 }
-    $pointsPerLvl = if ($Config.ContainsKey("points_per_level")) { [double]$Config.points_per_level } else { 1.0 }
-    $cookSpeed = if ($Config.ContainsKey("cooking_speed")) { [double]$Config.cooking_speed } else { 1.0 }
-    $harvestYield = if ($Config.ContainsKey("harvest_yield")) { [double]$Config.harvest_yield } else { 1.0 }
+    function Get-EffectiveMultiplier {
+        param(
+            [string]$Name,
+            [hashtable]$Values,
+            [string[]]$DisabledKeys
+        )
+
+        if ($DisabledKeys -contains $Name) { return 1.0 }
+        if ($Values.ContainsKey($Name)) { return [double]$Values[$Name] }
+        return 1.0
+    }
+
+    $loot = Get-EffectiveMultiplier -Name "loot" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $xp = Get-EffectiveMultiplier -Name "xp" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $stackSize = Get-EffectiveMultiplier -Name "stack_size" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $craftEfficiency = Get-EffectiveMultiplier -Name "craft_efficiency" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $cropSpeed = Get-EffectiveMultiplier -Name "crop_speed" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $weight = Get-EffectiveMultiplier -Name "weight" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $invSize = Get-EffectiveMultiplier -Name "inventory_size" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $pointsPerLvl = Get-EffectiveMultiplier -Name "points_per_level" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $cookSpeed = Get-EffectiveMultiplier -Name "cooking_speed" -Values $Config -DisabledKeys $disabledPakMultipliers
+    $harvestYield = Get-EffectiveMultiplier -Name "harvest_yield" -Values $Config -DisabledKeys $disabledPakMultipliers
 
     # Clamp to prevent div-by-zero / negative-duration math when the builder is
     # invoked standalone (Lua clamps, but the PS1 also runs from -BuildPak directly).
@@ -326,7 +338,7 @@ function Build-MultiplierPak {
     $perResourceActive = $false
     foreach ($v in $perResource.Values) { if ($v -ne 1.0) { $perResourceActive = $true; break } }
 
-    $allDefault = ($loot -eq 1.0 -and $xp -eq 1.0 -and $stackSize -eq 1.0 -and $craftEfficiency -eq 1.0 -and $cropSpeed -eq 1.0 -and $weight -eq 1.0 -and $invSize -eq 1.0 -and $pointsPerLvl -eq 1.0 -and $cookSpeed -eq 1.0 -and $harvestYield -eq 1.0 -and -not $perResourceActive)
+    $allDefault = ($effectiveNonDefaultMultipliers -eq 0 -and -not $perResourceActive)
     if ($allDefault) {
         $result.Error = "All multipliers are 1.0 (default). Nothing to build."
         return $result
@@ -501,7 +513,7 @@ function Build-MultiplierPak {
         # Keep disabled until a validator-aware patch path exists AND a character sanitizer
         # can safely restore save files after a rollback.
         if ($invSize -ne 1.0) {
-            Write-Host "  Skipping inventory_size (disabled due to engine validator crash + character-save time-bomb)"
+            Write-Host "  Ignoring inventory_size (disabled/no-op due to engine validator crash + character-save time-bomb)"
         }
 
         # points_per_level patching intentionally disabled.

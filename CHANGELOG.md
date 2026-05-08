@@ -14,6 +14,7 @@
 
 - **Fixed multiplier-history persistence on Linux/macOS PowerShell hosts.** The builder now uses the Windows-only `File.Replace` path only on Windows and uses a forced move on non-Windows hosts, preventing Linux Docker servers from boot-looping when the ratchet history file already exists.
 - **Moved WindrosePlus PAK-builder state files out of `R5\Content\Paks`.** `.windroseplus_build.hash` and `.windroseplus_multiplier_history.json` now live under `windrose_plus_data\` instead of the game content tree, and the builder migrates/removes legacy copies on the next run. This avoids current Windrose builds trying to parse WindrosePlus dotfiles as game JSON assets during startup.
+- **Disabled compatibility multipliers no longer trigger generated multiplier PAK output.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are now ignored consistently in the builder and dashboard PAK-status check instead of being counted as active config.
 
 ## [1.2.0] - 2026-05-06
 
@@ -127,7 +128,7 @@
 
 ### Fixed
 
-- **Query/LiveMap no longer get stuck in degraded mode when UE4SS exposes `ExecuteInGameThread` but the selected dispatcher hook is disabled.** Windrose-safe UE4SS settings keep both EngineTick and ProcessEvent hooks off, which meant `ExecuteInGameThread` accepted queued callbacks that never ran. Windrose+ now detects that inert configuration at startup and uses the existing direct writer fallback instead of permanently reporting `execute_in_game_thread_starved`, restoring dashboard player counts, active/idle mode, and Sea Chart updates on SurvivalServers-style installs.
+- **Query/LiveMap no longer get stuck in degraded mode when UE4SS exposes `ExecuteInGameThread` but the selected dispatcher hook is disabled.** Windrose-safe UE4SS settings keep both EngineTick and ProcessEvent hooks off, which meant `ExecuteInGameThread` accepted queued callbacks that never ran. Windrose+ now detects that inert configuration at startup and uses the existing direct writer fallback instead of permanently reporting `execute_in_game_thread_starved`, restoring dashboard player counts, active/idle mode, and Sea Chart updates on installs using those safe UE4SS hook settings.
 
 ## [1.1.12] - 2026-04-30
 
@@ -202,7 +203,7 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Fixed
 
-- **`DefaultExecuteInGameThreadMethod = ProcessEvent` (set in v1.1.4) prevented unrelated UE4SS mods from loading.** With `HookUObjectProcessEvent = 0` — required to keep UE4SS' `ProcessEvent` detour out of the Windrose Shipping binary — the ProcessEvent dispatch path is also unavailable, and any UE4SS mod that calls `ExecuteInGameThread` without its own fallback (observed: `BPModLoaderMod`, `ConsoleEnablerMod`) errors out at script load. WindrosePlus survived because of the runtime fallback added in the same release (`_hasExecuteInGameThread = false` flips to direct dispatch on first failure), but customers running stacked UE4SS mods lost them. Reverted `DefaultExecuteInGameThreadMethod` to `EngineTick`. WindrosePlus's pcall-wrapped dispatcher catches the `ExecuteInGameThread` unavailable case the same way it caught it under ProcessEvent, so the v1.1.4 crash fixes from #41 still apply. Caught by the v1.1.4 → v1.1.5 smoke test before the SurvivalServers-side pin was bumped.
+- **`DefaultExecuteInGameThreadMethod = ProcessEvent` (set in v1.1.4) prevented unrelated UE4SS mods from loading.** With `HookUObjectProcessEvent = 0` — required to keep UE4SS' `ProcessEvent` detour out of the Windrose Shipping binary — the ProcessEvent dispatch path is also unavailable, and any UE4SS mod that calls `ExecuteInGameThread` without its own fallback (observed: `BPModLoaderMod`, `ConsoleEnablerMod`) errors out at script load. WindrosePlus survived because of the runtime fallback added in the same release (`_hasExecuteInGameThread = false` flips to direct dispatch on first failure), but customers running stacked UE4SS mods lost them. Reverted `DefaultExecuteInGameThreadMethod` to `EngineTick`. WindrosePlus's pcall-wrapped dispatcher catches the `ExecuteInGameThread` unavailable case the same way it caught it under ProcessEvent, so the v1.1.4 crash fixes from #41 still apply. Caught by the v1.1.4 → v1.1.5 smoke test before the hosted deployment pin was bumped.
 
 ## [1.1.4] - 2026-04-28
 
@@ -367,7 +368,7 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Fixed
 
-- **Made the idle CPU limiter boot and rejoin safe ([#23](https://github.com/HumanGenome/WindrosePlus/issues/23)).** The opt-in limiter now waits for real Windrose server readiness (`Login finished successfully` plus `Initialized as an R5P2P listen server`) and for fresh post-boot `server_status.json` writes before applying the idle CPU cap. It also watches the dedicated-server log for early P2P/ICE connection activity and lifts the cap immediately when a player starts connecting, instead of waiting for `player_count` to flip. On the tested Survival Servers admin host this preserved ~`2%` idle CPU with no join/login kick on capped idle rejoin.
+- **Made the idle CPU limiter boot and rejoin safe ([#23](https://github.com/HumanGenome/WindrosePlus/issues/23)).** The opt-in limiter now waits for real Windrose server readiness (`Login finished successfully` plus `Initialized as an R5P2P listen server`) and for fresh post-boot `server_status.json` writes before applying the idle CPU cap. It also watches the dedicated-server log for early P2P/ICE connection activity and lifts the cap immediately when a player starts connecting, instead of waiting for `player_count` to flip. On the tested Windows dedicated host this preserved ~`2%` idle CPU with no join/login kick on capped idle rejoin.
 
 ## [1.0.9] - 2026-04-23
 

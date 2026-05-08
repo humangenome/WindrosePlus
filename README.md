@@ -14,8 +14,6 @@
 
 Everything your Windrose dedicated server is missing. Multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
 
-> **Recommended Hosting** - Get a Windrose server with Windrose+ pre-installed at [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)
-
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
 ---
@@ -182,7 +180,7 @@ Safe mode only fixes no-spend progression drift. If the save has spent-point dri
 
 ## Installation
 
-You need a Windrose Dedicated Server already set up on Windows. If you don't have one yet, you can [rent a server from SurvivalServers](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) (Windrose+ comes pre-installed) or [set one up yourself](https://www.survivalservers.com/wiki/index.php?title=How_to_Create_a_Windrose_Server_Guide).
+You need a Windrose Dedicated Server already set up on Windows. If you do not have one yet, install the official Windrose Dedicated Server tool first, then extract Windrose+ into that server folder.
 
 ### Step 1: Download and Install
 
@@ -374,4 +372,3 @@ MIT. See [LICENSE](LICENSE).
 
 - [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) - Unreal Engine scripting and modding framework
 - [rxi/json.lua](https://github.com/rxi/json.lua) - Pure Lua JSON library (MIT)
-- Server hosting by [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)
