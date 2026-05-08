@@ -473,6 +473,7 @@ var STATIC_CATALOG='/catalog/v1';
     var questStateLayer = L.layerGroup().addTo(map);
     var overlayStatus = 'loading';   // 'loading' | 'unavailable' | 'empty' | 'data'
     var overlayCounts = { islandStates: 0, chests: 0, buildings: 0, staticActors: 0, scenarioSaves: 0, fog: 0, savePlayers: 0, questFlags: 0 };
+    var overlayLayoutWaitAttempts = 0;
     var lastWtFingerprint = '';
     // Track whether the last successful render actually carried data. An empty
     // world (server up but no player has hydrated R5MarkersWorldSubsystem.Models[]
@@ -1516,6 +1517,16 @@ var STATIC_CATALOG='/catalog/v1';
                     rebuildLayerControl();
                     return;
                 }
+                var needsLayoutContext = (d.players || []).some(function(p) {
+                    var last = (p.last_position || {}).world_location || {};
+                    return typeof last.X === 'number' && typeof last.Y === 'number';
+                });
+                if (needsLayoutContext && (!currentLayoutNodes || currentLayoutNodes.length === 0) && overlayLayoutWaitAttempts < 8) {
+                    overlayLayoutWaitAttempts++;
+                    window.setTimeout(foverlay, 750);
+                    return;
+                }
+                overlayLayoutWaitAttempts = 0;
                 clearOverlay();
                 (d.islands || []).forEach(function(isle) {
                     var anchor = (isle.terrains && isle.terrains[0] && isle.terrains[0].world_location) || null;
