@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- **Fixed multiplier-history persistence on Linux/macOS PowerShell hosts.** The builder now uses the Windows-only `File.Replace` path only on Windows and uses a forced move on non-Windows hosts, preventing Linux Docker servers from boot-looping when the ratchet history file already exists.
 - **Moved WindrosePlus PAK-builder state files out of `R5\Content\Paks`.** `.windroseplus_build.hash` and `.windroseplus_multiplier_history.json` now live under `windrose_plus_data\` instead of the game content tree, and the builder migrates/removes legacy copies on the next run. This avoids current Windrose builds trying to parse WindrosePlus dotfiles as game JSON assets during startup.
 
 ## [1.2.0] - 2026-05-06

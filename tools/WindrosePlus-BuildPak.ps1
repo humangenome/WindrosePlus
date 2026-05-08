@@ -215,19 +215,25 @@ function Save-MultiplierHistory {
     $tmp = "$Path.tmp"
     $bak = "$Path.bak"
     $json = $History | ConvertTo-Json -Depth 2
+    $isWindowsPlatform = $false
+    try {
+        $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
+    } catch {
+        $isWindowsPlatform = ($env:OS -eq "Windows_NT")
+    }
 
     try {
         Set-Content -LiteralPath $tmp -Value $json -Encoding UTF8
 
         if (Test-Path -LiteralPath $Path) {
-            try {
-                [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
+            if ($isWindowsPlatform) {
+                [System.IO.File]::Replace($tmp, $Path, $bak, $true) | Out-Null
                 Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
-            } catch {
-                throw
+            } else {
+                Move-Item -LiteralPath $tmp -Destination $Path -Force
             }
         } else {
-            [System.IO.File]::Move($tmp, $Path)
+            Move-Item -LiteralPath $tmp -Destination $Path -Force
         }
     } catch {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
