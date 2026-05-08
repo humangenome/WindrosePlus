@@ -221,8 +221,12 @@ function Save-MultiplierHistory {
 
         if (Test-Path -LiteralPath $Path) {
             try {
-                [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
-                Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+                if ($IsLinux -or $IsMacOS) {
+                    Move-Item -LiteralPath $tmp -Destination $Path -Force
+                } else {
+                    [System.IO.File]::Replace($tmp, $Path, $null, $true) | Out-Null
+                    Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue
+                }
             } catch {
                 throw
             }
