@@ -31,6 +31,7 @@
             z-index: 1000;
         }
         /* Items catalog overlay */
+        .leaflet-top.leaflet-right { top: 44px; }
         #wpitems-btn {
             position: absolute; top: 12px; right: 12px; z-index: 1100;
             background: rgba(20, 35, 65, 0.92); color: #c9a959;
@@ -41,7 +42,8 @@
         }
         #wpitems-btn:hover { background: rgba(201, 169, 89, 0.18); color: #ede0cc; }
         #wpitems-panel {
-            position: absolute; top: 0; right: -380px; bottom: 0; width: 360px;
+            position: absolute; top: 0; right: -410px; bottom: 0; width: 390px;
+            max-width: 86vw;
             background: rgba(15, 22, 42, 0.96);
             border-left: 1px solid rgba(201, 169, 89, 0.3);
             z-index: 1200; transition: right 0.18s ease;
@@ -60,18 +62,36 @@
         }
         #wpitems-count { color: #8f775d; font-size: 10px; }
         #wpitems-close {
-            background: transparent; border: 0; color: #c9a959;
-            cursor: pointer; font: 16px monospace; padding: 0 4px;
+            background: rgba(20, 35, 65, 0.92); border: 1px solid rgba(201, 169, 89, 0.45);
+            color: #c9a959; cursor: pointer; font: 14px monospace; padding: 2px 7px;
+            border-radius: 2px;
+        }
+        #wpitems-search-wrap {
+            padding: 8px 14px; border-bottom: 1px solid rgba(201, 169, 89, 0.12);
         }
         #wpitems-search {
-            margin: 8px 14px; padding: 7px 10px;
+            width: 100%; padding: 7px 10px;
             background: rgba(8, 14, 28, 0.85);
             border: 1px solid rgba(201, 169, 89, 0.22);
             color: #ede0cc; font: 11px 'IBM Plex Mono', monospace;
             border-radius: 2px;
         }
         #wpitems-search:focus { outline: none; border-color: #c9a959; }
+        #wpitems-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+        .wpitems-filter {
+            width: 100%; background: rgba(8, 14, 28, 0.85);
+            border: 1px solid rgba(201, 169, 89, 0.22);
+            color: #ede0cc; padding: 5px 6px;
+            font: 10px 'IBM Plex Mono', monospace; border-radius: 2px;
+        }
+        .wpitems-filter option { background: #0f162a; color: #ede0cc; }
         #wpitems-list { flex: 1; overflow-y: auto; padding: 0 14px 14px; }
+        #wpitems-list, #wpitems-detail { scrollbar-color: #6b552b rgba(15, 22, 42, 0.96); scrollbar-width: thin; }
+        #wpitems-list::-webkit-scrollbar, #wpitems-detail::-webkit-scrollbar { width: 9px; }
+        #wpitems-list::-webkit-scrollbar-track, #wpitems-detail::-webkit-scrollbar-track { background: rgba(15, 22, 42, 0.96); }
+        #wpitems-list::-webkit-scrollbar-thumb, #wpitems-detail::-webkit-scrollbar-thumb {
+            background: #6b552b; border: 2px solid rgba(15, 22, 42, 0.96); border-radius: 8px;
+        }
         #wpitems-loading, #wpitems-empty {
             color: #8f775d; font-size: 11px; padding: 18px 0; text-align: center;
         }
@@ -94,11 +114,11 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .wpitem-meta { font-size: 10px; color: #8f775d; margin-top: 2px; }
-        .wpitem-rarity-Common      { color: #b8b8b8; }
-        .wpitem-rarity-Uncommon    { color: #5dba6f; }
-        .wpitem-rarity-Rare        { color: #5d99cf; }
-        .wpitem-rarity-Epic        { color: #b478d6; }
-        .wpitem-rarity-Legendary   { color: #d6a04a; }
+        .wpitem-rarity-common, .wpitem-rarity-Common { color: #b8b8b8; }
+        .wpitem-rarity-uncommon, .wpitem-rarity-Uncommon { color: #5dba6f; }
+        .wpitem-rarity-rare, .wpitem-rarity-Rare { color: #5d99cf; }
+        .wpitem-rarity-epic, .wpitem-rarity-Epic { color: #b478d6; }
+        .wpitem-rarity-legendary, .wpitem-rarity-Legendary { color: #d6a04a; }
         #wpitems-detail {
             position: absolute; top: 0; right: 0; bottom: 0; width: 100%;
             background: rgba(15, 22, 42, 0.98);
@@ -112,7 +132,23 @@
         }
         #wpitems-detail.open { visibility: visible; opacity: 1; }
         #wpitems-detail h3 { font-size: 13px; color: #c9a959; margin-bottom: 4px; }
-        #wpitems-detail h4 { color: #c9a959; }
+        #wpitems-detail h4 { color: #c9a959; font-size: 11px; margin: 14px 0 6px; clear: both; }
+        .wpitems-detail-row {
+            display: flex; justify-content: space-between; gap: 10px;
+            font-size: 10px; color: #bdaa92;
+            border-bottom: 1px solid rgba(201, 169, 89, 0.06); padding: 4px 0;
+        }
+        .wpitems-detail-row span:first-child { color: #8f775d; }
+        .wpitems-chipline { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; clear: both; }
+        .wpitems-chip {
+            border: 1px solid rgba(201, 169, 89, 0.2);
+            background: rgba(8, 14, 28, 0.7);
+            color: #bdaa92; border-radius: 2px; padding: 3px 5px; font-size: 10px;
+        }
+        @media (max-width: 520px) {
+            #wpitems-panel { width: 100%; max-width: 100%; right: -100%; }
+            #wpitems-filters { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -124,7 +160,15 @@
             <h3>Items <span id="wpitems-count"></span></h3>
             <button type="button" id="wpitems-close" aria-label="Close">×</button>
         </div>
-        <input type="search" id="wpitems-search" placeholder="Search by name, id, category, rarity…" autocomplete="off">
+        <div id="wpitems-search-wrap">
+            <input type="search" id="wpitems-search" placeholder="Search 840 items…" autocomplete="off">
+            <div id="wpitems-filters">
+                <select id="wpitems-category" class="wpitems-filter" aria-label="Category"><option value="">All groups</option></select>
+                <select id="wpitems-type" class="wpitems-filter" aria-label="Type"><option value="">All types</option></select>
+                <select id="wpitems-rarity" class="wpitems-filter" aria-label="Rarity"><option value="">All rarities</option></select>
+                <select id="wpitems-tier" class="wpitems-filter" aria-label="Tier"><option value="">All tiers</option></select>
+            </div>
+        </div>
         <div id="wpitems-list"><div id="wpitems-loading">Click Items to load catalog…</div></div>
         <div id="wpitems-detail"></div>
     </div>
@@ -324,11 +368,22 @@
             var closeBtn = document.getElementById('wpitems-close');
             var listEl = document.getElementById('wpitems-list');
             var searchEl = document.getElementById('wpitems-search');
+            var categoryEl = document.getElementById('wpitems-category');
+            var typeEl = document.getElementById('wpitems-type');
+            var rarityEl = document.getElementById('wpitems-rarity');
+            var tierEl = document.getElementById('wpitems-tier');
             var countEl = document.getElementById('wpitems-count');
             var detailEl = document.getElementById('wpitems-detail');
             var CATALOG = '/catalog/v1';
             var items = null;
+            var filtered = [];
             var loaded = false;
+            var CYRILLIC = /[\u0400-\u04FF]/;
+            var NAME_OVERRIDES = {
+                'did-misc-musket-butt-t01': 'Musket Stock',
+                'did-misc-musket-lock-t01': 'Musket Lock',
+                'did-misc-musket-barrel-t01': 'Musket Barrel'
+            };
 
             function escAttr(s) {
                 return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -340,13 +395,108 @@
                 d.appendChild(document.createTextNode(s == null ? '' : String(s)));
                 return d.innerHTML;
             }
-            function iconUrl(iconRef) {
+            function hasCyrillic(s) {
+                return CYRILLIC.test(String(s || ''));
+            }
+            function isKnown(v) {
+                return v !== undefined && v !== null && v !== '' && v !== '$undefined';
+            }
+            function titleFromId(id) {
+                var s = String(id || '').replace(/^DA_/, '').replace(/\.[^.]+$/, '').replace(/_/g, '-').toLowerCase();
+                var parts = s.split('-').filter(Boolean).filter(function(p) {
+                    return !/^(aid|cid|did|eid|da|item|items|new)$/.test(p);
+                });
+                if (!parts.length) return id || 'Item';
+                return parts.map(function(p) {
+                    if (/^t\d+$/.test(p)) return p.toUpperCase();
+                    if (p === 'cj') return 'CJ';
+                    if (p === 'npc') return 'NPC';
+                    if (p === 'oic') return 'OIC';
+                    return p.charAt(0).toUpperCase() + p.slice(1);
+                }).join(' ');
+            }
+            function cleanText(s) {
+                if (!isKnown(s)) return '';
+                s = String(s).replace(/\\r\\n/g, '\n').replace(/\r\n/g, '\n').trim();
+                return hasCyrillic(s) ? '' : s;
+            }
+            function itemName(it) {
+                if (!it) return 'Item';
+                if (NAME_OVERRIDES[it.id]) return NAME_OVERRIDES[it.id];
+                if (it.name && !hasCyrillic(it.name)) return it.name;
+                if (it.tooltip && it.tooltip.name && !hasCyrillic(it.tooltip.name)) return it.tooltip.name;
+                return titleFromId(it.id || it.sourceId || it.iconRef || it.icon);
+            }
+            function itemDescription(it) {
+                return cleanText((it && it.description) || (it && it.tooltip && it.tooltip.description) || '');
+            }
+            function itemRarity(it) {
+                return String((it && it.rarity) || '').toLowerCase();
+            }
+            function itemRarityLabel(it) {
+                var r = itemRarity(it);
+                return r ? (r.charAt(0).toUpperCase() + r.slice(1)) : '-';
+            }
+            function itemStack(it) {
+                return (it && (it.stackSize || it.stack)) || 1;
+            }
+            function itemTier(it) {
+                return isKnown(it && it.tier) ? String(it.tier) : '';
+            }
+            function itemGroup(it) {
+                return (it && (it.topLevelCategoryLabel || it.topLevelCategoryId)) || 'Other';
+            }
+            function itemType(it) {
+                return (it && (it.sourceCategoryLabel || it.sourceCategory || it.category)) || 'Other';
+            }
+            function iconUrl(it) {
+                var iconRef = (it && (it.iconRef || it.icon)) || '';
                 if (!iconRef) return '';
-                var base = iconRef.split('/').pop();
-                // Reject anything that isn't a plain asset basename so a future
-                // catalog with hostile iconRef can't break out of url('...').
+                var base = iconRef.split('/').pop().replace(/\.webp$/i, '');
                 if (!/^[A-Za-z0-9_]+$/.test(base)) return '';
                 return CATALOG + '/icons/items/' + base + '.webp';
+            }
+            function normalizeCatalog(d) {
+                if (Array.isArray(d)) return d;
+                if (d && typeof d === 'object') return Object.keys(d).map(function(k) { return d[k]; });
+                return [];
+            }
+            function setOpen(open) {
+                panel.classList.toggle('open', !!open);
+                btn.textContent = open ? 'Close' : 'Items';
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (!open) detailEl.classList.remove('open');
+            }
+            function fillSelect(el, label, values) {
+                if (!el) return;
+                var current = el.value || '';
+                var html = '<option value="">' + escHtml(label) + '</option>';
+                values.forEach(function(v) {
+                    html += '<option value="' + escAttr(v.value) + '">' + escHtml(v.label + ' (' + v.count + ')') + '</option>';
+                });
+                el.innerHTML = html;
+                el.value = values.some(function(v) { return v.value === current; }) ? current : '';
+            }
+            function optionCounts(list, valueFn, labelFn) {
+                var by = {};
+                list.forEach(function(it) {
+                    var value = valueFn(it);
+                    if (!isKnown(value)) return;
+                    var key = String(value);
+                    if (!by[key]) by[key] = { value: key, label: labelFn ? labelFn(it, key) : key, count: 0 };
+                    by[key].count++;
+                });
+                return Object.keys(by).map(function(k) { return by[k]; }).sort(function(a, b) {
+                    return a.label.localeCompare(b.label);
+                });
+            }
+            function populateFilters() {
+                fillSelect(categoryEl, 'All groups', optionCounts(items, function(it) { return it.topLevelCategoryId || itemGroup(it); }, function(it) { return itemGroup(it); }));
+                fillSelect(typeEl, 'All types', optionCounts(items, function(it) { return it.sourceCategory || itemType(it); }, function(it) { return itemType(it); }));
+                fillSelect(rarityEl, 'All rarities', optionCounts(items, itemRarity, itemRarityLabel));
+                fillSelect(tierEl, 'All tiers', optionCounts(items, itemTier, function(it, key) { return key === '0' ? 'Tier 0' : 'Tier ' + key; }).sort(function(a, b) {
+                    return Number(a.value) - Number(b.value);
+                }));
             }
 
             function render(list) {
@@ -354,16 +504,20 @@
                 var html = [];
                 for (var i = 0; i < list.length; i++) {
                     var it = list[i];
-                    var rarity = it.rarity || '';
+                    var rarity = itemRarity(it);
                     var dropCount = (it.drops || []).length;
-                    var iconBg = it.iconRef ? "background-image:url('" + iconUrl(it.iconRef) + "')" : '';
+                    var icon = iconUrl(it);
+                    var iconBg = icon ? "background-image:url('" + icon + "')" : '';
+                    var tier = itemTier(it);
                     html.push('<div class="wpitem" data-id="' + escAttr(it.id) + '">'
                         + '<div class="wpitem-icon" style="' + iconBg + '"></div>'
                         + '<div class="wpitem-body">'
-                        +   '<div class="wpitem-name">' + escHtml(it.name || it.id) + '</div>'
+                        +   '<div class="wpitem-name">' + escHtml(itemName(it)) + '</div>'
                         +   '<div class="wpitem-meta">'
-                        +     '<span class="wpitem-rarity-' + escAttr(rarity) + '">' + escHtml(rarity || '—') + '</span>'
-                        +     ' · stack ' + (it.stackSize || 1)
+                        +     '<span class="wpitem-rarity-' + escAttr(rarity) + '">' + escHtml(rarity || '-') + '</span>'
+                        +     (tier ? ' · T' + escHtml(tier) : '')
+                        +     ' · ' + escHtml(itemType(it))
+                        +     ' · stack ' + itemStack(it)
                         +     ' · ' + dropCount + ' drop' + (dropCount === 1 ? '' : 's')
                         +   '</div>'
                         + '</div></div>');
@@ -374,20 +528,88 @@
             function applyFilter() {
                 if (!items) return;
                 var q = (searchEl.value || '').toLowerCase().trim();
-                var filtered;
-                if (!q) {
-                    filtered = items;
-                } else {
-                    filtered = items.filter(function(it) {
-                        if ((it.name || '').toLowerCase().indexOf(q) >= 0) return true;
-                        if ((it.id || '').toLowerCase().indexOf(q) >= 0) return true;
-                        if ((it.category || '').toLowerCase().indexOf(q) >= 0) return true;
-                        if ((it.rarity || '').toLowerCase().indexOf(q) >= 0) return true;
-                        return false;
-                    });
-                }
-                countEl.textContent = '(' + filtered.length + (q ? '/' + items.length : '') + ')';
+                var cat = categoryEl ? categoryEl.value : '';
+                var type = typeEl ? typeEl.value : '';
+                var rarity = rarityEl ? rarityEl.value : '';
+                var tier = tierEl ? tierEl.value : '';
+                filtered = items.filter(function(it) {
+                    if (cat && String(it.topLevelCategoryId || itemGroup(it)) !== cat) return false;
+                    if (type && String(it.sourceCategory || itemType(it)) !== type) return false;
+                    if (rarity && itemRarity(it) !== rarity) return false;
+                    if (tier && itemTier(it) !== tier) return false;
+                    if (!q) return true;
+                    var hay = [
+                        itemName(it),
+                        itemDescription(it),
+                        it.id,
+                        it.sourceId,
+                        itemGroup(it),
+                        itemType(it),
+                        itemRarityLabel(it),
+                        it.itemTag,
+                        it.itemTypeTag
+                    ].join(' ').toLowerCase();
+                    return hay.indexOf(q) >= 0;
+                });
+                countEl.textContent = '(' + filtered.length + (filtered.length === items.length ? '' : '/' + items.length) + ')';
                 render(filtered);
+            }
+
+            function detailRow(label, value) {
+                if (!isKnown(value)) return '';
+                return '<div class="wpitems-detail-row"><span>' + escHtml(label) + '</span><b>' + escHtml(value) + '</b></div>';
+            }
+            function formatDuration(seconds) {
+                if (!isKnown(seconds)) return '';
+                seconds = Number(seconds);
+                if (!isFinite(seconds)) return '';
+                if (seconds >= 60 && seconds % 60 === 0) return (seconds / 60) + ' min';
+                return seconds + ' sec';
+            }
+            function formatStatEntry(s) {
+                if (!s || typeof s !== 'object') return '';
+                var value = isKnown(s.valueLevel1) ? s.valueLevel1 : '';
+                if (isKnown(value) && String(s.displayType || '').toLowerCase().indexOf('percent') >= 0) value = value + '%';
+                var label = s.stat || s.rowName || s.curveTable || 'Stat';
+                return detailRow(label, isKnown(value) ? value : 'set');
+            }
+            function effectsHtml(title, list) {
+                if (!Array.isArray(list) || !list.length) return '';
+                var html = '<h4>' + escHtml(title) + '</h4>';
+                list.forEach(function(e) {
+                    var text = cleanText(e);
+                    if (text) html += '<div class="wpitems-detail-row"><span>Effect</span><b>' + escHtml(text) + '</b></div>';
+                });
+                return html;
+            }
+            function statsHtml(it) {
+                var html = '';
+                var tooltip = it.tooltip || {};
+                html += detailRow('Group', itemGroup(it));
+                html += detailRow('Type', itemType(it));
+                html += detailRow('Rarity', itemRarityLabel(it));
+                html += detailRow('Tier', itemTier(it) || '0');
+                html += detailRow('Stack', itemStack(it));
+                html += detailRow('Item tag', it.itemTag);
+                html += detailRow('Item type', it.itemTypeTag);
+                if (isKnown(it.foodPrimaryStatLabel)) html += detailRow(it.foodPrimaryStatLabel, it.foodPrimaryStatValue);
+                if (isKnown(it.foodDurationSeconds)) html += detailRow('Food duration', formatDuration(it.foodDurationSeconds));
+                if (isKnown(it.weaponStatLabel)) html += detailRow(it.weaponStatLabel, it.weaponStatValue);
+                if (isKnown(it.weaponGrade)) html += detailRow('Weapon grade', it.weaponGrade);
+                if (isKnown(it.weaponGradePrimaryStat)) html += detailRow('Weapon primary stat', it.weaponGradePrimaryStat);
+                if (isKnown(it.shipWeaponDamage)) html += detailRow('Ship damage', it.shipWeaponDamage);
+                if (isKnown(it.shipWeaponReloadTime)) html += detailRow('Ship reload', formatDuration(it.shipWeaponReloadTime) || it.shipWeaponReloadTime);
+                if (isKnown(it.shipWeaponRangeRank)) html += detailRow('Ship range', it.shipWeaponRangeRank);
+                if (isKnown(it.shipWeaponAccuracyRank)) html += detailRow('Ship accuracy', it.shipWeaponAccuracyRank);
+                if (tooltip.mainStat) html += '<h4>Main stat</h4>' + formatStatEntry(tooltip.mainStat);
+                var secondary = (tooltip.secondaryStats || []).concat(tooltip.additionalStats || [], tooltip.descriptionData || []);
+                if (secondary.length) {
+                    html += '<h4>Stats</h4>';
+                    secondary.slice(0, 20).forEach(function(s) { html += formatStatEntry(s); });
+                }
+                html += effectsHtml('Effects', tooltip.effectsDescriptions);
+                html += effectsHtml('Set effects', tooltip.setEffectsDescriptions);
+                return html;
             }
 
             function showDetail(id) {
@@ -395,35 +617,41 @@
                 for (var i = 0; i < items.length; i++) { if (items[i].id === id) { it = items[i]; break; } }
                 if (!it) return;
                 var drops = it.drops || [];
-                var iconUrl_ = it.iconRef ? iconUrl(it.iconRef) : '';
+                var iconUrl_ = iconUrl(it);
                 var html = '<button type="button" id="wpitems-back" style="background:transparent;border:0;color:#c9a959;cursor:pointer;font:11px monospace;padding:0 0 8px">← back</button>';
                 if (iconUrl_) {
                     html += '<div style="width:64px;height:64px;float:right;margin-left:8px;background:rgba(8,14,28,.7);border:1px solid rgba(201,169,89,.2);border-radius:2px;background-size:contain;background-repeat:no-repeat;background-position:center;background-image:url(\'' + iconUrl_ + '\')"></div>';
                 }
-                html += '<h3>' + escHtml(it.name || it.id) + '</h3>';
+                html += '<h3>' + escHtml(itemName(it)) + '</h3>';
+                html += '<div class="wpitems-chipline">'
+                    + '<span class="wpitems-chip">' + escHtml(itemGroup(it)) + '</span>'
+                    + '<span class="wpitems-chip">' + escHtml(itemType(it)) + '</span>'
+                    + '<span class="wpitems-chip wpitem-rarity-' + escAttr(itemRarity(it)) + '">' + escHtml(itemRarityLabel(it)) + '</span>'
+                    + (itemTier(it) ? '<span class="wpitems-chip">Tier ' + escHtml(itemTier(it)) + '</span>' : '')
+                    + '<span class="wpitems-chip">Stack ' + itemStack(it) + '</span>'
+                    + '</div>';
                 html += '<p style="color:#8f775d;font-size:10px;word-break:break-all">' + escHtml(it.id) + '</p>';
-                var rarity = it.rarity || '';
-                html += '<p><span class="wpitem-rarity-' + escAttr(rarity) + '">' + escHtml(rarity || '—') + '</span> · stack ' + (it.stackSize || 1);
-                if (it.category) html += ' · ' + escHtml(it.category);
-                html += '</p>';
-                if (it.description) {
-                    html += '<p style="white-space:pre-wrap;clear:both">' + escHtml(it.description.replace(/\\r\\n/g, '\n')) + '</p>';
-                }
+                var desc = itemDescription(it);
+                if (desc) html += '<p style="white-space:pre-wrap;clear:both">' + escHtml(desc) + '</p>';
+                var vanity = cleanText(it.tooltip && it.tooltip.vanityText);
+                if (vanity) html += '<p style="white-space:pre-wrap;color:#8f775d">' + escHtml(vanity) + '</p>';
+                html += '<h4>Item details</h4>' + statsHtml(it);
                 if (drops.length) {
-                    html += '<h4 style="font-size:11px;margin-top:14px;margin-bottom:6px;clear:both">Drops from (' + drops.length + ')</h4>';
+                    html += '<h4>Loot sources (' + drops.length + ')</h4>';
                     for (var j = 0; j < drops.length; j++) {
                         var d = drops[j];
-                        var pct = d.chance ? (Math.round(d.chance * 1000) / 10) : 0;
+                        var pct = d.chance ? (Math.round(d.chance * 10000) / 100) : 0;
                         var qmin = d.minQuantity == null ? 0 : d.minQuantity;
                         var qmax = d.maxQuantity == null ? 0 : d.maxQuantity;
-                        var qty = (qmin === qmax) ? String(qmin) : qmin + '–' + qmax;
+                        var qty = (qmin === qmax) ? String(qmin) : qmin + '-' + qmax;
                         html += '<div style="font-size:10px;color:#bdaa92;padding:5px 0;border-bottom:1px solid rgba(201,169,89,.06)">'
                             + '<div style="color:#ede0cc">' + escHtml(d.npcName || d.npcId || '?') + '</div>'
                             + '<div style="color:#8f775d">' + escHtml(d.sourceTypeLabel || d.sourceType || '') + ' · ' + pct + '% · qty ' + qty + '</div>'
+                            + (d.sourceTableId ? '<div style="color:#6f604b;word-break:break-all">' + escHtml(d.sourceTableId) + '</div>' : '')
                             + '</div>';
                     }
                 } else {
-                    html += '<p style="clear:both;color:#8f775d">No drop sources recorded.</p>';
+                    html += '<p style="clear:both;color:#8f775d">No loot sources recorded.</p>';
                 }
                 detailEl.innerHTML = html;
                 detailEl.classList.add('open');
@@ -432,16 +660,21 @@
             }
 
             btn.addEventListener('click', function() {
-                panel.classList.add('open');
+                if (panel.classList.contains('open')) {
+                    setOpen(false);
+                    return;
+                }
+                setOpen(true);
                 if (loaded) return;
                 loaded = true;
-                listEl.innerHTML = '<div id="wpitems-loading">Loading catalog…</div>';
-                fetch(CATALOG + '/items_full.json')
+                listEl.innerHTML = '<div id="wpitems-loading">Loading 840 items…</div>';
+                fetch(CATALOG + '/items_full.json?v=20260508-840')
                     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                     .then(function(d) {
-                        items = Object.keys(d).map(function(k) { return d[k]; }).sort(function(a, b) {
-                            return (a.name || '').localeCompare(b.name || '');
+                        items = normalizeCatalog(d).sort(function(a, b) {
+                            return itemName(a).localeCompare(itemName(b));
                         });
+                        populateFilters();
                         applyFilter();
                     })
                     .catch(function(e) {
@@ -450,10 +683,15 @@
                     });
             });
             closeBtn.addEventListener('click', function() {
-                panel.classList.remove('open');
-                detailEl.classList.remove('open');
+                setOpen(false);
             });
             searchEl.addEventListener('input', applyFilter);
+            [categoryEl, typeEl, rarityEl, tierEl].forEach(function(el) {
+                if (el) el.addEventListener('change', applyFilter);
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && panel.classList.contains('open')) setOpen(false);
+            });
             listEl.addEventListener('click', function(e) {
                 var t = e.target;
                 while (t && t !== listEl && !t.classList.contains('wpitem')) t = t.parentNode;

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Expanded the bundled Sea Chart item catalog to the same 840-item index windrose.tools exposes.** The local dashboard catalog now includes category/type/rarity/tier filters, richer item detail rows, tooltip stats/effects where available, and loot-source table IDs. Missing Cyrillic-only names fall back to English-safe asset names.
+
 ## [1.2.0] - 2026-05-06
 
 ### Added

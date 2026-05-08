@@ -1,13 +1,56 @@
 {
-  "items_total": 378,
-  "items_with_full_catalog_record": 365,
-  "items_synthesized_stubs": 13,
-  "items_with_drop_records": 378,
-  "plan_items_DA_DID": 647,
-  "quest_references_total": 208,
-  "quest_references_resolved": 18,
-  "quest_references_unresolved": 190,
-  "poi_instances": 1173,
-  "poi_unique_asset_types": 34,
-  "icon_asset_paths": 6
+  "source": "windrose.tools decompiled bundle snapshot",
+  "generated_on": "2026-05-08",
+  "items_total": 840,
+  "items_with_full_catalog_record": 836,
+  "items_synthesized_stubs": 4,
+  "missing_full_catalog_record_ids": [
+    "did-misc-recipe-deco-lights-t02-clay-torch",
+    "did-misc-cj-robinson-note-1-t01",
+    "did-misc-cj-robinson-note-2-t01",
+    "did-misc-cj-robinson-note-4-t01"
+  ],
+  "items_with_drop_records": 468,
+  "items_with_icon_refs": 840,
+  "icon_manifest_entries": 1042,
+  "categories": {
+    "Ship": 45,
+    "Misc": 409,
+    "Resources": 138,
+    "Weapons": 77,
+    "Consumables": 65,
+    "Equipment": 106
+  },
+  "rarities": {
+    "epic": 92,
+    "uncommon": 174,
+    "rare": 311,
+    "legendary": 170,
+    "common": 93
+  },
+  "types": {
+    "Ship Weapon": 29,
+    "Misc": 403,
+    "Resource": 135,
+    "Melee Weapon": 43,
+    "Food": 50,
+    "Medicine": 4,
+    "Range Weapon": 19,
+    "Ship Crew Equipment": 1,
+    "Backpack": 5,
+    "Ammo": 7,
+    "Ring": 36,
+    "Default": 6,
+    "Armor": 41,
+    "Tool": 8,
+    "Metal": 3,
+    "Alchemy": 11,
+    "Ship Hull Mod": 10,
+    "Necklace": 24,
+    "Ship Combat Order": 5
+  },
+  "icon_files_available": 557,
+  "icon_source_fallbacks": {
+    "/Game/UI/CommonElements/Assets/Decoration/T_Decoration_Compass": "T_ItemIcon_MapPiece_T01.webp copied locally because upstream CDN path returns 404"
+  }
 }
