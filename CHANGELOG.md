@@ -5,6 +5,7 @@
 ### Added
 
 - **Expanded the bundled Sea Chart item catalog to the same 840-item index windrose.tools exposes.** The local dashboard catalog now includes category/type/rarity/tier filters, richer item detail rows, source asset IDs, category paths, icon refs, tooltip stats/effects where available, and loot-source table IDs. Missing Cyrillic-only names fall back to English-safe asset names.
+- **Added windrose.tools-style item usage detail to Sea Chart item pages.** Item details can now show crafted-by recipes, station names, ingredients, output quantity, crafting time/rate, vendor buy/sell trades, and construction uses from the decompiled windrose.tools recipe/building/vendor datasets.
 - **Linked Sea Chart item drops back to the map when the layout runtime is available.** The item detail view now uses `/api/layout/runtime` marker/manual-POI data to show mapped loot-source buttons and highlight matching POI locations directly on the Sea Chart.
 
 ## [1.2.0] - 2026-05-06

@@ -152,6 +152,12 @@
         .wpitem-source-title { color: #ede0cc; margin-bottom: 2px; }
         .wpitem-source-meta, .wpitem-source-id { color: #8f775d; word-break: break-all; }
         .wpitem-source-id { color: #6f604b; }
+        .wpitem-usage {
+            font-size: 10px; color: #bdaa92; padding: 6px 0;
+            border-bottom: 1px solid rgba(201, 169, 89, 0.06);
+        }
+        .wpitem-usage-title { color: #ede0cc; margin-bottom: 2px; }
+        .wpitem-usage-meta { color: #8f775d; line-height: 1.35; }
         .wpitem-source-actions { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
         .wpitem-source-map {
             background: rgba(40, 30, 12, 0.95);
@@ -590,6 +596,11 @@
             var items = null;
             var filtered = [];
             var loaded = false;
+            var usageByItemId = {};
+            var usageBySourceId = {};
+            var usageLoaded = false;
+            var usageLoading = null;
+            var activeDetailId = null;
             var lastSourceHits = [];
             var CYRILLIC = /[\u0400-\u04FF]/;
             var NAME_OVERRIDES = {
@@ -850,8 +861,88 @@
                 if (!api.showItemSources) return;
                 api.showItemSources(sources, label);
             }
+            function loadUsage() {
+                if (usageLoaded) return Promise.resolve();
+                if (usageLoading) return usageLoading;
+                usageLoading = fetch(CATALOG + '/item_usage.json?v=20260508-usage')
+                    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(function(data) {
+                        usageByItemId = data.byItemId || {};
+                        usageBySourceId = data.bySourceId || {};
+                        usageLoaded = true;
+                    })
+                    .catch(function() {
+                        usageLoaded = true;
+                    });
+                return usageLoading;
+            }
+            function formatUsageDuration(seconds) {
+                if (!isKnown(seconds)) return '';
+                seconds = Number(seconds);
+                if (!isFinite(seconds) || seconds <= 0) return '';
+                if (seconds < 60) return seconds + 's';
+                if (seconds % 60 === 0) return (seconds / 60) + 'm';
+                return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+            }
+            function requirementText(list) {
+                if (!Array.isArray(list) || !list.length) return '';
+                return list.map(function(req) {
+                    return (req.name || req.sourceId || '?') + ' x' + (req.quantity == null ? '?' : req.quantity);
+                }).join(', ');
+            }
+            function stationText(list) {
+                if (!Array.isArray(list) || !list.length) return 'Unknown station';
+                return list.map(function(station) { return station.name || station.sourceId || 'Unknown station'; }).join(', ');
+            }
+            function usageSection(title, list, renderer, emptyText) {
+                var rows = Array.isArray(list) ? list : [];
+                if (!rows.length && !emptyText) return '';
+                var html = '<h4>' + escHtml(title) + (rows.length ? ' (' + rows.length + ')' : '') + '</h4>';
+                if (!rows.length) return html + '<p style="color:#8f775d">' + escHtml(emptyText) + '</p>';
+                rows.slice(0, 12).forEach(function(row) { html += renderer(row); });
+                if (rows.length > 12) html += '<p style="color:#8f775d">+' + (rows.length - 12) + ' more</p>';
+                return html;
+            }
+            function usageHtml(it) {
+                var usage = it.usage || usageByItemId[it.id] || usageBySourceId[it.sourceId] || null;
+                if (!usage) return '';
+                var html = '';
+                html += usageSection('Crafted by', usage.craftedBy, function(row) {
+                    var bits = [stationText(row.stations)];
+                    var duration = formatUsageDuration(row.durationSeconds);
+                    if (duration) bits.push(duration);
+                    if (row.itemsPerMinute) bits.push(row.itemsPerMinute + '/min');
+                    return '<div class="wpitem-usage">'
+                        + '<div class="wpitem-usage-title">' + escHtml(row.name || row.sourceRecipeId || 'Recipe') + '</div>'
+                        + '<div class="wpitem-usage-meta">' + escHtml(bits.join(' · ')) + '</div>'
+                        + '<div class="wpitem-usage-meta">' + escHtml(requirementText(row.inputs) || 'No inputs') + ' → ' + escHtml(requirementText(row.outputs) || 'Output x' + (row.outputQuantity || 1)) + '</div>'
+                        + '</div>';
+                });
+                html += usageSection('Vendor trades', usage.vendorTrades, function(row) {
+                    var verb = row.direction === 'sell' ? 'Sell' : 'Buy';
+                    return '<div class="wpitem-usage">'
+                        + '<div class="wpitem-usage-title">' + escHtml(row.vendor && row.vendor.name ? row.vendor.name : 'Vendor') + '</div>'
+                        + '<div class="wpitem-usage-meta">' + escHtml(verb + ' x' + (row.itemQuantity || 1) + ' · Cost: ' + (requirementText(row.costs) || 'none')) + '</div>'
+                        + (requirementText(row.rewards) ? '<div class="wpitem-usage-meta">Reward: ' + escHtml(requirementText(row.rewards)) + '</div>' : '')
+                        + '</div>';
+                });
+                html += usageSection('Construction', usage.construction, function(row) {
+                    return '<div class="wpitem-usage">'
+                        + '<div class="wpitem-usage-title">' + escHtml(row.name || row.sourceId || 'Building') + '</div>'
+                        + '<div class="wpitem-usage-meta">' + escHtml((row.category || 'Building') + ' · requires x' + (row.quantity || 1)) + '</div>'
+                        + '</div>';
+                });
+                html += usageSection('Crafts', usage.crafts, function(row) {
+                    return '<div class="wpitem-usage">'
+                        + '<div class="wpitem-usage-title">' + escHtml(requirementText(row.outputs) || row.name || row.sourceRecipeId || 'Recipe') + '</div>'
+                        + '<div class="wpitem-usage-meta">' + escHtml(stationText(row.stations) + ' · Inputs: ' + (requirementText(row.inputs) || 'none')) + '</div>'
+                        + '</div>';
+                }, 'Not used in item recipes.');
+                return html;
+            }
 
             function showDetail(id) {
+                activeDetailId = id;
                 var it = null;
                 for (var i = 0; i < items.length; i++) { if (items[i].id === id) { it = items[i]; break; } }
                 if (!it) return;
@@ -876,6 +967,7 @@
                 var vanity = cleanText(it.tooltip && it.tooltip.vanityText);
                 if (vanity) html += '<p style="white-space:pre-wrap;color:#8f775d">' + escHtml(vanity) + '</p>';
                 html += '<h4>Item details</h4>' + statsHtml(it);
+                html += usageHtml(it);
                 if (drops.length) {
                     var allLocations = [];
                     html += '<h4>Loot sources (' + drops.length + ')</h4>';
@@ -911,6 +1003,11 @@
                 detailEl.classList.add('open');
                 var back = document.getElementById('wpitems-back');
                 if (back) back.addEventListener('click', function() { detailEl.classList.remove('open'); });
+                if (!usageLoaded) {
+                    loadUsage().then(function() {
+                        if (activeDetailId === id && detailEl.classList.contains('open')) showDetail(id);
+                    });
+                }
             }
 
             btn.addEventListener('click', function() {
