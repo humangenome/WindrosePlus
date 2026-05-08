@@ -556,7 +556,7 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 | GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "timestamp": ...}` |
 | GET | `/catalog/*` | No | Static bundled item catalog JSON and icons used by the Sea Chart item browser. |
 | GET | `/api/layout` | No | Public world-layout fingerprint and terrain placement summary used for map overlays. |
-| GET | `/api/layout/runtime` | No | Cached windrose.tools-compatible runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
+| GET | `/api/layout/runtime` | No | Cached layout runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |

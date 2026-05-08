@@ -72,6 +72,12 @@ if ($BindIp -and $BindIp -ne "0.0.0.0" -and $BindIp -ne "*" -and $BindIp -ne "+"
 $displayListenHost = if ($listenHost -eq "+") { "0.0.0.0" } else { $listenHost }
 $dashboardHost = if ($listenHost -eq "+") { "localhost" } else { $listenHost }
 
+$layoutRuntimeProviderUrl = "$env:WINDROSEPLUS_LAYOUT_RUNTIME_URL".Trim()
+if (-not $layoutRuntimeProviderUrl -and $config.server -and $config.server.layout_runtime_url) {
+    $layoutRuntimeProviderUrl = ([string]$config.server.layout_runtime_url).Trim()
+}
+$layoutRuntimeProviderUrl = $layoutRuntimeProviderUrl.TrimEnd("/")
+
 # Load the INI parser used by /api/pak-status. Failure is non-fatal; the endpoint
 # degrades to a "parser unavailable" response instead of crashing the dashboard.
 $script:IniParserLoaded = $false
@@ -606,12 +612,15 @@ function Get-CachedLayoutScan {
     return @{ ok = $true; cached = $false; scan = $scan; cachedAt = $now }
 }
 
-# POST the local scan to windrose.tools so they index it, then GET the runtime
-# overlay (markers, biome polygons, manual POIs, quest popups). Cached locally
-# keyed off layoutFingerprint so we only hit the upstream once per world layout.
+# POST the local scan to an optional layout-runtime provider, then GET the
+# runtime overlay (markers, biome polygons, manual POIs, quest popups). Cached
+# locally by layoutFingerprint so repeat map loads are cheap.
 function Get-CachedLayoutRuntime($scan) {
     if (-not $scan -or -not $scan.layoutFingerprint) {
         return @{ ok = $false; error = "Scanner result missing layoutFingerprint" }
+    }
+    if (-not $layoutRuntimeProviderUrl) {
+        return @{ ok = $false; error = "Layout runtime provider is not configured" }
     }
     $fp = [string]$scan.layoutFingerprint
     $runtimeCachePath = Join-Path $dataDir "layout_runtime.json"
@@ -631,7 +640,7 @@ function Get-CachedLayoutRuntime($scan) {
     $fetchedFrom = $null
     $shouldPost = $false
     try {
-        $resp = Invoke-WebRequest -Uri ("https://windrose.tools/api/map/runtime?layout={0}" -f $fp) `
+        $resp = Invoke-WebRequest -Uri ("{0}?layout={1}" -f $layoutRuntimeProviderUrl, $fp) `
             -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
         if ($resp.StatusCode -eq 200 -and $resp.Content) {
             $runtime = $resp.Content | ConvertFrom-Json
@@ -655,7 +664,7 @@ function Get-CachedLayoutRuntime($scan) {
                     }
                 } catch {}
             }
-            return @{ ok = $false; error = "windrose.tools GET failed (HTTP $statusCode); no stale cache available" }
+            return @{ ok = $false; error = "Layout runtime provider GET failed (HTTP $statusCode); no stale cache available" }
         }
     }
 
@@ -667,13 +676,13 @@ function Get-CachedLayoutRuntime($scan) {
                 worldPreset       = $scan.worldPreset
                 terrainPlacements = $scan.terrainPlacements
             }) | ConvertTo-Json -Depth 10 -Compress
-            $resp = Invoke-WebRequest -Uri "https://windrose.tools/api/map/runtime" -Method Post `
+            $resp = Invoke-WebRequest -Uri $layoutRuntimeProviderUrl -Method Post `
                 -Body $body -ContentType "application/json" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
             if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 201) {
                 if ($resp.Content) {
                     $runtime = $resp.Content | ConvertFrom-Json
                 } else {
-                    $resp2 = Invoke-WebRequest -Uri ("https://windrose.tools/api/map/runtime?layout={0}" -f $fp) `
+                    $resp2 = Invoke-WebRequest -Uri ("{0}?layout={1}" -f $layoutRuntimeProviderUrl, $fp) `
                         -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
                     if ($resp2.StatusCode -eq 200 -and $resp2.Content) {
                         $runtime = $resp2.Content | ConvertFrom-Json
@@ -693,7 +702,7 @@ function Get-CachedLayoutRuntime($scan) {
                     }
                 } catch {}
             }
-            return @{ ok = $false; error = "windrose.tools POST failed (no stale cache): " + (Sanitize-PathInMessage $_.Exception.Message) }
+            return @{ ok = $false; error = "Layout runtime provider POST failed (no stale cache): " + (Sanitize-PathInMessage $_.Exception.Message) }
         }
     }
 
@@ -708,7 +717,7 @@ function Get-CachedLayoutRuntime($scan) {
                 }
             } catch {}
         }
-        return @{ ok = $false; error = "windrose.tools returned no runtime data for fingerprint $fp" }
+        return @{ ok = $false; error = "Layout runtime provider returned no runtime data for fingerprint $fp" }
     }
 
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -959,9 +968,9 @@ try {
                 continue
             }
 
-            # Layout fingerprint + windrose.tools runtime overlay — no auth.
-            # Output is identical to what windrose.tools serves publicly for
-            # any matching world layout (no player or server identifying info).
+            # Layout fingerprint + optional runtime overlay — no auth.
+            # Output contains world-layout data only; no player or server
+            # identifying info is sent by this route.
             if ($path -eq "/api/layout") {
                 $r = Get-CachedLayoutScan
                 if ($r.ok) {

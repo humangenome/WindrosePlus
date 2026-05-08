@@ -431,10 +431,9 @@ var STATIC_CATALOG='/catalog/v1';
         });
     }
 
-    // windrose.tools curated overlay (markers, biome polygons, layout nodes)
-    // pulled per-server via /api/layout/runtime → cached on the WP+ HTTP
-    // server keyed off the .sst layout fingerprint. Categories below are
-    // derived from the marker.type prefix windrose.tools uses for sprites.
+    // Curated layout overlay (markers, biome polygons, layout nodes) pulled
+    // per-server via /api/layout/runtime and cached on the WP+ HTTP server
+    // keyed off the .sst layout fingerprint.
     var WT_CATEGORIES = [
         { key: 'main_quest',   label: 'Main quests',     color: '#f5d76e' },
         { key: 'side_quest',   label: 'Side quests',     color: '#9bc4ef' },
@@ -459,10 +458,10 @@ var STATIC_CATALOG='/catalog/v1';
     var edgeLayer = L.layerGroup().addTo(map);
     var levelLabelLayer = L.layerGroup();
     var nodeLayer = L.layerGroup();    // off by default — layout graph debug
-    // Runtime-overlay layers — live save state that windrose.tools cannot
-    // serve (chests opened, buildings placed, fog reveal, save rows). The
-    // generic open-source dashboard exposes these only when an API provides
-    // the decoded overlay data; otherwise the layers stay empty.
+    // Runtime-overlay layers — live save state such as chests opened,
+    // buildings placed, fog reveal, and save rows. The generic open-source
+    // dashboard exposes these only when an API provides the decoded overlay
+    // data; otherwise the layers stay empty.
     var islandStateLayer = L.layerGroup().addTo(map);
     var chestLayer    = L.layerGroup().addTo(map);
     var buildingLayer = L.layerGroup().addTo(map);
@@ -572,7 +571,7 @@ var STATIC_CATALOG='/catalog/v1';
     var SOURCE_GENERIC_TOKENS = { coast: true, jungle: true, highlands: true, swamp: true, camp: true, pirate: true, ruin: true, ruins: true, big: true, small: true, battle: true };
     '0 1 2 3 4 5 6 7 8 9 01 02 03 04 05 06 07 08 09 10'.split(' ').forEach(function(t) { SOURCE_GENERIC_TOKENS[t] = true; });
 
-    // Map a windrose.tools marker.type to one of our display buckets.
+    // Map a layout marker type to one of our display buckets.
     function wtCategorize(t) {
         if (!t) return 'misc';
         if (t === 'Tortuga') return 'tortuga';
@@ -1435,8 +1434,8 @@ var STATIC_CATALOG='/catalog/v1';
     }
 
     // Optional POIScan-style output. The open-source map does not require a
-    // separate scanner feed because the layout runtime already supplies the
-    // windrose.tools-compatible markers and biomes.
+    // separate scanner feed because the layout runtime already supplies
+    // marker and biome overlays.
     var lastPoiTimestamp = 0;
     var poiStatus = 'loading'; // loading | ok | empty | error
     function clearPoiKinds() {
@@ -1951,7 +1950,7 @@ var STATIC_CATALOG='/catalog/v1';
         layerEntries = [];
         addLayerEntry('Essentials', 'base:players', 'Players', pL, pL.getLayers().length);
 
-        // windrose.tools curated overlay categories
+        // Curated layout overlay categories
         if (wtStatus === 'loading') {
             addLayerStatus('World map', 'World map loading…');
         } else if (wtStatus === 'error') {
@@ -2033,10 +2032,10 @@ var STATIC_CATALOG='/catalog/v1';
     foverlay();
     setInterval(fp, 10000);
     setInterval(fpoi, 30 * 60 * 1000);
-    // Re-poll the layout overlay every 10 minutes — picks up windrose.tools
-    // re-scoring of the same fingerprint, and detects fingerprint shifts after
-    // RocksDB compaction. The WP+ HTTP server caches by fingerprint so a no-op
-    // poll is cheap (single localhost cache hit).
+    // Re-poll the layout overlay every 10 minutes to pick up refreshed data
+    // for the same fingerprint and detect fingerprint shifts after RocksDB
+    // compaction. The WP+ HTTP server caches by fingerprint so a no-op poll is
+    // cheap (single localhost cache hit).
     setInterval(flayout, 10 * 60 * 1000);
     // Save-state overlay refresh — proxy caches for 30s, so 60s gives a fresh
     // pull every other panel-cycle while staying out of LOCAL_CACHED most of
@@ -2045,8 +2044,8 @@ var STATIC_CATALOG='/catalog/v1';
 })();
 
 // Items catalog overlay — fed by /catalog/v1/.
-// Independent of per-server POIScan; 840 items from the static game catalog
-// extracted from windrose.tools' bundle and shipped with WindrosePlus.
+// Independent of per-server POIScan; 840 items from the bundled static game
+// catalog shipped with WindrosePlus.
 (function() {
     var btn = document.getElementById('wpitems-btn');
     var panel = document.getElementById('wpitems-panel');

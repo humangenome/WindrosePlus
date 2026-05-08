@@ -1,7 +1,7 @@
 {
   "meta": {
     "generatedAt": "2026-05-08",
-    "source": "windrose.tools decompile chunk7996 resource data",
+    "source": "bundled resource-zone data",
     "resourceClustersExtractor": "resource-clusters-2026-04-21b",
     "resourceZonesExtractor": "data/approximate-resource-spawn-zones.json",
     "notes": [
