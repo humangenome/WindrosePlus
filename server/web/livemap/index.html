@@ -456,6 +456,7 @@ var STATIC_CATALOG='/catalog/v1';
     var manualPoiCount = 0;
     var wtStatus = 'loading';
     var biomeLayer = L.layerGroup().addTo(map);
+    var edgeLayer = L.layerGroup().addTo(map);
     var nodeLayer = L.layerGroup();    // off by default — layout graph debug
     // Runtime-overlay layers — live save state that windrose.tools cannot
     // serve (chests opened, buildings placed, fog reveal, save rows). The
@@ -1124,6 +1125,7 @@ var STATIC_CATALOG='/catalog/v1';
         manualPoiLayer.clearLayers();
         manualPoiCount = 0;
         biomeLayer.clearLayers();
+        edgeLayer.clearLayers();
         nodeLayer.clearLayers();
         itemSourceLayer.clearLayers();
         itemSourceCount = 0;
@@ -1263,6 +1265,33 @@ var STATIC_CATALOG='/catalog/v1';
                 // not at rt-level. Polygons are bare arrays of {x, y} points.
                 var nodes = Array.isArray(layout.nodes) ? layout.nodes : (Array.isArray(rt.nodes) ? rt.nodes : []);
                 currentLayoutNodes = nodes;
+                var nodeById = {};
+                nodes.forEach(function(n) {
+                    var id = n.nodeId !== undefined ? n.nodeId : n.id;
+                    if (id !== undefined && id !== null) nodeById[String(id)] = n;
+                });
+                function nodeCoord(n) {
+                    if (!n) return null;
+                    var x = (typeof n.worldX === 'number') ? n.worldX : n.x;
+                    var y = (typeof n.worldY === 'number') ? n.worldY : n.y;
+                    if (typeof x !== 'number' || typeof y !== 'number') return null;
+                    return { x: x, y: y };
+                }
+                var edges = Array.isArray(layout.edges) ? layout.edges : (Array.isArray(rt.edges) ? rt.edges : []);
+                edges.forEach(function(edge) {
+                    var sourceId = edge.sourceNodeId !== undefined ? edge.sourceNodeId : (edge.source || edge.from);
+                    var targetId = edge.targetNodeId !== undefined ? edge.targetNodeId : (edge.target || edge.to);
+                    var a = nodeCoord(nodeById[String(sourceId)]);
+                    var b = nodeCoord(nodeById[String(targetId)]);
+                    if (!a || !b) return;
+                    L.polyline([wLL(a.x, a.y), wLL(b.x, b.y)], {
+                        color: '#6f8fb3',
+                        weight: 1,
+                        opacity: 0.38,
+                        dashArray: '4 7',
+                        interactive: false
+                    }).addTo(edgeLayer);
+                });
                 nodes.forEach(function(n) {
                     // node debug dot
                     var nx = (typeof n.worldX === 'number') ? n.worldX : n.x;
@@ -1809,6 +1838,7 @@ var STATIC_CATALOG='/catalog/v1';
             'wt:dungeon': true,
             'wt:mine': true,
             'wt:tortuga': true,
+            'wt:junctions': true,
             'live:chests': true,
             'live:buildings': true,
             'live:save_players': true,
@@ -1924,6 +1954,7 @@ var STATIC_CATALOG='/catalog/v1';
             });
             if (manualPoiCount > 0) addLayerEntry('Places', 'wt:manual_pois', 'Manual POIs', manualPoiLayer, manualPoiCount);
             if (biomeLayer.getLayers().length) addLayerEntry('Places', 'wt:biomes', 'Biomes', biomeLayer, biomeLayer.getLayers().length);
+            if (edgeLayer.getLayers().length) addLayerEntry('Places', 'wt:junctions', 'Junctions', edgeLayer, edgeLayer.getLayers().length);
             if (nodeLayer.getLayers().length)  addLayerEntry('Scanner / debug', 'wt:layout_graph', 'Layout graph', nodeLayer, nodeLayer.getLayers().length);
         }
         if (resourceStatus === 'loading') {
