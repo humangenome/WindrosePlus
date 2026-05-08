@@ -217,6 +217,19 @@ function Get-ResourceFamily {
     return $null
 }
 
+function ConvertTo-DropInt {
+    param(
+        [double]$Value,
+        [double]$Multiplier
+    )
+
+    $scaled = $Value * $Multiplier
+    if ($Multiplier -gt 1.0 -and $scaled -gt $Value) {
+        return [Math]::Max(1, [int][Math]::Ceiling($scaled - 0.000001))
+    }
+    return [Math]::Max(1, [int][Math]::Floor($scaled + 0.000001))
+}
+
 function Build-MultiplierPak {
     <#
     .SYNOPSIS
@@ -383,8 +396,8 @@ function Build-MultiplierPak {
                     # gear stacks and breaks unique-item gameplay (issue #3).
                     if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
                     if ($null -ne $item.Min -and $null -ne $item.Max) {
-                        $item.Min = [Math]::Max(1, [int]($item.Min * $loot))
-                        $item.Max = [Math]::Max(1, [int]($item.Max * $loot))
+                        $item.Min = ConvertTo-DropInt -Value $item.Min -Multiplier $loot
+                        $item.Max = ConvertTo-DropInt -Value $item.Max -Multiplier $loot
                         $changed = $true
                     }
                 }
@@ -600,8 +613,8 @@ function Build-MultiplierPak {
                             }
                             $eff = $harvestYield * $resMult
                             if ($eff -eq 1.0) { continue }
-                            $entry.Amount.Min = [Math]::Max(1, [int]($entry.Amount.Min * $eff))
-                            $entry.Amount.Max = [Math]::Max(1, [int]($entry.Amount.Max * $eff))
+                            $entry.Amount.Min = ConvertTo-DropInt -Value $entry.Amount.Min -Multiplier $eff
+                            $entry.Amount.Max = ConvertTo-DropInt -Value $entry.Amount.Max -Multiplier $eff
                             $changed = $true
                         }
                     }
@@ -648,8 +661,8 @@ function Build-MultiplierPak {
                         }
                         $eff = $harvestYield * $resMult
                         if ($eff -eq 1.0) { continue }
-                        $item.Min = [Math]::Max(1, [int]($item.Min * $eff))
-                        $item.Max = [Math]::Max(1, [int]($item.Max * $eff))
+                        $item.Min = ConvertTo-DropInt -Value $item.Min -Multiplier $eff
+                        $item.Max = ConvertTo-DropInt -Value $item.Max -Multiplier $eff
                         $changed = $true
                     }
                 }
@@ -694,8 +707,8 @@ function Build-MultiplierPak {
                         }
                         $eff = $harvestYield * $resMult
                         if ($eff -eq 1.0) { continue }
-                        $item.Min = [Math]::Max(1, [int]($item.Min * $eff))
-                        $item.Max = [Math]::Max(1, [int]($item.Max * $eff))
+                        $item.Min = ConvertTo-DropInt -Value $item.Min -Multiplier $eff
+                        $item.Max = ConvertTo-DropInt -Value $item.Max -Multiplier $eff
                         $changed = $true
                     }
                 }
