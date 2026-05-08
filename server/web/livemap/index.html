@@ -145,6 +145,26 @@
             background: rgba(8, 14, 28, 0.7);
             color: #bdaa92; border-radius: 2px; padding: 3px 5px; font-size: 10px;
         }
+        .wpitem-source {
+            font-size: 10px; color: #bdaa92; padding: 6px 0;
+            border-bottom: 1px solid rgba(201, 169, 89, 0.06);
+        }
+        .wpitem-source-title { color: #ede0cc; margin-bottom: 2px; }
+        .wpitem-source-meta, .wpitem-source-id { color: #8f775d; word-break: break-all; }
+        .wpitem-source-id { color: #6f604b; }
+        .wpitem-source-actions { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
+        .wpitem-source-map {
+            background: rgba(40, 30, 12, 0.95);
+            border: 1px solid rgba(201, 169, 89, 0.35);
+            color: #c9a959; border-radius: 2px; cursor: pointer;
+            font: 10px 'IBM Plex Mono', monospace; padding: 3px 6px;
+        }
+        .wpitem-source-map:hover {
+            background: rgba(70, 50, 18, 0.95);
+            border-color: rgba(201, 169, 89, 0.65);
+            color: #ede0cc;
+        }
+        .wpitem-source-muted { color: #6f604b; margin-top: 5px; }
         @media (max-width: 520px) {
             #wpitems-panel { width: 100%; max-width: 100%; right: -100%; }
             #wpitems-filters { grid-template-columns: 1fr; }
@@ -307,6 +327,8 @@
             // Player + mob layers
             var playerLayer = L.layerGroup().addTo(map);
             var mobLayer = L.layerGroup().addTo(map);
+            var itemSourceLayer = L.layerGroup().addTo(map);
+            var mapSourceMarkers = [];
 
             function worldToLatLng(wx, wy) { return L.latLng(wy, wx); }
 
@@ -314,6 +336,195 @@
                 var d = document.createElement('div');
                 d.appendChild(document.createTextNode(s));
                 return d.innerHTML;
+            }
+
+            var SOURCE_SYNONYMS = {
+                cj: ['coast', 'jungle'],
+                hl: ['highlands'],
+                sw: ['swamp'],
+                buca: ['buccaneer'],
+                bucanneer: ['buccaneer'],
+                bucanneers: ['buccaneer'],
+                bucaneers: ['buccaneer'],
+                buccaneers: ['buccaneer'],
+                def: ['defence'],
+                defense: ['defence'],
+                habitable: ['habbitable'],
+                habitat: ['habbitable'],
+                cost: ['coast'],
+                pirates: ['pirate'],
+                traveller: ['traveler'],
+                robinzon: ['robinson'],
+                bigcampbb: ['big', 'camp', 'bb'],
+                smallcampbb: ['small', 'camp', 'bb'],
+                shelfcamp: ['shelf', 'camp'],
+                giga: ['big'],
+                firebowl: ['fire', 'bowl'],
+                ironcavern: ['iron', 'caverns'],
+                ironcaverns: ['iron', 'caverns'],
+                higlands: ['highlands'],
+                senka: ['senkamati']
+            };
+            var SOURCE_STOP_TOKENS = {};
+            'da lt chest shared storage poi quest qp main core gameplay scenario player r5businessrules loottables chests inventory poichestsdefaultinventoriesitems personal mob mobs rss final regular base table tables all ordered weight onetime world game content plugins bp marker map icon iconpoi iconpoichest t icon r5 island generator foliage types ft grass green sand rocky hill type hard easy medium small large xl object objects actor pickup resource resources common family'.split(' ').forEach(function(t) { SOURCE_STOP_TOKENS[t] = true; });
+            var SOURCE_BIOME_TOKENS = { coast: true, jungle: true, highlands: true, swamp: true };
+            var SOURCE_GENERIC_TOKENS = { coast: true, jungle: true, highlands: true, swamp: true, camp: true, pirate: true, ruin: true, ruins: true, big: true, small: true, battle: true };
+            '0 1 2 3 4 5 6 7 8 9 01 02 03 04 05 06 07 08 09 10'.split(' ').forEach(function(t) { SOURCE_GENERIC_TOKENS[t] = true; });
+
+            function sourceSplitTokens(v) {
+                return String(v || '')
+                    .replace(/([a-z])([A-Z])/g, '$1 $2')
+                    .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+                    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, ' ')
+                    .trim()
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .reduce(function(out, t) {
+                        var mapped = SOURCE_SYNONYMS[t] || [t];
+                        mapped.forEach(function(x) { out.push(x); });
+                        return out;
+                    }, []);
+            }
+            function sourceTokens(values) {
+                var seen = {};
+                var out = [];
+                values.forEach(function(v) {
+                    sourceSplitTokens(v).forEach(function(t) {
+                        if (SOURCE_STOP_TOKENS[t]) return;
+                        if (t.length === 1 && !/^[0-9]$/.test(t)) return;
+                        if (seen[t]) return;
+                        seen[t] = true;
+                        out.push(t);
+                    });
+                });
+                return out;
+            }
+            function sourceMarkerTokens(m) {
+                var values = [m.name, m.title, m.poiId, m.foliageTypeAssetPath, m.discoveredTag, m.unknownTag];
+                (m.discoveredMarkers || []).forEach(function(dm) {
+                    values.push(dm.linkTag, dm.scenarioQuestAssetPath, dm.shownNameText, dm.shownNameKey);
+                });
+                return sourceTokens(values);
+            }
+            function sourceDropTokens(d) {
+                var values = [d.npcName, d.npcSourceId, d.sourceTableId, d.sourceTableAssetPath];
+                (d.rollPath || []).forEach(function(v) { values.push(v); });
+                return sourceTokens(values);
+            }
+            function registerMapSource(raw, x, y, kind) {
+                if (!raw || !raw.poiId || typeof x !== 'number' || typeof y !== 'number') return;
+                if (!isFinite(x) || !isFinite(y)) return;
+                mapSourceMarkers.push({
+                    kind: kind || 'marker',
+                    name: raw.name || raw.title || raw.poiId,
+                    poiId: raw.poiId,
+                    type: raw.type || '',
+                    x: x,
+                    y: y,
+                    tokens: sourceMarkerTokens(raw)
+                });
+            }
+            function findItemSourceLocations(drop) {
+                if (!drop || String(drop.sourceType || '').toLowerCase() === 'creature') return [];
+                var q = sourceDropTokens(drop);
+                if (!q.length || !mapSourceMarkers.length) return [];
+                var qSet = {};
+                q.forEach(function(t) { qSet[t] = true; });
+                var qBiome = q.filter(function(t) { return SOURCE_BIOME_TOKENS[t]; });
+                var scored = mapSourceMarkers.map(function(m) {
+                    var common = m.tokens.filter(function(t) { return qSet[t]; });
+                    var specific = common.filter(function(t) { return !SOURCE_GENERIC_TOKENS[t] && !/^[0-9]+$/.test(t); });
+                    var nums = common.filter(function(t) { return /^[0-9]{2}$/.test(t); });
+                    var score = common.length + (specific.length * 3) + (nums.length * 4);
+                    if (common.some(function(t) { return SOURCE_BIOME_TOKENS[t]; })) score += 2;
+                    return {
+                        name: m.name,
+                        poiId: m.poiId,
+                        type: m.type,
+                        kind: m.kind,
+                        x: m.x,
+                        y: m.y,
+                        score: score,
+                        matchedTokens: common
+                    };
+                }).filter(function(m) {
+                    if (m.score < 7 || m.matchedTokens.length < 2) return false;
+                    if (!m.matchedTokens.some(function(t) { return !SOURCE_GENERIC_TOKENS[t] && !/^[0-9]+$/.test(t); })) return false;
+                    if (qBiome.length && !qBiome.some(function(t) { return m.matchedTokens.indexOf(t) >= 0; })) return false;
+                    return true;
+                }).sort(function(a, b) {
+                    return b.score - a.score || b.matchedTokens.length - a.matchedTokens.length || a.name.localeCompare(b.name);
+                });
+                var seen = {};
+                var out = [];
+                for (var i = 0; i < scored.length; i++) {
+                    var k = scored[i].poiId || (scored[i].x + ',' + scored[i].y);
+                    if (seen[k]) continue;
+                    seen[k] = true;
+                    out.push(scored[i]);
+                    if (out.length >= 1) break;
+                }
+                return out;
+            }
+            function showItemSources(sources, label) {
+                itemSourceLayer.clearLayers();
+                var itemSourceCount = 0;
+                var bounds = [];
+                (sources || []).forEach(function(src) {
+                    if (!src || typeof src.x !== 'number' || typeof src.y !== 'number') return;
+                    var ll = worldToLatLng(src.x, src.y);
+                    var title = src.name || src.poiId || 'Loot source';
+                    var marker = L.circleMarker(ll, {
+                        radius: 8,
+                        color: '#fff1a8',
+                        fillColor: '#f6cf4f',
+                        fillOpacity: 0.9,
+                        weight: 2,
+                        opacity: 1
+                    });
+                    var html = '<b>' + escHtml(label || 'Item source') + '</b><br>' + escHtml(title);
+                    if (src.poiId) html += '<br>poi: ' + escHtml(src.poiId);
+                    html += '<br>pos: ' + Math.round(src.x) + ', ' + Math.round(src.y);
+                    marker.bindTooltip(escHtml(title), { direction: 'top', offset: [0, -6], opacity: 0.95 });
+                    marker.bindPopup(html, { maxWidth: 360 });
+                    marker.addTo(itemSourceLayer);
+                    bounds.push(ll);
+                    itemSourceCount++;
+                });
+                window.WindroseSeaChartItemSourceCount = itemSourceCount;
+                if (bounds.length === 1) map.setView(bounds[0], Math.max(map.getZoom(), 3), { animate: true });
+                else if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds).pad(0.25), { animate: true });
+            }
+            window.WindroseSeaChart = {
+                findItemSourceLocations: findItemSourceLocations,
+                showItemSources: showItemSources,
+                clearItemSources: function() { itemSourceLayer.clearLayers(); window.WindroseSeaChartItemSourceCount = 0; },
+                getItemSourceCount: function() { return window.WindroseSeaChartItemSourceCount || 0; },
+                getMapSourceCount: function() { return mapSourceMarkers.length; }
+            };
+
+            async function fetchLayoutSources() {
+                try {
+                    var res = await fetch('/api/layout/runtime', { credentials: 'same-origin' });
+                    if (!res.ok) return;
+                    var data = await res.json();
+                    if (!data || !data.ok || !data.runtime) return;
+                    mapSourceMarkers = [];
+                    (data.runtime.markers || []).forEach(function(m) {
+                        if (typeof m.worldX !== 'number' || typeof m.worldY !== 'number') return;
+                        registerMapSource(m, m.worldX, m.worldY, 'runtime-marker');
+                    });
+                    var nodes = (data.runtime.layout && data.runtime.layout.nodes) || [];
+                    nodes.forEach(function(n) {
+                        (n.manualPoiMarkers || []).forEach(function(m) {
+                            var x = (typeof m.worldX === 'number') ? m.worldX : m.x;
+                            var y = (typeof m.worldY === 'number') ? m.worldY : m.y;
+                            registerMapSource(m, x, y, 'manual-poi');
+                        });
+                    });
+                } catch (e) {}
             }
 
             async function fetchEntities() {
@@ -354,6 +565,7 @@
             }
 
             fetchEntities();
+            fetchLayoutSources();
             setInterval(fetchEntities, 5000);
         })();
 
@@ -378,6 +590,7 @@
             var items = null;
             var filtered = [];
             var loaded = false;
+            var lastSourceHits = [];
             var CYRILLIC = /[\u0400-\u04FF]/;
             var NAME_OVERRIDES = {
                 'did-misc-musket-butt-t01': 'Musket Stock',
@@ -614,12 +827,36 @@
                 html += effectsHtml('Set effects', tooltip.setEffectsDescriptions);
                 return html;
             }
+            function mapLocationsForDrop(drop) {
+                var api = window.WindroseSeaChart || {};
+                if (!api.findItemSourceLocations) return [];
+                try { return api.findItemSourceLocations(drop) || []; }
+                catch (e) { return []; }
+            }
+            function uniqueLocations(list) {
+                var seen = {};
+                var out = [];
+                list.forEach(function(src) {
+                    if (!src || typeof src.x !== 'number' || typeof src.y !== 'number') return;
+                    var k = src.poiId || (Math.round(src.x) + ',' + Math.round(src.y));
+                    if (seen[k]) return;
+                    seen[k] = true;
+                    out.push(src);
+                });
+                return out;
+            }
+            function showMapSources(sources, label) {
+                var api = window.WindroseSeaChart || {};
+                if (!api.showItemSources) return;
+                api.showItemSources(sources, label);
+            }
 
             function showDetail(id) {
                 var it = null;
                 for (var i = 0; i < items.length; i++) { if (items[i].id === id) { it = items[i]; break; } }
                 if (!it) return;
                 var drops = it.drops || [];
+                lastSourceHits = [];
                 var iconUrl_ = iconUrl(it);
                 var html = '<button type="button" id="wpitems-back" style="background:transparent;border:0;color:#c9a959;cursor:pointer;font:11px monospace;padding:0 0 8px">← back</button>';
                 if (iconUrl_) {
@@ -640,6 +877,7 @@
                 if (vanity) html += '<p style="white-space:pre-wrap;color:#8f775d">' + escHtml(vanity) + '</p>';
                 html += '<h4>Item details</h4>' + statsHtml(it);
                 if (drops.length) {
+                    var allLocations = [];
                     html += '<h4>Loot sources (' + drops.length + ')</h4>';
                     for (var j = 0; j < drops.length; j++) {
                         var d = drops[j];
@@ -647,11 +885,24 @@
                         var qmin = d.minQuantity == null ? 0 : d.minQuantity;
                         var qmax = d.maxQuantity == null ? 0 : d.maxQuantity;
                         var qty = (qmin === qmax) ? String(qmin) : qmin + '-' + qmax;
-                        html += '<div style="font-size:10px;color:#bdaa92;padding:5px 0;border-bottom:1px solid rgba(201,169,89,.06)">'
-                            + '<div style="color:#ede0cc">' + escHtml(d.npcName || d.npcId || '?') + '</div>'
-                            + '<div style="color:#8f775d">' + escHtml(d.sourceTypeLabel || d.sourceType || '') + ' · ' + pct + '% · qty ' + qty + '</div>'
-                            + (d.sourceTableId ? '<div style="color:#6f604b;word-break:break-all">' + escHtml(d.sourceTableId) + '</div>' : '')
+                        var locs = mapLocationsForDrop(d);
+                        var hitIndex = -1;
+                        if (locs.length) {
+                            hitIndex = lastSourceHits.length;
+                            lastSourceHits.push({ drop: d, locations: locs });
+                            locs.forEach(function(src) { allLocations.push(src); });
+                        }
+                        html += '<div class="wpitem-source">'
+                            + '<div class="wpitem-source-title">' + escHtml(d.npcName || d.npcId || '?') + '</div>'
+                            + '<div class="wpitem-source-meta">' + escHtml(d.sourceTypeLabel || d.sourceType || '') + ' · ' + pct + '% · qty ' + qty + '</div>'
+                            + (d.sourceTableId ? '<div class="wpitem-source-id">' + escHtml(d.sourceTableId) + '</div>' : '')
+                            + (hitIndex >= 0 ? '<div class="wpitem-source-actions"><button type="button" class="wpitem-source-map" data-source-hit="' + hitIndex + '">Show on map</button><span class="wpitem-source-muted">' + escHtml(locs[0].name || locs[0].poiId || 'mapped source') + '</span></div>' : '')
                             + '</div>';
+                    }
+                    allLocations = uniqueLocations(allLocations);
+                    if (allLocations.length) {
+                        html = html.replace('<h4>Loot sources (' + drops.length + ')</h4>', '<h4>Loot sources (' + drops.length + ')</h4><div class="wpitem-source-actions" style="margin-bottom:6px"><button type="button" class="wpitem-source-map" id="wpitems-show-all-sources">Show ' + allLocations.length + ' mapped location' + (allLocations.length === 1 ? '' : 's') + '</button></div>');
+                        lastSourceHits.unshift({ drop: null, locations: allLocations, all: true, itemName: itemName(it) });
                     }
                 } else {
                     html += '<p style="clear:both;color:#8f775d">No loot sources recorded.</p>';
@@ -700,6 +951,23 @@
                 while (t && t !== listEl && !t.classList.contains('wpitem')) t = t.parentNode;
                 if (!t || !t.classList || !t.classList.contains('wpitem')) return;
                 showDetail(t.getAttribute('data-id'));
+            });
+            detailEl.addEventListener('click', function(e) {
+                var t = e.target;
+                if (t && t.id === 'wpitems-show-all-sources') {
+                    var all = lastSourceHits[0];
+                    if (all && all.all) showMapSources(all.locations, all.itemName || 'Item sources');
+                    return;
+                }
+                while (t && t !== detailEl && !t.classList.contains('wpitem-source-map')) t = t.parentNode;
+                if (!t || !t.classList || !t.classList.contains('wpitem-source-map')) return;
+                var idx = parseInt(t.getAttribute('data-source-hit'), 10);
+                if (!isFinite(idx)) return;
+                if (lastSourceHits[0] && lastSourceHits[0].all) idx += 1;
+                var hit = lastSourceHits[idx];
+                if (!hit) return;
+                var label = (hit.drop && (hit.drop.npcName || hit.drop.sourceTableId)) || 'Item source';
+                showMapSources(hit.locations, label);
             });
         })();
     </script>
