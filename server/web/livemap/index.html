@@ -457,6 +457,7 @@ var STATIC_CATALOG='/catalog/v1';
     var wtStatus = 'loading';
     var biomeLayer = L.layerGroup().addTo(map);
     var edgeLayer = L.layerGroup().addTo(map);
+    var levelLabelLayer = L.layerGroup();
     var nodeLayer = L.layerGroup();    // off by default — layout graph debug
     // Runtime-overlay layers — live save state that windrose.tools cannot
     // serve (chests opened, buildings placed, fog reveal, save rows). The
@@ -1126,6 +1127,7 @@ var STATIC_CATALOG='/catalog/v1';
         manualPoiCount = 0;
         biomeLayer.clearLayers();
         edgeLayer.clearLayers();
+        levelLabelLayer.clearLayers();
         nodeLayer.clearLayers();
         itemSourceLayer.clearLayers();
         itemSourceCount = 0;
@@ -1353,7 +1355,7 @@ var STATIC_CATALOG='/catalog/v1';
                             className: 'wt-level-label',
                             opacity: 1,
                             interactive: false
-                        }).setLatLng(wLL(nx, ny)).setContent(escHtml(levelLabel)).addTo(biomeLayer);
+                        }).setLatLng(wLL(nx, ny)).setContent(escHtml(levelLabel)).addTo(levelLabelLayer);
                     }
                 });
                 renderResourceZones(nodes);
@@ -1955,6 +1957,7 @@ var STATIC_CATALOG='/catalog/v1';
             if (manualPoiCount > 0) addLayerEntry('Places', 'wt:manual_pois', 'Manual POIs', manualPoiLayer, manualPoiCount);
             if (biomeLayer.getLayers().length) addLayerEntry('Places', 'wt:biomes', 'Biomes', biomeLayer, biomeLayer.getLayers().length);
             if (edgeLayer.getLayers().length) addLayerEntry('Places', 'wt:junctions', 'Junctions', edgeLayer, edgeLayer.getLayers().length);
+            if (levelLabelLayer.getLayers().length) addLayerEntry('Scanner / debug', 'wt:level_labels', 'Level labels', levelLabelLayer, levelLabelLayer.getLayers().length);
             if (nodeLayer.getLayers().length)  addLayerEntry('Scanner / debug', 'wt:layout_graph', 'Layout graph', nodeLayer, nodeLayer.getLayers().length);
         }
         if (resourceStatus === 'loading') {
