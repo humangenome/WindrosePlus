@@ -74,6 +74,8 @@ Adjust XP, loot, crafting costs, cooking/smelting speed, harvest yield, and more
 
 > **Save-safety warning:** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in and saves. Take an out-of-band save backup before enabling them. Windrose+ now refuses to build these high-risk multiplier PAKs when another installed PAK also edits inventory assets, and removes the existing generated multiplier PAK on that failure, unless an advanced admin deliberately sets `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1`.
 
+> **Emergency multiplier-PAK disable:** set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before running `StartWindrosePlusServer.bat` to remove/skip `WindrosePlus_Multipliers_P.pak` while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAKs available. Non-default values in `windrose_plus.json` / `windrose_plus.harvest.ini` will not apply while this switch is set.
+
 **Active multipliers** (`windrose_plus.json`):
 ```json
 {
@@ -199,6 +201,15 @@ This downloads UE4SS, installs the mod, and sets up the dashboard. Reinstalling 
 Edits to `multipliers` in `windrose_plus.json` or to any `.ini` file need to be baked into a game override PAK before the server launches — otherwise the game loads the unmodified defaults. That rebuild step is what `tools/WindrosePlus-BuildPak.ps1` does.
 
 **The easy way:** run `StartWindrosePlusServer.bat` (installed at your server root). It runs the rebuild step if anything changed (no-op in milliseconds otherwise), then launches `WindroseServer.exe`.
+
+To temporarily run Windrose+ without generated multiplier PAKs:
+
+```powershell
+set WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1
+StartWindrosePlusServer.bat
+```
+
+This is for recovery/testing only. It removes/skips `WindrosePlus_Multipliers_P.pak`, so JSON/harvest multipliers do not apply until the environment variable is removed and the server is started again through the wrapper.
 
 **If you already have your own launcher**, add one line before whatever calls `WindroseServer.exe`:
 
@@ -328,6 +339,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
+- **Run dashboard/RCON/Sea Chart without multiplier PAKs** - Set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. The wrapper removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`, but leaves runtime features and CurveTable PAKs alone.
 - **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, make sure you are on v1.0.14 or newer; older builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
 - **Fully disable Windrose+ for recovery testing** - Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` is not enough because UE4SS and existing PAK overrides can still load.
 - **Recovering from inventory/stack save issues** - Restore a save backup from before the inventory-affecting PAK change, fully disable Windrose+ as above, then confirm the character can join before re-enabling any PAK overrides.

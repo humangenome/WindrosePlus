@@ -162,6 +162,7 @@ Save-safety notes:
 - `inventory_size`, `stack_size`, and `weight` are disabled because inventory-affecting changes can become part of player save state after login/save and can crash Windrose's inventory validator.
 - `crop_speed` is disabled because non-default crop timing can crash Windrose's crop validator.
 - `points_per_level` is disabled because changing progression rewards can create `RewardLevel < CurrentLevel` character-save crashes. The dashboard Character Repair page can repair the known no-spend drift case from a zipped local `SaveProfiles` folder.
+- To keep Windrose+ runtime features but disable generated multiplier PAKs, set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. This removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`. JSON and harvest multipliers will not apply while the switch is set.
 - To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`.
 
 ### [PlayerStats]

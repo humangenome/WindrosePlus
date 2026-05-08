@@ -84,6 +84,8 @@ if (-not $ServerDir -or -not (Test-Path -LiteralPath (Join-Path $ServerDir "R5\C
 $paksDir = Join-Path $ServerDir "R5\Content\Paks"
 $stateDir = Join-Path $ServerDir "windrose_plus_data"
 $binDir  = Join-Path $PSScriptRoot "bin"
+$multiplierPakFile = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
+$disableMultiplierPak = "$env:WINDROSEPLUS_DISABLE_MULTIPLIER_PAK".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 if (-not (Test-Path -LiteralPath $stateDir) -and -not $DryRun) {
     New-Item -ItemType Directory -Force -LiteralPath $stateDir | Out-Null
@@ -242,7 +244,7 @@ function Save-MultiplierHistory {
 }
 
 $history = @{}
-$historyExisted = Test-Path -LiteralPath $historyFile
+$historyExisted = (Test-Path -LiteralPath $historyFile) -and -not $disableMultiplierPak
 $historyCorrupt = $false
 if ($historyExisted) {
     try {
@@ -276,7 +278,7 @@ if ($historyExisted) {
     }
 }
 
-if ($historyCorrupt -and -not $allowDowngrade) {
+if ($historyCorrupt -and -not $allowDowngrade -and -not $disableMultiplierPak) {
     Write-Host ""
     Write-Host "REFUSING TO BUILD: multiplier history file is unreadable" -ForegroundColor Red
     Write-Host "  $historyFile" -ForegroundColor Yellow
@@ -388,6 +390,23 @@ if (-not $hasMultipliers) {
     foreach ($v in $perResourceHarvest.Values) {
         if ($v -ne 1.0) { $hasMultipliers = $true; break }
     }
+}
+
+if ($disableMultiplierPak) {
+    if ($hasMultipliers) {
+        Write-Warning "WINDROSEPLUS_DISABLE_MULTIPLIER_PAK is enabled. Removing/skipping generated multiplier PAK output; multiplier config will not apply while this is set."
+    }
+    foreach ($stale in @($multiplierPakFile, $historyFile)) {
+        if (Test-Path -LiteralPath $stale) {
+            if ($DryRun) {
+                Write-Host "  [DRY RUN] Would remove $stale because WINDROSEPLUS_DISABLE_MULTIPLIER_PAK is enabled" -ForegroundColor DarkGray
+            } else {
+                Remove-Item -LiteralPath $stale -Force -ErrorAction SilentlyContinue
+                Write-Host "Removed $stale because WINDROSEPLUS_DISABLE_MULTIPLIER_PAK is enabled"
+            }
+        }
+    }
+    $hasMultipliers = $false
 }
 $hasCT = ($ctConfig.Count -gt 0)
 
@@ -508,12 +527,14 @@ if ($cachedHash -eq $currentHash -and $allExpectedExist -and -not $DryRun -and -
     # Backfill history on legacy installs whose previous build (pre-ratchet)
     # never wrote one. The PAK on disk reflects $plannedHistory exactly because
     # config did not change since it was built.
-    try {
-        Save-MultiplierHistory -History $plannedHistory -Path $historyFile
-    } catch {
-        [Console]::Error.WriteLine("FAILED to persist multiplier history at ${historyFile}: $_")
-        [Console]::Error.WriteLine("The downgrade ratchet for issue #69 needs this file. Resolve the file-system issue (permissions / disk space) and rebuild.")
-        exit 4
+    if ($hasMultipliers) {
+        try {
+            Save-MultiplierHistory -History $plannedHistory -Path $historyFile
+        } catch {
+            [Console]::Error.WriteLine("FAILED to persist multiplier history at ${historyFile}: $_")
+            [Console]::Error.WriteLine("The downgrade ratchet for issue #69 needs this file. Resolve the file-system issue (permissions / disk space) and rebuild.")
+            exit 4
+        }
     }
     exit 0
 }
@@ -753,7 +774,7 @@ if ($hasCT) {
 # history. Hard fail if we cannot persist — without this file the next
 # downgrade is unprotected, which is exactly the failure mode the ratchet
 # exists to prevent (issue #69).
-if (-not $DryRun) {
+if ($hasMultipliers -and -not $DryRun) {
     try {
         Save-MultiplierHistory -History $plannedHistory -Path $historyFile
     } catch {

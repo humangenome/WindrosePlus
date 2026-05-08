@@ -1773,7 +1773,13 @@
                 const s = await res.json();
                 const banner = document.getElementById('pak-banner');
                 const msg = document.getElementById('pak-banner-msg');
-                if (s && s.wrapper_present && s.stale) {
+                if (s && s.wrapper_present && s.multiplier_pak_disabled && s.multipliers_pak_present) {
+                    msg.textContent = 'Multiplier PAK generation is disabled but a generated multiplier PAK is still present. Restart the server via StartWindrosePlusServer.bat to remove it.';
+                    banner.style.display = 'block';
+                } else if (s && s.wrapper_present && s.multiplier_pak_disabled && s.multiplier_config_present) {
+                    msg.textContent = 'Multiplier PAK generation is disabled; non-default multiplier config will not apply until WINDROSEPLUS_DISABLE_MULTIPLIER_PAK is removed and the server is restarted via StartWindrosePlusServer.bat.';
+                    banner.style.display = 'block';
+                } else if (s && s.wrapper_present && s.stale) {
                     if (s.stale_reason) {
                         msg.textContent = s.stale_reason + ' Restart the server via StartWindrosePlusServer.bat to apply.';
                     }

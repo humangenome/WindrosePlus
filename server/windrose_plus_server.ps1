@@ -1159,6 +1159,7 @@ try {
                     $wrapper = Join-Path $gameDir "StartWindrosePlusServer.bat"
                     $jsonPath = Join-Path $gameDir "windrose_plus.json"
                     $iniPath  = Join-Path $gameDir "windrose_plus.ini"
+                    $multiplierPakDisabled = "$env:WINDROSEPLUS_DISABLE_MULTIPLIER_PAK".Trim().ToLowerInvariant() -in @("1","true","yes","on")
                     # CurveTable-relevant INIs only — harvest is a
                     # multipliers-only file and must NOT make ct_config_present
                     # true on its own (would trigger spurious "Default INI
@@ -1190,6 +1191,8 @@ try {
                         json_present            = (Test-Path -LiteralPath $jsonPath)
                         ini_present             = (Test-Path -LiteralPath $iniPath)
                         ct_config_present       = $ctConfigPresent
+                        multiplier_pak_disabled = $multiplierPakDisabled
+                        multiplier_config_present = $false
                         stale                   = $false
                         stale_reason            = $null
                     }
@@ -1244,6 +1247,7 @@ try {
                                 } catch { }
                             }
                         }
+                        $status.multiplier_config_present = $expectMultPak
 
                         if (-not $script:IniParserLoaded) {
                             # Can't authoritatively answer CT question — return what we know
@@ -1281,8 +1285,15 @@ try {
                                 $stale = $true
                                 $reason = $ctStatusError
                             }
+                            if ($multiplierPakDisabled -and $status.multipliers_pak_present -and -not $stale) {
+                                $stale = $true; $reason = "Multiplier PAK generation is disabled but a generated multiplier PAK is still present"
+                            }
                             if ($expectMultPak -and -not $stale) {
-                                if ($status.multipliers_pak_present) {
+                                if ($multiplierPakDisabled) {
+                                    # Intentional no-op: config has multipliers, but the
+                                    # emergency disable switch tells the builder not to
+                                    # produce/load a generated multiplier PAK.
+                                } elseif ($status.multipliers_pak_present) {
                                     $t = (Get-Item $multPak).LastWriteTimeUtc.Ticks
                                     if ($t -lt $pakMtime) { $pakMtime = $t }
                                 } else {
@@ -1297,7 +1308,7 @@ try {
                                     $stale = $true; $reason = "CurveTables PAK missing but config requires one"
                                 }
                             }
-                            if (-not $stale -and ($expectMultPak -or $expectCtPak)) {
+                            if (-not $stale -and (($expectMultPak -and -not $multiplierPakDisabled) -or $expectCtPak)) {
                                 if ($configMtime -gt 0 -and $configMtime -gt $pakMtime) {
                                     $stale = $true
                                     $reason = "Config edited after PAK build"
