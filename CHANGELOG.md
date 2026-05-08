@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-08
+
 ### Added
 
 - **Added an emergency multiplier-PAK disable switch.** Setting `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before running `StartWindrosePlusServer.bat` removes/skips `WindrosePlus_Multipliers_P.pak` and the multiplier history file while leaving the runtime dashboard, RCON, Sea Chart, mods loader, and CurveTable PAK support available. This gives hosts a clean recovery path while investigating current Windrose build inventory/backpack compatibility reports.
