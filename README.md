@@ -34,7 +34,7 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ## Features
 
 ### Live Sea Chart
-A real-time map of your server showing player positions, creature locations, and island terrain, right in your browser. The map generates automatically when the first player connects.
+A real-time map of your server showing island terrain, player and creature positions, windrose.tools-style POI/layout overlays when available, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, drop-source table IDs, and map links for sources that match known POI markers.
 
 ![Sea Chart](docs/screenshots/seachart.png)
 
@@ -273,7 +273,7 @@ See [docs/config-reference.md](docs/config-reference.md) for every advanced INI 
 
 ### Dashboard
 
-Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing player and mob positions in real-time.
+Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, and item drop sources in real time.
 
 If you want friends to see the Sea Chart without the dashboard password, enable the optional map-only view:
 
@@ -286,7 +286,7 @@ If you want friends to see the Sea Chart without the dashboard password, enable 
 }
 ```
 
-Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only map data and tiles; the console, config, repair, and admin APIs still require the dashboard login.
+Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only the map view, public map data, tiles, layout overlays, and catalog assets; the console, config, repair, and admin APIs still require the dashboard login.
 
 ### Commands
 
@@ -325,7 +325,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **Server crashes on startup** - Check `UE4SS-settings.ini`. As of v1.1.4 only `HookProcessInternal` should be enabled; `HookEngineTick` must be `0` and `DefaultExecuteInGameThreadMethod` must be `ProcessEvent` on Windrose Shipping builds (older guidance to enable `HookEngineTick` is no longer correct).
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
-- **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed.
+- **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
 - **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, make sure you are on v1.0.14 or newer; older builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
 - **Fully disable Windrose+ for recovery testing** - Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `R5\Content\Paks\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` is not enough because UE4SS and existing PAK overrides can still load.
 - **Recovering from inventory/stack save issues** - Restore a save backup from before the inventory-affecting PAK change, fully disable Windrose+ as above, then confirm the character can join before re-enabling any PAK overrides.

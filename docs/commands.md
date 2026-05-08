@@ -549,11 +549,14 @@ Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 
 ## HTTP API Endpoints
 
-The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`.
+The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. Catalog assets and layout overlays are public because they contain generic game data or world-layout data, not player/admin data. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "timestamp": ...}` |
+| GET | `/catalog/*` | No | Static bundled item catalog JSON and icons used by the Sea Chart item browser. |
+| GET | `/api/layout` | No | Public world-layout fingerprint and terrain placement summary used for map overlays. |
+| GET | `/api/layout/runtime` | No | Cached windrose.tools-compatible runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
