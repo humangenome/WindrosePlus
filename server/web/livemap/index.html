@@ -590,8 +590,11 @@
                 html += detailRow('Rarity', itemRarityLabel(it));
                 html += detailRow('Tier', itemTier(it) || '0');
                 html += detailRow('Stack', itemStack(it));
+                html += detailRow('Source ID', it.sourceId);
+                html += detailRow('Category path', it.categoryId);
                 html += detailRow('Item tag', it.itemTag);
                 html += detailRow('Item type', it.itemTypeTag);
+                html += detailRow('Icon ref', it.iconRef);
                 if (isKnown(it.foodPrimaryStatLabel)) html += detailRow(it.foodPrimaryStatLabel, it.foodPrimaryStatValue);
                 if (isKnown(it.foodDurationSeconds)) html += detailRow('Food duration', formatDuration(it.foodDurationSeconds));
                 if (isKnown(it.weaponStatLabel)) html += detailRow(it.weaponStatLabel, it.weaponStatValue);
