@@ -935,7 +935,7 @@
         .tab-content { display: none; flex: 1; min-height: 0; flex-direction: column; }
         .tab-content.active { display: flex; }
         #seachart-pane { position: relative; }
-        #seachart-map { width: 100%; height: 100%; min-height: 300px; background: #141820; border-radius: 8px; }
+        #seachart-map { width: 100%; height: 100%; min-height: 300px; background: #141820; border: 0; border-radius: 8px; }
 
         .player-card-footer {
             margin-top: 10px;
@@ -1236,7 +1236,7 @@
                 </section>
             </div>
             <div class="tab-content" id="seachart-pane">
-                <div id="seachart-map"></div>
+                <iframe id="seachart-map" title="WindrosePlus Sea Chart" loading="lazy"></iframe>
                 <div class="tp-hint-banner" id="tp-hint-banner" style="display:none;"></div>
             </div>
 
@@ -1804,7 +1804,6 @@
         });
         // Tab switching
         var seachartInitialized = false;
-        var seachartMap = null;
 
         // -------- Click-to-teleport state --------
         // The TELEPORT button on each player row "arms" a teleport for that player. While
@@ -1817,6 +1816,49 @@
         var tpArmedPlayer = null;
         var tpArmedPlayerZ = null;  // captured at arm time as a fallback Z for click commits
         var tpPreviewCoords = null;
+
+        function getSeaChartFrame() {
+            return document.getElementById('seachart-map');
+        }
+
+        function postSeaChartMessage(type, payload) {
+            var frame = getSeaChartFrame();
+            if (!frame || !frame.contentWindow) return;
+            frame.contentWindow.postMessage({
+                source: 'WindrosePlusDashboard',
+                type: type,
+                payload: payload || {}
+            }, window.location.origin);
+        }
+
+        function postSeaChartTeleportState() {
+            postSeaChartMessage('teleport-armed', { armed: !!tpArmedPlayer });
+        }
+
+        function commitTeleportFromSeaChart(x, y) {
+            if (!tpArmedPlayer) return;
+            var player = tpArmedPlayer;
+            var fallbackZ = tpArmedPlayerZ;
+            disarmTeleport();
+
+            fetch('/api/terrain_height?x=' + encodeURIComponent(x) + '&y=' + encodeURIComponent(y))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var z;
+                    if (data && typeof data.z === 'number') {
+                        z = data.z >= 0 ? Math.round(data.z + 100) : 300;
+                    } else if (fallbackZ != null) {
+                        z = fallbackZ;
+                    } else {
+                        z = 300;
+                    }
+                    sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y + ' ' + z);
+                })
+                .catch(function() {
+                    var z = fallbackZ != null ? fallbackZ : 300;
+                    sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y + ' ' + z);
+                });
+        }
 
         function armTeleport(playerName) {
             if (!playerName) return;
@@ -1855,6 +1897,7 @@
                     + '<span class="hint-key">ESC to cancel</span>';
                 banner.style.display = 'block';
             }
+            postSeaChartTeleportState();
         }
 
         function disarmTeleport() {
@@ -1874,6 +1917,7 @@
             if (mapEl) mapEl.classList.remove('tp-armed');
             var banner = document.getElementById('tp-hint-banner');
             if (banner) banner.style.display = 'none';
+            postSeaChartTeleportState();
         }
 
         // Update the armed player's row coords + banner to reflect the cursor position.
@@ -1924,6 +1968,20 @@
             }
         });
 
+        window.addEventListener('message', function(e) {
+            if (e.origin !== window.location.origin) return;
+            var data = e.data || {};
+            if (data.source !== 'WindrosePlusLivemap') return;
+            var payload = data.payload || {};
+            if (data.type === 'map-hover' && tpArmedPlayer && typeof payload.x === 'number' && typeof payload.y === 'number') {
+                updateTeleportPreview(payload.x, payload.y);
+            } else if (data.type === 'map-leave' && tpArmedPlayer) {
+                clearTeleportPreview();
+            } else if (data.type === 'map-click' && tpArmedPlayer && typeof payload.x === 'number' && typeof payload.y === 'number') {
+                commitTeleportFromSeaChart(payload.x, payload.y);
+            }
+        });
+
         document.querySelectorAll('.dashboard-tab').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var tab = this.getAttribute('data-tab');
@@ -1935,8 +1993,8 @@
                 if (tab === 'seachart' && !seachartInitialized) {
                     initSeaChart();
                 }
-                if (tab === 'seachart' && seachartMap) {
-                    seachartMap.invalidateSize();
+                if (tab === 'seachart') {
+                    postSeaChartTeleportState();
                 }
             });
         });
@@ -1947,6 +2005,22 @@
             // start a parallel fetch chain, duplicate the Leaflet map mount, and leak intervals.
             if (seachartInitializing || seachartInitialized) return;
             seachartInitializing = true;
+            var frame = getSeaChartFrame();
+            if (!frame) {
+                seachartInitializing = false;
+                return;
+            }
+            if (!frame.dataset.srcSet) {
+                frame.src = '/livemap?embed=1';
+                frame.dataset.srcSet = '1';
+                frame.addEventListener('load', function() {
+                    postSeaChartTeleportState();
+                });
+            }
+            seachartInitialized = true;
+            seachartInitializing = false;
+            postSeaChartTeleportState();
+            return;
             // Manifest fetch with retry — first connect can race tile generation.
             // Poll every 3s for up to 3 minutes before showing the not-ready notice.
             var attempts = 0, maxAttempts = 60;
