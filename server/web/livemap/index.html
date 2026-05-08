@@ -204,6 +204,7 @@
         (async function() {
             var loadEl = document.getElementById('loading');
             var manifest;
+            var STATIC_CATALOG = '/catalog/v1';
 
             var isPublicMap = window.location.pathname.replace(/\/+$/, '') === '/public-map';
             var publicToken = '';
@@ -335,6 +336,14 @@
             var mobLayer = L.layerGroup().addTo(map);
             var itemSourceLayer = L.layerGroup().addTo(map);
             var mapSourceMarkers = [];
+            var layerControl = null;
+            var placeholderLayer = L.layerGroup();
+            var resourceStatus = 'loading';
+            var resourceTypes = {};
+            var resourceTypeLayers = {};
+            var resourceCounts = {};
+            var resourceZones = [];
+            var resourceLayoutNodes = [];
 
             function worldToLatLng(wx, wy) { return L.latLng(wy, wx); }
 
@@ -432,6 +441,150 @@
                     tokens: sourceMarkerTokens(raw)
                 });
             }
+            function resourceName(id) {
+                var rt = resourceTypes[id] || {};
+                if (rt.name) return rt.name;
+                return String(id || 'Resource').replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+            }
+            function resourceColor(id, prop, fallback) {
+                var rt = resourceTypes[id] || {};
+                return (rt.color && rt.color[prop]) || fallback;
+            }
+            function ensureResourceLayer(id) {
+                if (!resourceTypeLayers[id]) resourceTypeLayers[id] = L.layerGroup();
+                return resourceTypeLayers[id];
+            }
+            function clearResources() {
+                Object.keys(resourceTypeLayers).forEach(function(k) { resourceTypeLayers[k].clearLayers(); });
+                resourceCounts = {};
+            }
+            function resourceNodeCenter(n) {
+                var x = (typeof n.worldX === 'number') ? n.worldX : n.x;
+                var y = (typeof n.worldY === 'number') ? n.worldY : n.y;
+                if (typeof x !== 'number' || typeof y !== 'number' || !isFinite(x) || !isFinite(y)) return null;
+                return { x: x, y: y };
+            }
+            function resourceNodeSpread(n) {
+                var b = n.bounds || {};
+                if (typeof b.minX === 'number' && typeof b.maxX === 'number' && typeof b.minY === 'number' && typeof b.maxY === 'number') {
+                    return Math.max(12000, Math.min(32000, Math.min(Math.abs(b.maxX - b.minX), Math.abs(b.maxY - b.minY)) * 0.24));
+                }
+                return 18000;
+            }
+            function resourcePopup(zone, n) {
+                var id = zone.resourceTypeId || '';
+                var html = '<b>' + escHtml(resourceName(id)) + '</b><br>Resource hint';
+                if (zone.terrainTemplateId) html += '<br>terrain: ' + escHtml(zone.terrainTemplateId);
+                if (n && n.nodeId !== undefined) html += '<br>node: ' + escHtml(String(n.nodeId));
+                if (zone.approximationConfidence) html += '<br>confidence: ' + escHtml(zone.approximationConfidence);
+                if (Array.isArray(zone.evidenceKinds) && zone.evidenceKinds.length) html += '<br>evidence: ' + escHtml(zone.evidenceKinds.join(', '));
+                if (zone.authoredClusterCount !== undefined) html += '<br>authored clusters: ' + escHtml(String(zone.authoredClusterCount));
+                if (zone.authoredNodeCount !== undefined) html += '<br>authored nodes: ' + escHtml(String(zone.authoredNodeCount));
+                if (zone.manualPlacedObjectPoiCount !== undefined) html += '<br>manual POIs: ' + escHtml(String(zone.manualPlacedObjectPoiCount));
+                html += '<br><span style="color:#8f775d">terrain-template hint, not live harvest state</span>';
+                return html;
+            }
+            function renderResourceZones(nodes) {
+                if (Array.isArray(nodes)) resourceLayoutNodes = nodes;
+                clearResources();
+                if (!resourceZones.length || !resourceLayoutNodes.length) {
+                    if (resourceStatus !== 'error') resourceStatus = resourceZones.length ? 'empty' : resourceStatus;
+                    rebuildLayerControl();
+                    return;
+                }
+                var nodeById = {};
+                resourceLayoutNodes.forEach(function(n) {
+                    if (n && n.nodeId !== undefined && n.kind !== 'junction') nodeById[String(n.nodeId)] = n;
+                });
+                var zonesByNode = {};
+                resourceZones.forEach(function(zone) {
+                    (zone.nodeIds || []).forEach(function(id) {
+                        var key = String(id);
+                        if (!nodeById[key]) return;
+                        if (!zonesByNode[key]) zonesByNode[key] = [];
+                        zonesByNode[key].push(zone);
+                    });
+                });
+                Object.keys(zonesByNode).forEach(function(nodeId) {
+                    var n = nodeById[nodeId];
+                    var center = resourceNodeCenter(n);
+                    if (!center) return;
+                    var list = zonesByNode[nodeId];
+                    var spread = resourceNodeSpread(n);
+                    list.forEach(function(zone, i) {
+                        var total = Math.max(1, list.length);
+                        var angle = (-Math.PI / 2) + (Math.PI * 2 * i / total);
+                        var dist = total === 1 ? 0 : spread;
+                        var x = center.x + Math.cos(angle) * dist;
+                        var y = center.y + Math.sin(angle) * dist;
+                        var id = zone.resourceTypeId || 'resource';
+                        var fill = resourceColor(id, 'fill', '#9ecb65');
+                        var stroke = resourceColor(id, 'stroke', '#45692a');
+                        var marker = L.circleMarker(worldToLatLng(x, y), {
+                            radius: id === 'mineral-deposit' ? 5.5 : 5,
+                            color: stroke,
+                            fillColor: fill,
+                            fillOpacity: 0.78,
+                            weight: 1.4,
+                            opacity: 0.95
+                        });
+                        var label = resourceName(id);
+                        marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
+                        marker.bindPopup(resourcePopup(zone, n), { maxWidth: 380 });
+                        marker.addTo(ensureResourceLayer(id));
+                        resourceCounts[id] = (resourceCounts[id] || 0) + 1;
+                    });
+                });
+                var totalMarkers = Object.keys(resourceCounts).reduce(function(sum, id) { return sum + resourceCounts[id]; }, 0);
+                resourceStatus = totalMarkers > 0 ? 'ok' : 'empty';
+                rebuildLayerControl();
+            }
+            function loadResourceZones() {
+                fetch(STATIC_CATALOG + '/resource_zones.json?v=20260508-resources')
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(d) {
+                        if (!d || !Array.isArray(d.resourceTypes) || !Array.isArray(d.zones)) {
+                            resourceStatus = 'error';
+                            rebuildLayerControl();
+                            return;
+                        }
+                        resourceTypes = {};
+                        d.resourceTypes.forEach(function(rt) { if (rt && rt.id) resourceTypes[rt.id] = rt; });
+                        resourceZones = d.zones;
+                        renderResourceZones(resourceLayoutNodes);
+                    })
+                    .catch(function() {
+                        resourceStatus = 'error';
+                        rebuildLayerControl();
+                    });
+            }
+            function resourceTotalCount() {
+                return Object.keys(resourceCounts).reduce(function(sum, id) { return sum + resourceCounts[id]; }, 0);
+            }
+            function rebuildLayerControl() {
+                if (layerControl) { map.removeControl(layerControl); layerControl = null; }
+                var overlays = {
+                    'Players': playerLayer,
+                    'Mobs': mobLayer
+                };
+                if (window.WindroseSeaChartItemSourceCount > 0) overlays['Item source hits (' + window.WindroseSeaChartItemSourceCount + ')'] = itemSourceLayer;
+                if (resourceStatus === 'loading') {
+                    overlays['Resource hints (loading…)'] = placeholderLayer;
+                } else if (resourceStatus === 'error') {
+                    overlays['Resource hints (unavailable)'] = placeholderLayer;
+                } else if (resourceStatus === 'empty') {
+                    overlays['Resource hints (none)'] = placeholderLayer;
+                } else {
+                    Object.keys(resourceTypeLayers).sort(function(a, b) {
+                        return resourceName(a).localeCompare(resourceName(b));
+                    }).forEach(function(id) {
+                        var n = resourceCounts[id] || 0;
+                        if (n <= 0) return;
+                        overlays['Resource: ' + resourceName(id) + ' (' + n + ')'] = resourceTypeLayers[id];
+                    });
+                }
+                layerControl = L.control.layers(null, overlays, { collapsed: true, position: 'topright' }).addTo(map);
+            }
             function findItemSourceLocations(drop) {
                 if (!drop || String(drop.sourceType || '').toLowerCase() === 'creature') return [];
                 var q = sourceDropTokens(drop);
@@ -500,15 +653,20 @@
                     itemSourceCount++;
                 });
                 window.WindroseSeaChartItemSourceCount = itemSourceCount;
+                rebuildLayerControl();
                 if (bounds.length === 1) map.setView(bounds[0], Math.max(map.getZoom(), 3), { animate: true });
                 else if (bounds.length > 1) map.fitBounds(L.latLngBounds(bounds).pad(0.25), { animate: true });
             }
             window.WindroseSeaChart = {
                 findItemSourceLocations: findItemSourceLocations,
                 showItemSources: showItemSources,
-                clearItemSources: function() { itemSourceLayer.clearLayers(); window.WindroseSeaChartItemSourceCount = 0; },
+                clearItemSources: function() { itemSourceLayer.clearLayers(); window.WindroseSeaChartItemSourceCount = 0; rebuildLayerControl(); },
                 getItemSourceCount: function() { return window.WindroseSeaChartItemSourceCount || 0; },
-                getMapSourceCount: function() { return mapSourceMarkers.length; }
+                getMapSourceCount: function() { return mapSourceMarkers.length; },
+                getResourceZoneCount: resourceTotalCount,
+                getResourceTypeCount: function() {
+                    return Object.keys(resourceCounts).filter(function(id) { return resourceCounts[id] > 0; }).length;
+                }
             };
 
             async function fetchLayoutSources() {
@@ -530,6 +688,7 @@
                             registerMapSource(m, x, y, 'manual-poi');
                         });
                     });
+                    renderResourceZones(nodes);
                 } catch (e) {}
             }
 
@@ -571,6 +730,8 @@
             }
 
             fetchEntities();
+            rebuildLayerControl();
+            loadResourceZones();
             fetchLayoutSources();
             setInterval(fetchEntities, 5000);
         })();

@@ -34,7 +34,7 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ## Features
 
 ### Live Sea Chart
-A real-time map of your server showing island terrain, player and creature positions, windrose.tools-style POI/layout overlays when available, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, crafting recipes, vendor trades, construction uses, drop-source table IDs, and map links for sources that match known POI markers.
+A real-time map of your server showing island terrain, player and creature positions, windrose.tools-style POI/layout overlays when available, resource-zone hints, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, crafting recipes, vendor trades, construction uses, drop-source table IDs, and map links for sources that match known POI markers.
 
 ![Sea Chart](docs/screenshots/seachart.png)
 
@@ -273,7 +273,7 @@ See [docs/config-reference.md](docs/config-reference.md) for every advanced INI 
 
 ### Dashboard
 
-Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, and item drop sources in real time.
+Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, resource-zone hints, and item drop sources in real time.
 
 If you want friends to see the Sea Chart without the dashboard password, enable the optional map-only view:
 
