@@ -288,6 +288,8 @@ If you want friends to see the Sea Chart without the dashboard password, enable 
 
 Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only the map view, public map data, tiles, layout overlays, and catalog assets; the console, config, repair, and admin APIs still require the dashboard login.
 
+Sea Chart can also render optional runtime save overlays when another local tool writes `windrose_plus_data/runtime_overlay.json`. That file is intentionally separate from the dashboard core: if it is absent, the map still loads terrain, players, layout overlays, resources, and item data normally; if present, `/api/runtime-overlay` and the token-gated public map path render chest state, buildings, saved player positions, fog reveal, and quest blackboard layers from the same JSON schema.
+
 ### Commands
 
 Type `wp.help` in the console to see all available commands. Common ones:

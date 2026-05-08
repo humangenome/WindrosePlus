@@ -214,6 +214,22 @@ function ConvertTo-PublicLiveMapData($data) {
     return [PSCustomObject]$publicData
 }
 
+function Get-RuntimeOverlayData {
+    $overlayFile = Join-Path $dataDir "runtime_overlay.json"
+    if (-not (Test-Path -LiteralPath $overlayFile)) {
+        return @{ Ok = $false; StatusCode = 404; Error = "No runtime overlay data" }
+    }
+    try {
+        $data = Get-Content -LiteralPath $overlayFile -Raw | ConvertFrom-Json
+        if ($data.PSObject.Properties.Name -contains "source_save_path") {
+            $data.PSObject.Properties.Remove("source_save_path")
+        }
+        return @{ Ok = $true; StatusCode = 200; Data = $data }
+    } catch {
+        return @{ Ok = $false; StatusCode = 500; Error = "Runtime overlay data is not valid JSON" }
+    }
+}
+
 # Session management — HMAC-signed tokens
 $sessionSecret = [System.Guid]::NewGuid().ToString()
 
@@ -1037,6 +1053,16 @@ try {
                     continue
                 }
 
+                if ($path -eq "/api/public/runtime-overlay") {
+                    $overlay = Get-RuntimeOverlayData
+                    if ($overlay.Ok) {
+                        Send-Json $context $overlay.Data
+                    } else {
+                        Send-Json $context @{ error = $overlay.Error } $overlay.StatusCode
+                    }
+                    continue
+                }
+
                 if ($path -eq "/api/public/mapinfo") {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
@@ -1112,6 +1138,14 @@ try {
                         Send-Json $context $data
                     } else {
                         Send-Json $context @{ error = "No livemap data" }
+                    }
+                }
+                "/api/runtime-overlay" {
+                    $overlay = Get-RuntimeOverlayData
+                    if ($overlay.Ok) {
+                        Send-Json $context $overlay.Data
+                    } else {
+                        Send-Json $context @{ error = $overlay.Error } $overlay.StatusCode
                     }
                 }
                 "/api/config" {
