@@ -397,6 +397,14 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
             std::string blob = read_struct_value(sname, base);
             if (!blob.empty()) {
                 out << ",\"value\":" << blob;
+            } else {
+                // Honest signal to the adapter: this struct shape isn't decoded
+                // by read_struct_value yet. The adapter must treat the value
+                // as opaque rather than guess fields. A populated-world run
+                // that needs custom-struct fields (e.g. R5FoliageBinding,
+                // R5RuntimePolygon) MUST extend read_struct_value or add a
+                // recursive walker before claiming byte-exact parity.
+                out << ",\"value\":null,\"unhandledStruct\":true";
             }
         } catch (...) {
             out << ",\"err\":\"struct_read_failed\"";
@@ -472,7 +480,7 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
                         }
                     }
                     out << "]";
-                    if (num > limit) out << ",\"truncated\":true";
+                    if (num > limit) out << ",\"truncated\":true,\"limit\":" << limit;
                 } else if (innerKind == STR("StrProperty")) {
                     out << ",\"items\":[";
                     for (int32 i = 0; i < limit; i++) {
@@ -486,7 +494,7 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
                         out << "\"" << json_escape(wide_to_utf8(sv)) << "\"";
                     }
                     out << "]";
-                    if (num > limit) out << ",\"truncated\":true";
+                    if (num > limit) out << ",\"truncated\":true,\"limit\":" << limit;
                 } else if (innerKind == STR("NameProperty")) {
                     out << ",\"items\":[";
                     for (int32 i = 0; i < limit; i++) {
@@ -497,18 +505,26 @@ static void emit_property_value(std::ofstream& out, FProperty* p, UObject* o) {
                         out << "\"" << json_escape(wide_to_utf8(wstr)) << "\"";
                     }
                     out << "]";
-                    if (num > limit) out << ",\"truncated\":true";
+                    if (num > limit) out << ",\"truncated\":true,\"limit\":" << limit;
                 } else if (innerKind == STR("StructProperty")) {
+                    bool sawUnhandledItem = false;
                     out << ",\"items\":[";
                     for (int32 i = 0; i < limit; i++) {
                         if (i > 0) out << ", ";
                         const uint8_t* base = (const uint8_t*)helper.GetRawPtr(i);
                         std::string blob = read_struct_value(innerStruct, base);
-                        if (!blob.empty()) out << blob;
-                        else out << "null";
+                        if (!blob.empty()) {
+                            out << blob;
+                        } else {
+                            // Same honest signal as the scalar StructProperty path.
+                            out << "{\"__unhandledStruct\":true,\"structName\":\""
+                                << json_escape(wide_to_utf8(innerStruct)) << "\"}";
+                            sawUnhandledItem = true;
+                        }
                     }
                     out << "]";
-                    if (num > limit) out << ",\"truncated\":true";
+                    if (sawUnhandledItem) out << ",\"unhandledStructItems\":true";
+                    if (num > limit) out << ",\"truncated\":true,\"limit\":" << limit;
                 } else {
                     // Inner kind not yet handled — record count only.
                 }
@@ -562,6 +578,7 @@ static void emit_object_full(std::ofstream& out, UObject* o, bool& first) {
 struct ExtractBucket {
     std::wstring class_name;
     std::vector<UObject*> objs;
+    int totalSeen = 0; // every match, even past the cap — exposes silent truncation
 };
 
 // Per-class instance cap for the live walk.
@@ -581,6 +598,7 @@ static void run_extract(const std::filesystem::path& outDir) {
         if (class_in_extract_denylist(cn)) return RC::LoopAction::Continue;
         auto& b = buckets[cn];
         if (b.class_name.empty()) b.class_name = cn;
+        b.totalSeen++;
         if ((int)b.objs.size() < kPerClassLimit) b.objs.push_back(o);
         return RC::LoopAction::Continue;
     });
@@ -593,7 +611,14 @@ static void run_extract(const std::filesystem::path& outDir) {
         cfirst = false;
         out << "  {\"class\":\"" << json_escape(wide_to_utf8(b.class_name))
             << "\",\"count\":" << (int)b.objs.size()
-            << ",\"instances\":[\n";
+            << ",\"totalSeen\":" << b.totalSeen;
+        if (b.totalSeen > (int)b.objs.size()) {
+            // Surface silent class-instance truncation. The adapter's
+            // _collect_truncation_flags walker reads `truncated:true`
+            // and warns / fails-on-strict.
+            out << ",\"truncated\":true,\"limit\":" << kPerClassLimit;
+        }
+        out << ",\"instances\":[\n";
         bool ifirst = true;
         for (UObject* o : b.objs) {
             emit_object_full(out, o, ifirst);
@@ -611,7 +636,7 @@ class MapMaterializerExporter : public CppUserModBase {
 public:
     MapMaterializerExporter() : CppUserModBase() {
         ModName = STR("MapMaterializerExporter");
-        ModVersion = STR("2.1.0");
+        ModVersion = STR("2.1.1");
     }
     ~MapMaterializerExporter() override {}
 
