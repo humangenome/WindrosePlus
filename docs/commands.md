@@ -549,7 +549,7 @@ Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 
 ## HTTP API Endpoints
 
-The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. Catalog assets and layout overlays are public because they contain generic game data or world-layout data, not player/admin data. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`.
+The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. Catalog assets and layout overlays are public because they contain generic game data or world-layout data, not player/admin data. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`, and public runtime-overlay access follows the same public-map token rules.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -560,8 +560,10 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 | GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
+| GET | `/api/public/runtime-overlay` | No (if enabled) | Public optional live save-state overlay for the Sea Chart. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/status` | Yes | Server status: player list, multipliers, server info |
 | GET | `/api/livemap` | Yes | Live map data: player positions, mobs, resource nodes |
+| GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for chests, buildings, saved player positions, fog reveal, and quest blackboard layers. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
 | GET | `/api/commands` | Yes | Command documentation for console autocomplete |
 | GET | `/api/mapinfo` | Yes | Map coordinate metadata for tile rendering |

@@ -26,6 +26,7 @@ Dashboard listener settings.
 |-----|---------|-------------|
 | `http_port` | `8780` | Dashboard/API HTTP port. You can also pass `-Port` to `start_dashboard.bat`. |
 | `bind_ip` | `""` | Optional IP address to bind the dashboard to on multi-IP hosts. Empty means all interfaces when elevated, with localhost fallback. You can also pass `-BindIp` to `start_dashboard.bat`. |
+| `layout_runtime_url` | `""` | Optional compatible layout-runtime provider URL for curated POI, quest, biome, marker, and item-source overlays. The `WINDROSEPLUS_LAYOUT_RUNTIME_URL` environment variable can also set this. |
 
 Example:
 
@@ -33,7 +34,8 @@ Example:
 {
     "server": {
         "http_port": 8780,
-        "bind_ip": "192.0.2.10"
+        "bind_ip": "192.0.2.10",
+        "layout_runtime_url": ""
     }
 }
 ```

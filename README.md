@@ -16,6 +16,8 @@ Everything your Windrose dedicated server is missing. Multipliers, a live map, a
 
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
+> **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) offers Windrose servers with Windrose+ pre-installed.
+
 ---
 
 ## Table of Contents
@@ -34,7 +36,14 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ### Live Sea Chart
 A real-time map of your server showing island terrain, player and creature positions, POI/layout overlays when available, resource-zone hints, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, crafting recipes, vendor trades, construction uses, drop-source table IDs, and map links for sources that match known POI markers.
 
-![Sea Chart](docs/screenshots/seachart.png)
+<p>
+  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-map.png" alt="Sea Chart item browser" width="49%">
+  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-search.png" alt="Sea Chart search" width="49%">
+</p>
+<p>
+  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-items.png" alt="Item detail view" width="49%">
+  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-live-save.png" alt="Live save overlay" width="49%">
+</p>
 
 ### Admin Console (RCON)
 Run commands from a web dashboard with autocomplete. Check who's online, view server stats, repair known character-save drift, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
