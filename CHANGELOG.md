@@ -4,44 +4,43 @@
 
 ## [1.3.0] - 2026-05-08
 
-Windrose+ v1.3.0 is primarily a Sea Chart release. The map is no longer just
-terrain plus player dots: it now includes a richer item browser, searchable map
-data, optional live save-state overlays, public-map parity, and a much more
-usable layer system.
+Windrose+ v1.3.0 is a Sea Chart and recovery release: a richer map UI, full item catalog, optional live-save overlays, public-map parity, and safer multiplier-PAK recovery.
 
 ### Sea Chart
 
-- **Overhauled the Sea Chart UI.** The map now uses themed map markers, real POI/quest/resource icons, richer popups, cleaner tooltips, themed scrollbars, non-overlapping Search/Layers/Items panels, and responsive panel sizing for public and authenticated map views.
-- **Added a global Sea Chart search panel.** Search now covers map markers, quests, POIs, resources, and the item catalog. Results are grouped, icon-backed, and clickable: map results pan/open the matching marker, while item results open the item detail page.
-- **Rebuilt the layer menu.** Layers are grouped into Essentials, Places, Scanner / debug, Resources, and Live save sections with All, None, Default, and per-section Show/Hide actions. Defaults keep the useful map visible without turning every debug layer on.
-- **Added layout-graph junction rendering.** When layout runtime data is available, the map can render junction/edge lines between layout nodes as their own optional Places layer.
-- **Improved saved-player context.** Saved player positions now use a player icon, try to display a friendly name from nearby live player data, show nearest-island context, and include copy buttons for useful player IDs and quest-state tags.
+- Reworked the Sea Chart with clearer POI, quest, player, mine, resource, and saved-player icons.
+- Added richer popups, cleaner tooltips, themed scrollbars, and non-overlapping Search, Layers, and Items panels.
+- Added global search across map markers, quests, POIs, resources, descriptions, and the item catalog.
+- Rebuilt Layers into useful groups with All, None, Default, and per-section Show / Hide controls.
+- Added optional layout-graph junction lines when layout runtime data is available.
+- Improved saved-player popups with friendly names when available, nearest-island context, quest flags, and copy buttons.
 
-### Live Save Overlays
+### Items
 
-- **Added optional live save-state overlays to the Sea Chart.** If `windrose_plus_data/runtime_overlay.json` exists, the authenticated map and token-gated public map can render island runtime state, opened/locked chests, built structures, saved player positions, quest blackboard flags, fog reveal chunks, static actor save rows, and scenario save rows.
-- **Added runtime overlay HTTP routes.** `/api/runtime-overlay` serves the authenticated dashboard view, and `/api/public/runtime-overlay` serves the same schema through the public-map token gate. If no overlay file exists, the map still loads normally without the Live save layer.
-- **Kept public-map parity.** `/public-map` can now show the same catalog, layout overlays, resource hints, item source links, and optional live save layers as the authenticated Sea Chart, while dashboard, RCON, config, repair, and admin APIs remain behind login.
+- Expanded the bundled catalog to 840 indexed items, 468 items with drop records, and 557 icon files.
+- Added group, type, rarity, and tier filters with icon-backed dropdowns.
+- Added detailed item pages with recipes, stations, ingredient/output icons, vendor trades, construction uses, drops, and useful copy buttons.
+- Linked item drop sources back to map locations when matching layout data is available.
+- Added 13 resource types and 63 terrain-template resource zones as authored resource hints.
 
-### Items And Resources
+### Live Save
 
-- **Expanded the bundled Sea Chart item catalog to 840 indexed game items.** The catalog now includes 840 item records, 468 items with drop records, 557 available icon files, group/type/rarity/tier filters, English-safe fallback names, source asset IDs, category paths, icon refs, tooltip stats/effects where available, and loot-source table IDs.
-- **Added richer item detail pages.** Item details can now show crafted-by recipes, station names, ingredient/output icons, output quantity, crafting time/rate, vendor buy/sell trades, construction uses, drops, and copy buttons for useful asset IDs.
-- **Linked item drops back to map locations.** When layout runtime data is available, item detail pages show mapped loot-source buttons and can highlight matching POI/manual-marker locations directly on the Sea Chart.
-- **Added resource hint layers.** The dashboard now ships 13 resource types and 63 terrain-template resource zones in `server/web/catalog/v1/resource_zones.json`. These render as authored terrain/resource hints, not exact live harvested-state markers.
+- Added optional `windrose_plus_data/runtime_overlay.json` support for chests, buildings, saved player positions, quest flags, fog reveal, island runtime state, static actor rows, and scenario rows.
+- Added authenticated and public-token runtime overlay routes.
+- Kept `/public-map` aligned with the authenticated Sea Chart for catalog, layout, resource, item-source, and optional live-save overlays.
 
-### Server And PAK Safety
+### Server Safety
 
-- **Added an emergency multiplier-PAK disable switch.** Setting `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before running `StartWindrosePlusServer.bat` removes/skips `WindrosePlus_Multipliers_P.pak` and the multiplier history file while leaving the runtime dashboard, RCON, Sea Chart, mods loader, and CurveTable PAK support available. This gives hosts a clean recovery path while investigating current Windrose build inventory/backpack compatibility reports.
-- **Added config-only layout runtime wiring.** Self-hosted installs can set `WINDROSEPLUS_LAYOUT_RUNTIME_URL` or `server.layout_runtime_url` to enable layout runtime overlays from a compatible source. No source URL is hardcoded in the public release.
+- Added `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` to remove/skip generated multiplier PAKs while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAK support available.
+- Added config-only layout runtime wiring through `WINDROSEPLUS_LAYOUT_RUNTIME_URL` or `server.layout_runtime_url`.
 
 ### Fixed
 
-- **Fixed multiplier-history persistence on Linux/macOS PowerShell hosts.** The builder now uses the Windows-only `File.Replace` path only on Windows and uses a forced move on non-Windows hosts, preventing Linux Docker servers from boot-looping when the ratchet history file already exists.
-- **Moved WindrosePlus PAK-builder state files out of `R5\Content\Paks`.** `.windroseplus_build.hash` and `.windroseplus_multiplier_history.json` now live under `windrose_plus_data\` instead of the game content tree, and the builder migrates/removes legacy copies on the next run. This avoids current Windrose builds trying to parse WindrosePlus dotfiles as game JSON assets during startup.
-- **Disabled compatibility multipliers no longer trigger generated multiplier PAK output.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are now ignored consistently in the builder and dashboard PAK-status check instead of being counted as active config.
-- **Fixed harvest rounding for single-yield drops.** Single-yield harvest results are rounded consistently so small resource drops do not disappear after multiplier math.
-- **Polished Sea Chart item filtering.** Group/type/rarity/tier controls now use themed dropdowns with icons and counts, and the Items panel behaves like the other map panels instead of stacking over them.
+- Linux/macOS PowerShell hosts no longer fail multiplier-history writes on the Windows-only `File.Replace` path.
+- PAK-builder state now lives under `windrose_plus_data\` instead of `R5\Content\Paks`.
+- Disabled compatibility multipliers no longer create generated multiplier PAK output.
+- Single-yield harvest drops round correctly after multiplier math.
+- Items and Layers panels no longer stack over each other awkwardly.
 
 ## [1.2.0] - 2026-05-06
 
