@@ -4,19 +4,44 @@
 
 ## [1.3.0] - 2026-05-08
 
-### Added
+Windrose+ v1.3.0 is primarily a Sea Chart release. The map is no longer just
+terrain plus player dots: it now includes a richer item browser, searchable map
+data, optional live save-state overlays, public-map parity, and a much more
+usable layer system.
+
+### Sea Chart
+
+- **Overhauled the Sea Chart UI.** The map now uses themed map markers, real POI/quest/resource icons, richer popups, cleaner tooltips, themed scrollbars, non-overlapping Search/Layers/Items panels, and responsive panel sizing for public and authenticated map views.
+- **Added a global Sea Chart search panel.** Search now covers map markers, quests, POIs, resources, and the item catalog. Results are grouped, icon-backed, and clickable: map results pan/open the matching marker, while item results open the item detail page.
+- **Rebuilt the layer menu.** Layers are grouped into Essentials, Places, Scanner / debug, Resources, and Live save sections with All, None, Default, and per-section Show/Hide actions. Defaults keep the useful map visible without turning every debug layer on.
+- **Added layout-graph junction rendering.** When layout runtime data is available, the map can render junction/edge lines between layout nodes as their own optional Places layer.
+- **Improved saved-player context.** Saved player positions now use a player icon, try to display a friendly name from nearby live player data, show nearest-island context, and include copy buttons for useful player IDs and quest-state tags.
+
+### Live Save Overlays
+
+- **Added optional live save-state overlays to the Sea Chart.** If `windrose_plus_data/runtime_overlay.json` exists, the authenticated map and token-gated public map can render island runtime state, opened/locked chests, built structures, saved player positions, quest blackboard flags, fog reveal chunks, static actor save rows, and scenario save rows.
+- **Added runtime overlay HTTP routes.** `/api/runtime-overlay` serves the authenticated dashboard view, and `/api/public/runtime-overlay` serves the same schema through the public-map token gate. If no overlay file exists, the map still loads normally without the Live save layer.
+- **Kept public-map parity.** `/public-map` can now show the same catalog, layout overlays, resource hints, item source links, and optional live save layers as the authenticated Sea Chart, while dashboard, RCON, config, repair, and admin APIs remain behind login.
+
+### Items And Resources
+
+- **Expanded the bundled Sea Chart item catalog to 840 indexed game items.** The catalog now includes 840 item records, 468 items with drop records, 557 available icon files, group/type/rarity/tier filters, English-safe fallback names, source asset IDs, category paths, icon refs, tooltip stats/effects where available, and loot-source table IDs.
+- **Added richer item detail pages.** Item details can now show crafted-by recipes, station names, ingredient/output icons, output quantity, crafting time/rate, vendor buy/sell trades, construction uses, drops, and copy buttons for useful asset IDs.
+- **Linked item drops back to map locations.** When layout runtime data is available, item detail pages show mapped loot-source buttons and can highlight matching POI/manual-marker locations directly on the Sea Chart.
+- **Added resource hint layers.** The dashboard now ships 13 resource types and 63 terrain-template resource zones in `server/web/catalog/v1/resource_zones.json`. These render as authored terrain/resource hints, not exact live harvested-state markers.
+
+### Server And PAK Safety
 
 - **Added an emergency multiplier-PAK disable switch.** Setting `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before running `StartWindrosePlusServer.bat` removes/skips `WindrosePlus_Multipliers_P.pak` and the multiplier history file while leaving the runtime dashboard, RCON, Sea Chart, mods loader, and CurveTable PAK support available. This gives hosts a clean recovery path while investigating current Windrose build inventory/backpack compatibility reports.
-- **Expanded the bundled Sea Chart item catalog to 840 indexed game items.** The local dashboard catalog now includes category/type/rarity/tier filters, richer item detail rows, source asset IDs, category paths, icon refs, tooltip stats/effects where available, and loot-source table IDs. Missing Cyrillic-only names fall back to English-safe asset names.
-- **Added item usage detail to Sea Chart item pages.** Item details can now show crafted-by recipes, station names, ingredients, output quantity, crafting time/rate, vendor buy/sell trades, and construction uses from bundled recipe/building/vendor datasets.
-- **Linked Sea Chart item drops back to the map when the layout runtime is available.** The item detail view now uses `/api/layout/runtime` marker/manual-POI data to show mapped loot-source buttons and highlight matching POI locations directly on the Sea Chart.
-- **Added resource hint data to the Sea Chart.** The dashboard now ships 13 resource types and 63 terrain-template resource zones in `server/web/catalog/v1/resource_zones.json`; when `/api/layout/runtime` is available, the map layer control exposes those hints by resource type. They are terrain-zone hints from authored cluster/resource-node data, not live harvested-state markers.
+- **Added config-only layout runtime wiring.** Self-hosted installs can set `WINDROSEPLUS_LAYOUT_RUNTIME_URL` or `server.layout_runtime_url` to enable layout runtime overlays from a compatible source. No source URL is hardcoded in the public release.
 
 ### Fixed
 
 - **Fixed multiplier-history persistence on Linux/macOS PowerShell hosts.** The builder now uses the Windows-only `File.Replace` path only on Windows and uses a forced move on non-Windows hosts, preventing Linux Docker servers from boot-looping when the ratchet history file already exists.
 - **Moved WindrosePlus PAK-builder state files out of `R5\Content\Paks`.** `.windroseplus_build.hash` and `.windroseplus_multiplier_history.json` now live under `windrose_plus_data\` instead of the game content tree, and the builder migrates/removes legacy copies on the next run. This avoids current Windrose builds trying to parse WindrosePlus dotfiles as game JSON assets during startup.
 - **Disabled compatibility multipliers no longer trigger generated multiplier PAK output.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are now ignored consistently in the builder and dashboard PAK-status check instead of being counted as active config.
+- **Fixed harvest rounding for single-yield drops.** Single-yield harvest results are rounded consistently so small resource drops do not disappear after multiplier math.
+- **Polished Sea Chart item filtering.** Group/type/rarity/tier controls now use themed dropdowns with icons and counts, and the Items panel behaves like the other map panels instead of stacking over them.
 
 ## [1.2.0] - 2026-05-06
 
@@ -33,7 +58,7 @@
 
 ### Fixed
 
-- **53 orphan icon references in the bundled items catalog.** 13 unique icon basenames in `items_full.json` pointed to WebP files that don't exist (the upstream extraction missed them, and they don't exist on any public CDN either). Browser dev tools logged a 404 for each row that referenced one. The data fix sets `iconRef` to `null` for affected items so the row falls back to the empty-icon-slot path that the dashboard already handles cleanly. No more 404s in the network panel during the Items overlay flow.
+- **53 orphan icon references in the bundled items catalog.** 13 unique icon basenames in `items_full.json` pointed to WebP files that do not exist in the bundled icon set. Browser dev tools logged a 404 for each row that referenced one. The data fix sets `iconRef` to `null` for affected items so the row falls back to the empty-icon-slot path that the dashboard already handles cleanly. No more 404s in the network panel during the Items overlay flow.
 
 ## [1.1.23] - 2026-05-05
 
