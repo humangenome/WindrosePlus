@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-05-10
+
+A polish release on top of v1.3.0: a real fix for `wp.playerinfo` health/vitals, multi-word display-name targeting, a clearer Sea Chart empty-state for self-hosters without a layout runtime provider, and a docs pass.
+
+### Fixed
+
+- **`wp.playerinfo`, `wp.health`, `wp.pos`, `wp.playtime`, and `wp.stamina` now resolve players by display name with multi-word names.** Previously only lowercase actor IDs matched, so `wp.playerinfo HumanGenome` returned "not found" even when that player was online. Multi-word inputs like `wp.playerinfo Some Player Name` now work end-to-end.
+- **`wp.playerinfo` shows real health and attribute values.** The old output ended in `Health: UObject: 0x...` because the read pointed at a non-FProperty on `HealthComponent`. Vitals, stats, combat, and progression are now read from `PlayerState.R5AttributeSet` as `FGameplayAttributeData` structs and rendered as `HP / Stamina / Recovery / Corruption`, a 6-stat grid (`Str / Agi / Prec / Mas / Vit / End`), a combat row (`Attack / Defense / Crit / CritDmg`), and a progression row (`talents / stat upgrades`).
+- **`_getPlayers` keeps the R5Character fallback.** PlayerController enumeration is primary (with `Admin._isConnected` filtering out disconnected/spectator PCs), and an R5Character actor sweep is reached as a fallback when the PC enumerator returns empty (issue #67-class installs).
+- **Position reads are async-safe.** Info commands now read positions from the LiveMap snapshot first (game-thread-collected), then the replicated movement struct, then the root component — no UFunction calls from the async dispatch path.
+- **`wp.stamina` resolves players by display name and reads stamina from `R5AttributeSet`.** It was the only info command still matching lowercase actor IDs exactly and reading from the legacy `StaminaComponent`/`HungerComponent`/`ThirstComponent` actor components, which return nothing on current GAS-based builds.
+- **Sea Chart shows "Curated overlay not configured — see docs/config-reference.md"** in the Layers panel when `/api/layout/runtime` returns the unconfigured-provider response, instead of leaving the world map / resources / scanner sections silently empty or labeled "unavailable" (#91).
+
+### Added
+
+- **`docs/config-reference.md` documents the Layout Runtime Provider HTTP contract.** Full GET (`?layout=<fingerprint>`), seeding POST, and response payload shape (`runtime.markers`, `runtime.layout.nodes[*].manualPoiMarkers`, `runtime.layout.nodes[*].polygons`, edges) so self-hosted operators can stand up their own provider.
+- **README troubleshooting** has a dedicated entry for the "Curated overlay not configured" state with a pointer to the provider docs.
+- **`wp.players` output adds the display name parenthetically next to the canonical actor ID** so admins can recognize who's who at a glance: `1. BP_R5Character_C_2147419648 (HumanGenome) @ -52090, -482978, 205`.
+
+### Docs
+
+- Refreshed the README Sea Chart screenshots: full-size, full HTTP panel chrome around the map, default Layers panel state, and an Items panel example. Dropped the advanced live-save and item-detail comps from the README hero strip.
+
 ## [1.3.0] - 2026-05-08
 
 Windrose+ v1.3.0 is a Sea Chart and recovery release: a richer map UI, full item catalog, optional live-save overlays, public-map parity, and safer multiplier-PAK recovery.
