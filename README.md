@@ -36,14 +36,11 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ### Live Sea Chart
 A real-time map of your server showing island terrain, player and creature positions, POI/layout overlays when available, resource-zone hints, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, crafting recipes, vendor trades, construction uses, drop-source table IDs, and map links for sources that match known POI markers.
 
-<p>
-  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-map.png" alt="Sea Chart item browser" width="49%">
-  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-search.png" alt="Sea Chart search" width="49%">
-</p>
-<p>
-  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-items.png" alt="Item detail view" width="49%">
-  <img src="https://github.com/HumanGenome/WindrosePlus/releases/download/v1.3.0/windroseplus-v1.3.0-live-save.png" alt="Live save overlay" width="49%">
-</p>
+![Sea Chart with default Layers panel](docs/screenshots/v1.3.0/seachart-hero.png)
+
+The Items panel browses the bundled 840-item catalog with group/type/rarity/tier filters and click-through to recipes, vendor trades, and map source hits.
+
+![Sea Chart with Items panel](docs/screenshots/v1.3.0/seachart-items.png)
 
 ### Admin Console (RCON)
 Run commands from a web dashboard with autocomplete. Check who's online, view server stats, repair known character-save drift, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
