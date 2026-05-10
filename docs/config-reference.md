@@ -66,6 +66,78 @@ Example:
 }
 ```
 
+### Layout Runtime Provider (Optional)
+
+Windrose+ can render curated POI, quest, biome, marker, and item-source overlays on the Sea Chart when a compatible layout-runtime provider is reachable. The provider is optional and intentionally external — the dashboard, RCON, multipliers, terrain map, your own `POIScan` output, and item catalog all work without one. If `layout_runtime_url` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) is empty, the Layers panel reports "Curated overlay not configured" and you get the base map only.
+
+Set the URL via either:
+
+```json
+{
+    "server": {
+        "layout_runtime_url": "https://your.provider.example/api/layout/runtime"
+    }
+}
+```
+
+```text
+WINDROSEPLUS_LAYOUT_RUNTIME_URL=https://your.provider.example/api/layout/runtime
+```
+
+The dashboard expects two endpoints at that URL.
+
+**`GET <url>?layout=<fingerprint>`** — returns the curated runtime payload for a known layout fingerprint. The dashboard caches the response in `windrose_plus_data\layout_runtime.json` keyed by fingerprint, so repeat map loads do not re-hit the provider. A `200` with JSON body populates the layers; a `4xx` triggers the seeding `POST` below; a `5xx` / `429` / timeout serves the stale cache if one exists, otherwise leaves the layers empty.
+
+**`POST <url>`** with `Content-Type: application/json` and body:
+
+```json
+{
+    "layoutFingerprint": "<sha256>",
+    "seed": 12345678,
+    "worldPreset": "DA_CommonIsland_Personal",
+    "terrainPlacements": [ /* array of placement objects from the local scan */ ]
+}
+```
+
+Used once per new fingerprint to let the provider build/store its curated overlay. A `200` / `201` response can either return the runtime payload directly or be empty, in which case the dashboard immediately re-`GET`s.
+
+**Response payload shape** (the dashboard reads these fields):
+
+```json
+{
+    "ok": true,
+    "layoutFingerprint": "<sha256>",
+    "runtime": {
+        "markers": [
+            { "type": "main_quest", "name": "...", "worldX": 12345, "worldY": -67890, "popup": { "items": [], "rewards": [] } }
+        ],
+        "layout": {
+            "nodes": [
+                {
+                    "nodeId": "...",
+                    "worldX": 12345,
+                    "worldY": -67890,
+                    "tag": "biome.tag",
+                    "manualPoiMarkers": [
+                        { "name": "...", "worldX": 12345, "worldY": -67890, "iconAssetPath": "..." }
+                    ],
+                    "polygons": [
+                        [ { "x": 12345, "y": -67890 }, { "x": 12350, "y": -67895 } ]
+                    ]
+                }
+            ],
+            "edges": [
+                { "sourceNodeId": "...", "targetNodeId": "..." }
+            ]
+        }
+    }
+}
+```
+
+`markers`, `layout.nodes`, `layout.edges`, `layout.nodes[*].manualPoiMarkers`, and `layout.nodes[*].polygons` are all optional — the dashboard renders whichever are present. Coordinates are world-space integers.
+
+The provider is plain HTTP and stateless from the dashboard's perspective; you can run one centrally for a community of self-hosted servers, or stand one up for a single server.
+
 ---
 
 ## windrose_plus.harvest.ini (Per-Resource Yield)

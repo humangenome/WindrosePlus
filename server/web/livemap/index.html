@@ -1230,7 +1230,16 @@ var STATIC_CATALOG='/catalog/v1';
             if (r.status !== 200) { wtStatus = 'error'; rebuildLayerControl(); return; }
             try {
                 var d = JSON.parse(r.responseText);
-                if (!d || !d.ok) { wtStatus = (d && d.error) ? 'error' : 'empty'; rebuildLayerControl(); return; }
+                if (!d || !d.ok) {
+                    var err = d && d.error ? String(d.error) : '';
+                    if (err.indexOf('Layout runtime provider is not configured') !== -1) {
+                        wtStatus = 'unconfigured';
+                    } else {
+                        wtStatus = err ? 'error' : 'empty';
+                    }
+                    rebuildLayerControl();
+                    return;
+                }
                 if (d.layoutFingerprint && d.layoutFingerprint === lastWtFingerprint && lastWtHadData) {
                     // same world layout AND last render carried data — keep
                     // current overlay, but make sure status is 'ok' so the layer
@@ -1953,6 +1962,8 @@ var STATIC_CATALOG='/catalog/v1';
         // Curated layout overlay categories
         if (wtStatus === 'loading') {
             addLayerStatus('World map', 'World map loading…');
+        } else if (wtStatus === 'unconfigured') {
+            addLayerStatus('World map', 'Curated overlay not configured — see docs/config-reference.md');
         } else if (wtStatus === 'error') {
             addLayerStatus('World map', 'World map unavailable');
         } else if (wtStatus === 'empty') {
