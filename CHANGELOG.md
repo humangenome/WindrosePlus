@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-05-11
+
+Dashboard hardening pass. Closes a public-DoS surface on the layout-runtime route, persists dashboard logins across restarts, drops third-party CDN dependencies, tightens HTTP semantics, and refreshes the docs.
+
+### Security
+
+- **Auth-gate `/api/layout` and `/api/layout/runtime`.** Both routes previously sat above the auth check, so any unauthenticated client reachable on the dashboard port could trigger the local layout scan plus a 25–30 s outbound runtime fetch against the configured layout provider — and the GET-then-POST seeding path leaked the server's layout fingerprint to that provider with no caller verification. Moved both routes into the authenticated switch. Added `/api/public/layout` and `/api/public/layout/runtime` in the public-map block so the public Sea Chart still gets the curated overlay layers, gated by the same `livemap.public.token` mechanism that already protects `/api/public/livemap`.
+- **Canonical static-file path containment.** The static branch used a `\.\.` substring regex that rejected innocent filenames like `..hidden.txt` and didn't canonicalize before comparing. Replaced with the same `GetFullPath` + `StartsWith(webRoot + sep, OrdinalIgnoreCase)` pattern `/catalog/` already uses.
+- **Loopback bypass for trusted same-host proxies.** Requests from `127.0.0.1`, `::1`, and IPv4-mapped IPv6 forms (`::ffff:127.0.0.1`) skip the auth gate. Restores panel-side proxies that call `/api/layout/runtime` over loopback after the auth-gate move above; those proxies already authenticate users upstream. Source IP is not spoofable for TCP without LAN-level MITM.
+
+### Changed
+
+- **Persist dashboard session secret across restarts.** `$sessionSecret = [Guid]::NewGuid()` regenerated on every dashboard launch, so every restart logged everyone out. The 32-byte secret is now persisted to `windrose_plus_data\dashboard_session.key`. Tokens embed a 4-byte password epoch derived from `SHA256(currentRconPassword)`; `Test-SessionToken` rejects tokens whose epoch doesn't match the live password's epoch — so dashboard restarts preserve logins, but rotating the RCON password kills outstanding sessions immediately. Token format changes from `wp_session:$ts:$hash` to `wp_session:$epoch:$ts:$hash`; anyone holding an old cookie gets one re-login prompt on upgrade.
+- **`/api/config` re-reads `windrose_plus.json` from disk on each request** instead of serving the cached startup config. Live edits (multiplier tweaks, public-map toggle, RCON password rotation) reflect immediately, matching the behavior `Get-CurrentRconPassword` already had.
+- **`/api/commands` sourced from the live Lua command registry** via a new `windrose_plus_data\commands.json` file written by `Admin.writeCommandsJson()` on `Admin.init()`, after `wp.mapgen` / `wp.mapexport` registration, and on every `API.registerCommand()` call. The old hardcoded list in the PowerShell server had drifted to 27 entries while Lua actually registered 36; mod-registered commands now surface in the dashboard autocomplete the moment they're registered. A 3-entry bootstrap list (with `bootstrap: true` marker) is served for the brief window before the Lua side has written the file.
+- **Self-host Leaflet and Google Fonts.** Dashboard and Sea Chart no longer fetch Leaflet from `unpkg` or fonts from `fonts.googleapis.com` at load time. Both are vendored under `server/web/vendor/` (~576 KB total) and served by the existing static branch. Closes the failure mode where corporate firewalls, AV, and Defender SmartScreen blocked the CDNs and broke the UI, removes the per-load leak to Google and Cloudflare, and isolates the dashboard from upstream CDN outages.
+- **Static-file MIME types.** Added `font/woff2`, `font/woff`, and `font/ttf` to the static branch's MIME map so vendored fonts are served with the right `Content-Type`.
+
+### Fixed
+
+- **HTTP status codes on soft errors.** `/api/status`, `/api/livemap`, `/api/public/livemap`, `/api/mapinfo`, and `/api/public/mapinfo` now return 503 instead of `200 + {error: ...}` for missing-data states. `/api/rcon` timeout / worker-error path returns 504 instead of 200. Client `response.ok` checks now correctly distinguish success from missing-data states.
+
+### Docs
+
+- Folded the five scattered Multiplier PAK callouts (Disabled keys, Save-safety warning, Emergency disable, two Troubleshooting items) into a single **Multiplier PAK safety** subsection under the multipliers feature. Install step and Troubleshooting point back to it instead of restating.
+- `docs/commands.md` dropped the bogus `/api/mods` row (no such route exists), reflected the new auth state on `/api/layout` and `/api/layout/runtime`, and documented the new `/api/public/layout` and `/api/public/layout/runtime` routes. `/api/commands` description updated to note it's sourced from the Lua registry.
+
 ## [1.3.2] - 2026-05-10
 
 Hotfix for the loot multiplier squaring bug (#94).
