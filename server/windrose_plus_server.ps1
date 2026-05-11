@@ -252,12 +252,53 @@ function Get-RuntimeOverlayData {
     }
 }
 
-# Session management — HMAC-signed tokens
-$sessionSecret = [System.Guid]::NewGuid().ToString()
+# Session management — HMAC-signed tokens.
+# The secret is persisted to windrose_plus_data\dashboard_session.key so a
+# dashboard restart doesn't log everyone out. Tokens embed a password epoch
+# (first 4 bytes of SHA256(currentPassword)) so rotating the RCON password
+# invalidates outstanding sessions without invalidating the secret itself.
+function Get-OrCreateSessionSecret {
+    $keyPath = Join-Path $dataDir "dashboard_session.key"
+    if (Test-Path -LiteralPath $keyPath) {
+        try {
+            $existing = ([System.IO.File]::ReadAllText($keyPath)).Trim()
+            if ($existing.Length -ge 64) { return $existing }
+        } catch {
+            Write-Host "WARN: failed to read dashboard_session.key: $($_.Exception.Message)"
+        }
+    }
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    $secret = [System.BitConverter]::ToString($bytes).Replace("-","").ToLower()
+    try {
+        if (-not (Test-Path -LiteralPath $dataDir)) {
+            New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+        }
+        [System.IO.File]::WriteAllText($keyPath, $secret)
+    } catch {
+        Write-Host "WARN: failed to write dashboard_session.key: $($_.Exception.Message)"
+    }
+    return $secret
+}
+$sessionSecret = Get-OrCreateSessionSecret
+
+function Get-PasswordEpoch {
+    $pw = Get-CurrentRconPassword
+    if (-not $pw) { return "00000000" }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes([string]$pw))
+    } finally {
+        $sha.Dispose()
+    }
+    return ("{0:x2}{1:x2}{2:x2}{3:x2}" -f $bytes[0], $bytes[1], $bytes[2], $bytes[3])
+}
 
 function New-SessionToken {
     $timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $payload = "wp_session:$timestamp"
+    $epoch = Get-PasswordEpoch
+    $payload = "wp_session:$epoch:$timestamp"
     $hmac = New-Object System.Security.Cryptography.HMACSHA256
     $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
     $hash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
@@ -267,15 +308,17 @@ function New-SessionToken {
 function Test-SessionToken($token) {
     if (-not $token) { return $false }
     $parts = $token -split ":"
-    if ($parts.Count -ne 3) { return $false }
-    $payload = "$($parts[0]):$($parts[1])"
-    $providedHash = $parts[2]
+    if ($parts.Count -ne 4) { return $false }
+    $payload = "$($parts[0]):$($parts[1]):$($parts[2])"
+    $providedHash = $parts[3]
     $hmac = New-Object System.Security.Cryptography.HMACSHA256
     $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
     $expectedHash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
     if ($providedHash -ne $expectedHash) { return $false }
+    # Password rotation kills old sessions
+    if ($parts[1] -ne (Get-PasswordEpoch)) { return $false }
     # Check expiry (24 hours)
-    $timestamp = [long]$parts[1]
+    $timestamp = [long]$parts[2]
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     return ($now - $timestamp) -lt 86400
 }
