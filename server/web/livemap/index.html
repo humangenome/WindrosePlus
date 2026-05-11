@@ -2,7 +2,7 @@
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#141820}
@@ -240,7 +240,7 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 </div>
 <div id="loading"><div style="text-align:center"><div style="display:inline-block;width:24px;height:24px;border:3px solid rgba(200,170,90,0.3);border-top-color:#c9a959;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px"></div><div>Loading map data...</div><div id="loading-sub" style="font-size:11px;color:#8f775d;margin-top:6px"></div></div></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script>
 var urlParams = new URLSearchParams(window.location.search);
 var isPublicMap = window.location.pathname.replace(/\/+$/, '') === '/public-map';
