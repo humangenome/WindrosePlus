@@ -167,6 +167,75 @@ local function extractClassName(fullName)
     return first
 end
 
+local function summarizeSanitizedFields(fields)
+    local limit = 8
+    local out = {}
+    for i = 1, math.min(#fields, limit) do
+        table.insert(out, fields[i])
+    end
+    if #fields > limit then
+        table.insert(out, tostring(#fields - limit) .. " more")
+    end
+    return table.concat(out, ", ")
+end
+
+local function sanitizeJsonValue(value, path, fields, stack, inArray)
+    local t = type(value)
+    if t == "nil" or t == "string" or t == "boolean" then
+        return value
+    end
+    if t == "number" then
+        if value ~= value or value <= -math.huge or value >= math.huge then
+            table.insert(fields, path .. " (non-finite number)")
+            return inArray and 0 or nil
+        end
+        return value
+    end
+    if t ~= "table" then
+        table.insert(fields, path .. " (" .. t .. ")")
+        return inArray and tostring(value) or nil
+    end
+
+    stack = stack or {}
+    if stack[value] then
+        table.insert(fields, path .. " (circular table)")
+        return inArray and {} or nil
+    end
+    stack[value] = true
+
+    local out = {}
+    local isArray = rawget(value, 1) ~= nil or next(value) == nil
+    if isArray then
+        local maxIndex = 0
+        for k in pairs(value) do
+            if type(k) ~= "number" then
+                isArray = false
+                break
+            end
+            if k > maxIndex then maxIndex = k end
+        end
+        if isArray then
+            for i = 1, maxIndex do
+                out[i] = sanitizeJsonValue(value[i], path .. "[" .. i .. "]", fields, stack, true)
+            end
+            stack[value] = nil
+            return out
+        end
+    end
+
+    for k, v in pairs(value) do
+        if type(k) == "string" then
+            local safe = sanitizeJsonValue(v, path .. "." .. k, fields, stack, false)
+            if safe ~= nil then out[k] = safe end
+        else
+            table.insert(fields, path .. "[" .. tostring(k) .. "] (non-string key)")
+        end
+    end
+
+    stack[value] = nil
+    return out
+end
+
 function POIScan.init(gameDir, config)
     local dataDir = gameDir .. "windrose_plus_data"
     POIScan._path = dataDir .. "\\pois.json"
@@ -324,20 +393,29 @@ function POIScan._scanAndWrite()
 
     print(string.format("[POIScan] loop done: scanned=%d matched=%d pois=%d", actorsScanned, actorsMatched, #pois))
 
+    local rawPayload = {
+        pois = pois,
+        kind_counts = kindCounts,
+        class_counts = classCounts,
+        island_counts = islandCounts,
+        sub_type_counts = subTypeCounts,
+        total_pois = #pois,
+        actors_scanned = actorsScanned,
+        actors_matched = actorsMatched,
+        missing_position = missingPosCount,
+        timestamp = os.time(),
+    }
+    local sanitizedFields = {}
+    local safePayload = sanitizeJsonValue(rawPayload, "$", sanitizedFields)
+    if #sanitizedFields > 0 then
+        local summary = summarizeSanitizedFields(sanitizedFields)
+        Log.warn("POIScan", "sanitized non-JSON fields before encode: " .. summary)
+        pcall(Events.record, "poiscan.sanitize", { count = #sanitizedFields, fields = sanitizedFields })
+    end
+
     local payload
     local encOk, encErr = pcall(function()
-        payload = json.encode({
-            pois = pois,
-            kind_counts = kindCounts,
-            class_counts = classCounts,
-            island_counts = islandCounts,
-            sub_type_counts = subTypeCounts,
-            total_pois = #pois,
-            actors_scanned = actorsScanned,
-            actors_matched = actorsMatched,
-            missing_position = missingPosCount,
-            timestamp = os.time(),
-        })
+        payload = json.encode(safePayload)
     end)
     if not encOk then
         Log.warn("POIScan", "json.encode failed: " .. tostring(encErr))

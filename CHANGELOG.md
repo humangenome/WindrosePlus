@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **POIScan now sanitizes non-JSON actor fields before writing `pois.json`.** The first scan after server start can briefly expose UE userdata fields in actor-derived values; the scanner now drops/coerces those fields, logs the exact payload path once, and still writes the rest of the scan instead of aborting with `json.encode failed: unexpected type 'userdata'` (#93).
+
 ## [1.3.3] - 2026-05-11
 
 Dashboard hardening pass. Closes a public-DoS surface on the layout-runtime route, persists dashboard logins across restarts, drops third-party CDN dependencies, tightens HTTP semantics, and refreshes the docs.
