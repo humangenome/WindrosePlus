@@ -557,19 +557,20 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 |--------|----------|------|-------------|
 | GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "timestamp": ...}` |
 | GET | `/catalog/*` | No | Static bundled item catalog JSON and icons used by the Sea Chart item browser. |
-| GET | `/api/layout` | No | Public world-layout fingerprint and terrain placement summary used for map overlays. |
-| GET | `/api/layout/runtime` | No | Cached layout runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/runtime-overlay` | No (if enabled) | Public optional live save-state overlay for the Sea Chart. Same public-map config/token rules as `/public-map`. |
+| GET | `/api/public/layout` | No (if enabled) | Public world-layout fingerprint and terrain placement summary. Same public-map config/token rules as `/public-map`. |
+| GET | `/api/public/layout/runtime` | No (if enabled) | Public cached layout runtime overlay (POIs, quests, biomes, markers). Same public-map config/token rules as `/public-map`. |
 | GET | `/api/status` | Yes | Server status: player list, multipliers, server info |
 | GET | `/api/livemap` | Yes | Live map data: player positions, mobs, resource nodes |
 | GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for chests, buildings, saved player positions, fog reveal, and quest blackboard layers. |
+| GET | `/api/layout` | Yes | World-layout fingerprint and terrain placement summary used for map overlays. |
+| GET | `/api/layout/runtime` | Yes | Cached layout runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
-| GET | `/api/commands` | Yes | Command documentation for console autocomplete |
+| GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |
 | GET | `/api/mapinfo` | Yes | Map coordinate metadata for tile rendering |
-| GET | `/api/mods` | Yes | Installed third-party mods |
 | GET | `/api/rcon/log` | Yes | Recent RCON command audit log |
 | POST | `/api/rcon` | Yes | Execute an RCON command |
 | POST | `/api/character-repair` | Yes | Upload a local SaveProfiles zip and download a repaired zip for known progression drift |

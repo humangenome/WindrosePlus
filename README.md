@@ -74,12 +74,6 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
 ### 2,400+ Server Settings & Multipliers
 Adjust XP, loot, crafting costs, cooking/smelting speed, harvest yield, and more through a simple JSON file. Go deeper with 2,400+ individual INI settings for player stats, weapons, food effects, creature stats, co-op scaling, swimming, and rest bonuses.
 
-> **Disabled multiplier keys:** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but do not write server PAK changes. They were disabled after live crash evidence from Windrose's character, inventory, and crop validators. `wp.givestats` only records an audit note; it does not change a character in-game.
-
-> **Save-safety warning:** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in and saves. Take an out-of-band save backup before enabling them. Windrose+ now refuses to build these high-risk multiplier PAKs when another installed PAK also edits inventory assets, and removes the existing generated multiplier PAK on that failure, unless an advanced admin deliberately sets `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1`.
-
-> **Emergency multiplier-PAK disable:** set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before running `StartWindrosePlusServer.bat` to remove/skip `WindrosePlus_Multipliers_P.pak` while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAKs available. Non-default values in `windrose_plus.json` / `windrose_plus.harvest.ini` will not apply while this switch is set.
-
 **Active multipliers** (`windrose_plus.json`):
 ```json
 {
@@ -114,6 +108,15 @@ Food_Drink_Coffee_T03_Mobility = 20
 Alchemy_Potion_Healing_Base_HealthRestoreRatio = 0.35
 Alchemy_Potion_Healing_Great_HealthRestoreRatio = 0.8
 ```
+
+#### Multiplier PAK safety
+
+A handful of multiplier keys are disabled, a few more are gated behind explicit opt-in, and there's a safe path for recovery if a PAK ever causes trouble.
+
+- **Disabled keys.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but no longer write PAK changes — they were disabled after live crash evidence from the character, inventory, and crop validators. `wp.givestats` records an audit note only and does not change a character in-game.
+- **Save-state risk.** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in. Take an out-of-band save backup before enabling them. Windrose+ refuses to build these high-risk multiplier PAKs when another installed PAK also edits inventory assets and removes the existing generated multiplier PAK on that failure, unless `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1` is set.
+- **Emergency multiplier-PAK disable.** Set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. The wrapper removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json` while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAKs available. Non-default values in `windrose_plus.json` / `windrose_plus.harvest.ini` will not apply until the env var is removed and the server is started through the wrapper again.
+- **Full recovery / disable.** Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move both generated PAKs (`WindrosePlus_Multipliers_P.pak` and `WindrosePlus_CurveTables_P.pak`), then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` alone is not enough because UE4SS and existing PAK overrides can still load. Restore a save backup from before the inventory-affecting PAK change, confirm the character can join, then re-enable PAK overrides one at a time.
 
 ### Mod Support
 Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
@@ -206,14 +209,7 @@ Edits to `multipliers` in `windrose_plus.json` or to any `.ini` file need to be 
 
 **The easy way:** run `StartWindrosePlusServer.bat` (installed at your server root). It runs the rebuild step if anything changed (no-op in milliseconds otherwise), then launches `WindroseServer.exe`.
 
-To temporarily run Windrose+ without generated multiplier PAKs:
-
-```powershell
-set WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1
-StartWindrosePlusServer.bat
-```
-
-This is for recovery/testing only. It removes/skips `WindrosePlus_Multipliers_P.pak`, so JSON/harvest multipliers do not apply until the environment variable is removed and the server is started again through the wrapper.
+If you need to recover from a bad PAK or test without multipliers, see [Multiplier PAK safety](#multiplier-pak-safety).
 
 **If you already have your own launcher**, add one line before whatever calls `WindroseServer.exe`:
 
@@ -344,10 +340,8 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
 - **Sea Chart layers say "Curated overlay not configured"** - The curated POI / quest / biome / marker / item-source layers come from an optional layout-runtime provider. The base map (terrain, players, your own POIScan output, item catalog) works without one. To enable the curated layers, point `server.layout_runtime_url` in `windrose_plus.json` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) at any compatible provider. The HTTP contract — GET, seeding POST, and response payload shape — is documented in [`docs/config-reference.md`](docs/config-reference.md#layout-runtime-provider-optional) so you can run your own.
-- **Run dashboard/RCON/Sea Chart without multiplier PAKs** - Set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. The wrapper removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`, but leaves runtime features and CurveTable PAKs alone.
 - **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, make sure you are on v1.0.14 or newer; older builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
-- **Fully disable Windrose+ for recovery testing** - Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` is not enough because UE4SS and existing PAK overrides can still load.
-- **Recovering from inventory/stack save issues** - Restore a save backup from before the inventory-affecting PAK change, fully disable Windrose+ as above, then confirm the character can join before re-enabling any PAK overrides.
+- **Multiplier PAK / save issues / full recovery** - See [Multiplier PAK safety](#multiplier-pak-safety) for the disable env var, recovery steps, and save-backup guidance.
 
 </details>
 
