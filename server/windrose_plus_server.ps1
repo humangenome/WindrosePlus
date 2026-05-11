@@ -1160,16 +1160,22 @@ try {
             }
 
             # All other routes require authentication, except for loopback
-            # callers. Loopback (127.0.0.1 / ::1) is the trusted local-proxy
-            # boundary — used by the sspanel-remote dashboard proxy on the
-            # same host, which already authenticates customers upstream before
-            # forwarding API calls to this server. Source IP is not spoofable
-            # for TCP without LAN-level MITM.
+            # callers. Loopback (127.0.0.1 / ::1 / ::ffff:127.0.0.1) is the
+            # trusted local-proxy boundary — used by the sspanel-remote
+            # dashboard proxy on the same host, which already authenticates
+            # customers upstream before forwarding API calls. Source IP is not
+            # spoofable for TCP without LAN-level MITM.
             $remoteAddr = $null
             try { $remoteAddr = $context.Request.RemoteEndPoint.Address } catch {}
             $isLocalRequest = $false
             if ($remoteAddr) {
-                $isLocalRequest = $remoteAddr.IsLoopback -or ($remoteAddr.ToString() -eq "::1")
+                $addrStr = $remoteAddr.ToString()
+                if ($remoteAddr.IsLoopback) { $isLocalRequest = $true }
+                elseif ($addrStr -eq "::1" -or $addrStr -eq "127.0.0.1") { $isLocalRequest = $true }
+                elseif ($addrStr.StartsWith("::ffff:127.")) { $isLocalRequest = $true }
+                elseif ($remoteAddr.IsIPv4MappedToIPv6) {
+                    try { if ($remoteAddr.MapToIPv4().IsLoopback) { $isLocalRequest = $true } } catch {}
+                }
             }
 
             if (-not $isLocalRequest) {
