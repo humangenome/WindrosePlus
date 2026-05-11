@@ -984,52 +984,6 @@ try {
                 continue
             }
 
-            # Layout fingerprint + optional runtime overlay — no auth.
-            # Output contains world-layout data only; no player or server
-            # identifying info is sent by this route.
-            if ($path -eq "/api/layout") {
-                $r = Get-CachedLayoutScan
-                if ($r.ok) {
-                    Send-Json $context @{
-                        ok       = $true
-                        cached   = $r.cached
-                        cachedAt = $r.cachedAt
-                        scan     = (Get-PublicScanView $r.scan)
-                    }
-                } else {
-                    Send-Json $context @{ ok = $false; error = $r.error } 503
-                }
-                continue
-            }
-            if ($path -eq "/api/layout/runtime") {
-                $scanResult = Get-CachedLayoutScan
-                if (-not $scanResult.ok) {
-                    Send-Json $context @{ ok = $false; error = $scanResult.error } 503
-                    continue
-                }
-                $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
-                if ($runtimeResult.ok) {
-                    Send-Json $context @{
-                        ok                = $true
-                        layoutFingerprint = $scanResult.scan.layoutFingerprint
-                        seed              = $scanResult.scan.seed
-                        worldPreset       = $scanResult.scan.worldPreset
-                        cached            = $runtimeResult.cached
-                        stale             = ($runtimeResult.stale -eq $true)
-                        fetchedAt         = $runtimeResult.fetchedAt
-                        fetchedFrom       = $runtimeResult.fetchedFrom
-                        runtime           = $runtimeResult.runtime
-                    }
-                } else {
-                    Send-Json $context @{
-                        ok                = $false
-                        layoutFingerprint = $scanResult.scan.layoutFingerprint
-                        error             = $runtimeResult.error
-                    } 503
-                }
-                continue
-            }
-
             # Static game-catalog assets (item metadata + icons) — no auth.
             # This is generic Windrose game data, identical on every server,
             # no player or server identifying information. Letting public
@@ -1084,6 +1038,50 @@ try {
                         Send-Json $context $overlay.Data
                     } else {
                         Send-Json $context @{ error = $overlay.Error } $overlay.StatusCode
+                    }
+                    continue
+                }
+
+                if ($path -eq "/api/public/layout") {
+                    $r = Get-CachedLayoutScan
+                    if ($r.ok) {
+                        Send-Json $context @{
+                            ok       = $true
+                            cached   = $r.cached
+                            cachedAt = $r.cachedAt
+                            scan     = (Get-PublicScanView $r.scan)
+                        }
+                    } else {
+                        Send-Json $context @{ ok = $false; error = $r.error } 503
+                    }
+                    continue
+                }
+
+                if ($path -eq "/api/public/layout/runtime") {
+                    $scanResult = Get-CachedLayoutScan
+                    if (-not $scanResult.ok) {
+                        Send-Json $context @{ ok = $false; error = $scanResult.error } 503
+                        continue
+                    }
+                    $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
+                    if ($runtimeResult.ok) {
+                        Send-Json $context @{
+                            ok                = $true
+                            layoutFingerprint = $scanResult.scan.layoutFingerprint
+                            seed              = $scanResult.scan.seed
+                            worldPreset       = $scanResult.scan.worldPreset
+                            cached            = $runtimeResult.cached
+                            stale             = ($runtimeResult.stale -eq $true)
+                            fetchedAt         = $runtimeResult.fetchedAt
+                            fetchedFrom       = $runtimeResult.fetchedFrom
+                            runtime           = $runtimeResult.runtime
+                        }
+                    } else {
+                        Send-Json $context @{
+                            ok                = $false
+                            layoutFingerprint = $scanResult.scan.layoutFingerprint
+                            error             = $runtimeResult.error
+                        } 503
                     }
                     continue
                 }
@@ -1171,6 +1169,46 @@ try {
                         Send-Json $context $overlay.Data
                     } else {
                         Send-Json $context @{ error = $overlay.Error } $overlay.StatusCode
+                    }
+                }
+                "/api/layout" {
+                    $r = Get-CachedLayoutScan
+                    if ($r.ok) {
+                        Send-Json $context @{
+                            ok       = $true
+                            cached   = $r.cached
+                            cachedAt = $r.cachedAt
+                            scan     = (Get-PublicScanView $r.scan)
+                        }
+                    } else {
+                        Send-Json $context @{ ok = $false; error = $r.error } 503
+                    }
+                }
+                "/api/layout/runtime" {
+                    $scanResult = Get-CachedLayoutScan
+                    if (-not $scanResult.ok) {
+                        Send-Json $context @{ ok = $false; error = $scanResult.error } 503
+                        continue
+                    }
+                    $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
+                    if ($runtimeResult.ok) {
+                        Send-Json $context @{
+                            ok                = $true
+                            layoutFingerprint = $scanResult.scan.layoutFingerprint
+                            seed              = $scanResult.scan.seed
+                            worldPreset       = $scanResult.scan.worldPreset
+                            cached            = $runtimeResult.cached
+                            stale             = ($runtimeResult.stale -eq $true)
+                            fetchedAt         = $runtimeResult.fetchedAt
+                            fetchedFrom       = $runtimeResult.fetchedFrom
+                            runtime           = $runtimeResult.runtime
+                        }
+                    } else {
+                        Send-Json $context @{
+                            ok                = $false
+                            layoutFingerprint = $scanResult.scan.layoutFingerprint
+                            error             = $runtimeResult.error
+                        } 503
                     }
                 }
                 "/api/config" {

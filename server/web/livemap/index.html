@@ -1224,7 +1224,7 @@ var STATIC_CATALOG='/catalog/v1';
     }
     function flayout() {
         var r = new XMLHttpRequest();
-        r.open('GET', '/api/layout/runtime');
+        r.open('GET', withPublicToken(isPublicMap ? '/api/public/layout/runtime' : '/api/layout/runtime'));
         r.timeout = 95000;
         r.onload = function() {
             if (r.status !== 200) { wtStatus = 'error'; rebuildLayerControl(); return; }
