@@ -407,6 +407,17 @@ function Build-MultiplierPak {
                     # Skip equipment drops — multiplying weapons/armor/jewelry produces duplicate
                     # gear stacks and breaks unique-item gameplay (issue #3).
                     if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
+                    # Skip sub-table roll-count references. LootData entries come in two
+                    # shapes: direct item drops (LootItem set, LootTable="None", where Min/Max
+                    # is the per-roll item count) and sub-table references (LootItem="None",
+                    # LootTable set, where Min/Max is the *number of times to roll the
+                    # referenced sub-table*). Scaling Min/Max on a sub-table reference
+                    # composes multiplicatively with the scaling already applied to the
+                    # sub-table's own item entries, producing the squared-multiplier bug
+                    # in issue #94 (e.g. loot=8.0 → 64x Plague Thrall / Senkamati drops).
+                    # The sub-table itself is matched by the same Invoke-RepakList pass and
+                    # gets its direct-item Min/Max scaled exactly once, which is correct.
+                    if ($item.LootTable -and $item.LootTable -ne "None" -and $item.LootTable -ne "") { continue }
                     if ($null -ne $item.Min -and $null -ne $item.Max) {
                         $item.Min = ConvertTo-DropInt -Value $item.Min -Multiplier $loot
                         $item.Max = ConvertTo-DropInt -Value $item.Max -Multiplier $loot
@@ -664,6 +675,8 @@ function Build-MultiplierPak {
                 $changed = $false
                 foreach ($item in $data.LootData) {
                     if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
+                    # Skip sub-table roll-count references (see issue #94 comment in the main loot pass).
+                    if ($item.LootTable -and $item.LootTable -ne "None" -and $item.LootTable -ne "") { continue }
                     if ($null -ne $item.Min -and $null -ne $item.Max) {
                         $resMult = 1.0
                         $family = Get-ResourceFamily -LootItemPath $item.LootItem
@@ -710,6 +723,8 @@ function Build-MultiplierPak {
                 $changed = $false
                 foreach ($item in $data.LootData) {
                     if ($item.LootItem -and $item.LootItem -like "*/InventoryItems/Equipments/*") { continue }
+                    # Skip sub-table roll-count references (see issue #94 comment in the main loot pass).
+                    if ($item.LootTable -and $item.LootTable -ne "None" -and $item.LootTable -ne "") { continue }
                     if ($null -ne $item.Min -and $null -ne $item.Max) {
                         $resMult = 1.0
                         $family = Get-ResourceFamily -LootItemPath $item.LootItem

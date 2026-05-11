@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-05-10
+
+Hotfix for the loot multiplier squaring bug (#94).
+
+### Fixed
+
+- **`loot` multiplier no longer compounds itself for items dropped through sub-table references.** `LootData[]` entries come in two distinct shapes: direct item drops (`LootItem` set, `LootTable: "None"`, where `Min`/`Max` is the per-roll item count) and sub-table references (`LootItem: "None"`, `LootTable` set, where `Min`/`Max` is the *number of times to roll the referenced sub-table*). The patcher was scaling `Min`/`Max` on both, which multiplied with the scaling already applied to the sub-table's own item entries — producing `loot=2.0 → 4x`, `loot=8.0 → 64x` for any drop reached through a sub-table reference (Plague Thralls / Senkamati mobs, ship debris, several mineral nodes). Direct drops like Ancient Scraps scaled correctly. The fix skips sub-table reference entries in all three loot/harvest passes (main loot, foliage, pickup) so the per-roll count and the roll count don't compose multiplicatively.
+
 ## [1.3.1] - 2026-05-10
 
 A polish release on top of v1.3.0: a real fix for `wp.playerinfo` health/vitals, multi-word display-name targeting, a clearer Sea Chart empty-state for self-hosters without a layout runtime provider, and a docs pass.
