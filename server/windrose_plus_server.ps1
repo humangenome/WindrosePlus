@@ -1159,33 +1159,47 @@ try {
                 continue
             }
 
-            # All other routes require authentication
-            $currentPassword = Get-CurrentRconPassword
-            if ($null -eq $currentPassword) {
-                if ($path.StartsWith("/api/")) {
-                    Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
-                } else {
-                    Send-Redirect $context "/login"
-                }
-                continue
+            # All other routes require authentication, except for loopback
+            # callers. Loopback (127.0.0.1 / ::1) is the trusted local-proxy
+            # boundary — used by the sspanel-remote dashboard proxy on the
+            # same host, which already authenticates customers upstream before
+            # forwarding API calls to this server. Source IP is not spoofable
+            # for TCP without LAN-level MITM.
+            $remoteAddr = $null
+            try { $remoteAddr = $context.Request.RemoteEndPoint.Address } catch {}
+            $isLocalRequest = $false
+            if ($remoteAddr) {
+                $isLocalRequest = $remoteAddr.IsLoopback -or ($remoteAddr.ToString() -eq "::1")
             }
-            if (-not $currentPassword -or $currentPassword -eq "changeme") {
-                # No password configured or still default — block everything
-                if ($path.StartsWith("/api/")) {
-                    Send-Json $context @{ error = "No password configured. Set a password in windrose_plus.json to access the dashboard." } 403
-                } else {
-                    Send-Redirect $context "/login"
+
+            if (-not $isLocalRequest) {
+                $currentPassword = Get-CurrentRconPassword
+                if ($null -eq $currentPassword) {
+                    if ($path.StartsWith("/api/")) {
+                        Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
+                    } else {
+                        Send-Redirect $context "/login"
+                    }
+                    continue
                 }
-                continue
-            }
-            if (-not (Test-SessionToken (Get-SessionFromCookies $context.Request))) {
-                # API calls get 401, browser requests get redirect
-                if ($path.StartsWith("/api/")) {
-                    Send-Json $context @{ error = "Authentication required" } 401
-                } else {
-                    Send-Redirect $context "/login"
+                if (-not $currentPassword -or $currentPassword -eq "changeme") {
+                    # No password configured or still default — block everything
+                    if ($path.StartsWith("/api/")) {
+                        Send-Json $context @{ error = "No password configured. Set a password in windrose_plus.json to access the dashboard." } 403
+                    } else {
+                        Send-Redirect $context "/login"
+                    }
+                    continue
                 }
-                continue
+                if (-not (Test-SessionToken (Get-SessionFromCookies $context.Request))) {
+                    # API calls get 401, browser requests get redirect
+                    if ($path.StartsWith("/api/")) {
+                        Send-Json $context @{ error = "Authentication required" } 401
+                    } else {
+                        Send-Redirect $context "/login"
+                    }
+                    continue
+                }
             }
 
             switch ($path) {
