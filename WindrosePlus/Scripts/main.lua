@@ -239,6 +239,10 @@ if Admin then
     }
 end
 
+-- Re-export commands.json so wp.mapgen / wp.mapexport (and any mod commands
+-- registered via API.registerCommand above) are in the dashboard's view.
+if Admin and Admin.writeCommandsJson then Admin.writeCommandsJson() end
+
 -- Auto-trigger heightmap export on first player connection if no map exists
 local _mapExportTriggered = false
 local function checkAndTriggerMapExport()
@@ -351,6 +355,7 @@ WindrosePlus.API.registerCommand = function(name, handler, description, usage)
             handler = handler
         }
         Log.info("API", "Mod command registered: " .. name)
+        if Admin.writeCommandsJson then Admin.writeCommandsJson() end
     end
 end
 

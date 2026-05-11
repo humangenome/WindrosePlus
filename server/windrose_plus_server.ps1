@@ -1434,36 +1434,32 @@ try {
                     Send-Json $context $status
                 }
                 "/api/commands" {
-                    $cmds = @(
-                        @{name="wp.help"; usage="wp.help [command|all]"; description="List all commands or get help for a specific command"; category="server"},
-                        @{name="wp.status"; usage="wp.status"; description="Show server status and multipliers"; category="server"},
-                        @{name="wp.config"; usage="wp.config"; description="Show current config values"; category="server"},
-                        @{name="wp.multipliers"; usage="wp.multipliers"; description="Show all gameplay multipliers"; category="server"},
-                        @{name="wp.uptime"; usage="wp.uptime"; description="Show server uptime"; category="server"},
-                        @{name="wp.reload"; usage="wp.reload"; description="Reload config from disk"; category="server"},
-                        @{name="wp.version"; usage="wp.version"; description="Show version"; category="server"},
-                        @{name="wp.players"; usage="wp.players"; description="List online players with positions"; category="players"},
-                        @{name="wp.playerinfo"; usage="wp.playerinfo [player]"; description="Consolidated player info"; category="players"},
-                        @{name="wp.playtime"; usage="wp.playtime [player]"; description="Player session time"; category="players"},
-                        @{name="wp.health"; usage="wp.health [player]"; description="Read player health"; category="players"},
-                        @{name="wp.pos"; usage="wp.pos [player]"; description="Get player positions"; category="players"},
-                        @{name="wp.stamina"; usage="wp.stamina [player]"; description="Read stamina/hunger/thirst"; category="players"},
-                        @{name="wp.speed"; usage="wp.speed [player] <mult>"; description="Set movement speed"; category="admin"},
-                        @{name="wp.jump"; usage="wp.jump [player] <mult>"; description="Set jump height (1.0=normal, 2.0=double)"; category="admin"},
-                        @{name="wp.gravity"; usage="wp.gravity [player] <mult>"; description="Set gravity (1.0=normal, 0.3=moon)"; category="admin"},
-                        @{name="wp.tp"; usage="wp.tp [player] <x> <y> [z]"; description="Teleport player to absolute world coordinates"; category="admin"},
-                        @{name="wp.time"; usage="wp.time"; description="Read current time of day"; category="world"},
-                        @{name="wp.creatures"; usage="wp.creatures"; description="Count spawned creatures by type"; category="world"},
-                        @{name="wp.entities"; usage="wp.entities"; description="Count entities by type"; category="world"},
-                        @{name="wp.weather"; usage="wp.weather"; description="Read weather values"; category="world"},
-                        @{name="wp.perf"; usage="wp.perf"; description="Show server performance metrics"; category="diagnostics"},
-                        @{name="wp.doctor"; usage="wp.doctor"; description="Support snapshot with runtime and config warnings"; category="diagnostics"},
-                        @{name="wp.memory"; usage="wp.memory"; description="Detailed memory usage"; category="diagnostics"},
-                        @{name="wp.connections"; usage="wp.connections"; description="Network connection info"; category="diagnostics"},
-                        @{name="wp.mapgen"; usage="wp.mapgen"; description="Generate heightmap for live map"; category="server"},
-                        @{name="wp.mapexport"; usage="wp.mapexport"; description="Trigger terrain heightmap export"; category="server"}
-                    )
-                    Send-Json $context @{ commands = $cmds }
+                    # Source of truth is the Lua-side registry, written to
+                    # windrose_plus_data\commands.json on Admin.init() and on
+                    # every API.registerCommand() (so mod-registered commands
+                    # surface in the dashboard autocomplete without code drift).
+                    $commandsFile = Join-Path $dataDir "commands.json"
+                    if (Test-Path -LiteralPath $commandsFile) {
+                        try {
+                            $payload = Get-Content -LiteralPath $commandsFile -Raw | ConvertFrom-Json
+                            Send-Json $context @{ commands = $payload.commands; generatedAt = $payload.generatedAt }
+                            continue
+                        } catch {
+                            # fall through to bootstrap fallback
+                        }
+                    }
+                    # Bootstrap fallback: a small built-in list used only before
+                    # the Lua side has written commands.json (first boot, or if
+                    # WindrosePlus isn't loaded). Real autocomplete arrives once
+                    # the mod boots and overwrites this.
+                    Send-Json $context @{
+                        commands = @(
+                            @{name="wp.help"; usage="wp.help [command|all]"; description="List all commands or get help for a specific command"; category="server"},
+                            @{name="wp.status"; usage="wp.status"; description="Show server status and multipliers"; category="server"},
+                            @{name="wp.version"; usage="wp.version"; description="Show version"; category="server"}
+                        )
+                        bootstrap = $true
+                    }
                 }
                 "/api/mapinfo" {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"

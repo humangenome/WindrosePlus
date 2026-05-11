@@ -21,6 +21,7 @@ function Admin.init(config, gameDir)
     -- NOTE: RegisterConsoleCommandHandler requires HookProcessConsoleExec=1
     -- which crashes Windrose dedicated servers. Commands are RCON-only.
     Log.info("Admin", Admin._countCommands() .. " commands registered (RCON only)")
+    Admin.writeCommandsJson()
 end
 
 -- Execute a command. Returns status ("ok"/"error") and message.
@@ -55,6 +56,46 @@ function Admin._countCommands()
     local n = 0
     for _ in pairs(Admin._commands) do n = n + 1 end
     return n
+end
+
+-- Write the current command registry to windrose_plus_data\commands.json so
+-- the dashboard /api/commands route can serve the live list (including
+-- mod-registered commands) instead of a hardcoded snapshot that goes stale.
+function Admin.writeCommandsJson()
+    if not Admin._gameDir then return end
+    local dataDir = Admin._gameDir .. "windrose_plus_data"
+    local out = {}
+    for name, cmd in pairs(Admin._commands) do
+        if not cmd.hidden then
+            out[#out + 1] = {
+                name = name,
+                usage = cmd.usage or name,
+                description = cmd.description or "",
+                category = cmd.category or "server"
+            }
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.category == b.category then return a.name < b.name end
+        return a.category < b.category
+    end)
+    local payload = { generatedAt = os.time(), count = #out, commands = out }
+    local ok, encoded = pcall(json.encode, payload)
+    if not ok then
+        Log.warn("Admin", "writeCommandsJson encode failed: " .. tostring(encoded))
+        return
+    end
+    local tmp = dataDir .. "\\commands.json.tmp"
+    local final = dataDir .. "\\commands.json"
+    local f = io.open(tmp, "w")
+    if not f then
+        Log.warn("Admin", "writeCommandsJson open failed for " .. tmp)
+        return
+    end
+    f:write(encoded)
+    f:close()
+    os.remove(final)
+    os.rename(tmp, final)
 end
 
 function Admin._registerCommands()
