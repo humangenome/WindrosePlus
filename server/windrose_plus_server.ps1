@@ -298,7 +298,7 @@ function Get-PasswordEpoch {
 function New-SessionToken {
     $timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     $epoch = Get-PasswordEpoch
-    $payload = "wp_session:$epoch:$timestamp"
+    $payload = "wp_session:${epoch}:${timestamp}"
     $hmac = New-Object System.Security.Cryptography.HMACSHA256
     $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
     $hash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
