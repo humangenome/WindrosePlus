@@ -133,6 +133,22 @@ function Get-CurrentRconPassword {
     return $null
 }
 
+# Re-read the full config from disk so the dashboard /api/config view reflects
+# live edits (RCON password, multipliers, public-map settings) without needing
+# a dashboard restart. Returns $null on parse failure so callers can hint a retry.
+function Get-CurrentConfig {
+    $jsonPath = Join-Path $gameDir "windrose_plus.json"
+    for ($i = 0; $i -lt 3; $i++) {
+        try {
+            return (Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json)
+        } catch {
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    Write-Host "WARN: Unable to parse windrose_plus.json after 3 retries (Get-CurrentConfig)"
+    return $null
+}
+
 # Re-read public map settings on every request so hosts can enable, disable, or
 # rotate the optional share token without restarting the dashboard process.
 function Get-CurrentPublicMapConfig {
@@ -1057,7 +1073,7 @@ try {
                         $data = Get-Content $mapFile -Raw | ConvertFrom-Json
                         Send-Json $context (ConvertTo-PublicLiveMapData $data)
                     } else {
-                        Send-Json $context @{ error = "No livemap data" }
+                        Send-Json $context @{ error = "No livemap data" } 503
                     }
                     continue
                 }
@@ -1086,7 +1102,7 @@ try {
                         Send-Json $context @{
                             error = "Map not ready yet. Join the server once to auto-generate the map."
                             generation = $generation
-                        }
+                        } 503
                     }
                     continue
                 }
@@ -1137,7 +1153,7 @@ try {
                         $data = Get-Content $statusFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
-                        Send-Json $context @{ error = "No status data" }
+                        Send-Json $context @{ error = "No status data" } 503
                     }
                 }
                 "/api/livemap" {
@@ -1146,7 +1162,7 @@ try {
                         $data = Get-Content $mapFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
-                        Send-Json $context @{ error = "No livemap data" }
+                        Send-Json $context @{ error = "No livemap data" } 503
                     }
                 }
                 "/api/runtime-overlay" {
@@ -1158,9 +1174,13 @@ try {
                     }
                 }
                 "/api/config" {
-                    $safeConfig = $config.PSObject.Copy()
-                    if ($safeConfig.rcon) { $safeConfig.rcon.password = "***" }
-                    Send-Json $context $safeConfig
+                    $liveConfig = Get-CurrentConfig
+                    if ($null -eq $liveConfig) {
+                        Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
+                        continue
+                    }
+                    if ($liveConfig.rcon -and $liveConfig.rcon.password) { $liveConfig.rcon.password = "***" }
+                    Send-Json $context $liveConfig
                 }
                 "/api/pak-status" {
                     $multPak = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_Multipliers_P.pak"
@@ -1378,7 +1398,7 @@ try {
                         Send-Json $context @{
                             error = "Map not ready yet. Join the server once to auto-generate the map."
                             generation = $generation
-                        }
+                        } 503
                     }
                 }
                 "/api/terrain_height" {
@@ -1478,7 +1498,8 @@ try {
                     }
                     if (-not $result) {
                         $message = Get-RconWorkerDiagnostic $spoolDir $cmdPath
-                        $result = @{ id = $cmdId; status = "error"; message = $message }
+                        Send-Json $context @{ id = $cmdId; status = "error"; message = $message } 504
+                        continue
                     }
                     Send-Json $context $result
                 }
@@ -1565,15 +1586,21 @@ try {
                     }
 
                     $safePath = $filePath.TrimStart("/").Replace("/", "\")
-                    $fullPath = Join-Path $webDir $safePath
-
-                    if ($safePath -match "\.\." -or [System.IO.Path]::IsPathRooted($safePath)) {
+                    if ([System.IO.Path]::IsPathRooted($safePath)) {
+                        $context.Response.StatusCode = 403
+                        $context.Response.Close()
+                        continue
+                    }
+                    $webRoot   = [System.IO.Path]::GetFullPath($webDir)
+                    $candidate = [System.IO.Path]::GetFullPath((Join-Path $webDir $safePath))
+                    $sep       = [System.IO.Path]::DirectorySeparatorChar
+                    if (-not $candidate.StartsWith($webRoot + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
                         $context.Response.StatusCode = 403
                         $context.Response.Close()
                         continue
                     }
 
-                    Send-File $context $fullPath
+                    Send-File $context $candidate
                 }
             }
         } catch {
