@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-05-12
+
 ### Fixed
 
 - **Sea Chart now renders local POIScan and live entity data without a layout-runtime provider.** The v1.3.x map UI documented POIScan as the self-hosted fallback, but the frontend never fetched `pois.json`, and the live-map route only rendered players. The dashboard now exposes `/api/pois` / `/api/public/pois`, renders POIScan actor markers in the Layers panel, and restores live mobs plus resource nodes from `livemap_data.json` (#91, #67).
