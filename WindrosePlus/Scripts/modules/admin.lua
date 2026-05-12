@@ -1260,7 +1260,7 @@ function Admin._registerCommands()
     -- Keys whose PAK patch path is currently disabled in the open-source builder
     -- (save-safety / engine-validator hazards). Mirrored from the wp.doctor
     -- block below. Suffix `(disabled)` on the wp.config / wp.multipliers echo
-    -- when the customer has set a non-1 value, so the in-game output does not
+    -- when the server owner has set a non-1 value, so the in-game output does not
     -- mislead operators into thinking a value is being applied when it is not.
     local _disabledMultiplierEcho = {
         stack_size = true, weight = true, inventory_size = true,
@@ -2272,7 +2272,7 @@ function Admin._getPlayers()
     end
 
     -- Fallback: if PC enumeration yielded nothing (issue #67 — at least one
-    -- customer report where this happens even with players online), iterate
+    -- field report where this happens even with players online), iterate
     -- R5Character actors and reach PlayerState through char.Controller. Same
     -- struct shape so info commands work identically against either path.
     if #players == 0 then

@@ -10,9 +10,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![UE4SS](https://img.shields.io/badge/UE4SS-experimental-blue.svg)](https://github.com/UE4SS-RE/RE-UE4SS)
 [![Windrose](https://img.shields.io/badge/Windrose-Dedicated_Server-darkgreen.svg)](https://store.steampowered.com/app/3041230/)
-[![No Client Mods](https://img.shields.io/badge/Client_Mods-Not_Required-brightgreen.svg)](#)
+[![No Client Mods](https://img.shields.io/badge/Client_Mods-Not_Required-brightgreen.svg)](#features)
 
-Everything your Windrose dedicated server is missing. Multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
+Everything your Windrose dedicated server is missing: multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
 
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
@@ -43,7 +43,7 @@ The Items panel browses the bundled 840-item catalog with group/type/rarity/tier
 ![Sea Chart with Items panel](docs/screenshots/v1.3.0/seachart-items.png)
 
 ### Admin Console (RCON)
-Run commands from a web dashboard with autocomplete. Check who's online, view server stats, repair known character-save drift, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
+Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
 
 ![Console](docs/screenshots/console.png)
 
@@ -54,8 +54,8 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
 {
   "server": {
     "name": "My Windrose Server",
-    "version": "0.10.0.1.6",
-    "windrose_plus": "1.0.14",
+    "version": "0.10.0.5.120",
+    "windrose_plus": "1.3.4",
     "password_protected": false,
     "max_players": 10,
     "player_count": 3
@@ -113,7 +113,7 @@ Alchemy_Potion_Healing_Great_HealthRestoreRatio = 0.8
 
 A handful of multiplier keys are disabled, a few more are gated behind explicit opt-in, and there's a safe path for recovery if a PAK ever causes trouble.
 
-- **Disabled keys.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but no longer write PAK changes — they were disabled after live crash evidence from the character, inventory, and crop validators. `wp.givestats` records an audit note only and does not change a character in-game.
+- **Disabled keys.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but no longer write PAK changes — they were disabled after crash reports from the character, inventory, and crop validators. `wp.givestats` records an audit note only and does not change a character in-game.
 - **Save-state risk.** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in. Take an out-of-band save backup before enabling them. Windrose+ refuses to build these high-risk multiplier PAKs when another installed PAK also edits inventory assets and removes the existing generated multiplier PAK on that failure, unless `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1` is set.
 - **Emergency multiplier-PAK disable.** Set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. The wrapper removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json` while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAKs available. Non-default values in `windrose_plus.json` / `windrose_plus.harvest.ini` will not apply until the env var is removed and the server is started through the wrapper again.
 - **Full recovery / disable.** Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move both generated PAKs (`WindrosePlus_Multipliers_P.pak` and `WindrosePlus_CurveTables_P.pak`), then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` alone is not enough because UE4SS and existing PAK overrides can still load. Restore a save backup from before the inventory-affecting PAK change, confirm the character can join, then re-enable PAK overrides one at a time.
@@ -171,21 +171,6 @@ jq 'select(.ev=="heartbeat") | {ts, mult: .payload.multipliers}' logs/2026-04-27
 # Who ran which admin commands?
 jq 'select(.ev=="admin.command") | {ts, admin_user, command, status}' logs/2026-04-27.log
 ```
-
-### Character Repair
-The dashboard includes a Character Repair page at `/repair` for the known progression drift crash where the server log shows `RewardLevel < CurrentLevel` during `R5BLPlayer_ValidateData`.
-
-The repair page works on a client save zip, not the server world save:
-
-1. Close Windrose completely.
-2. Zip `%LOCALAPPDATA%\R5\Saved\SaveProfiles\<your-steamid-folder>`.
-3. Open the Windrose+ dashboard, go to **Repair**, and upload the zip.
-4. Download `windrose-save-repaired.zip`.
-5. Extract it back into `%LOCALAPPDATA%\R5\Saved\SaveProfiles\` and replace the old files.
-
-Safe mode only fixes no-spend progression drift. If the save has spent-point drift or a different corruption type, Windrose+ refuses the repair instead of guessing.
-
----
 
 ## Installation
 
@@ -289,15 +274,17 @@ Open the dashboard in your browser to manage your server. It includes a command 
 If you want friends to see the Sea Chart without the dashboard password, enable the optional map-only view:
 
 ```json
-"livemap": {
+{
+  "livemap": {
     "public": {
-        "enabled": true,
-        "token": "optional-share-token"
+      "enabled": true,
+      "token": "optional-share-token"
     }
+  }
 }
 ```
 
-Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only the map view, public map data, tiles, layout overlays, and catalog assets; the console, config, repair, and admin APIs still require the dashboard login.
+Then share `/public-map` or `/public-map?token=optional-share-token`. This exposes only the map view, public map data, tiles, layout overlays, and catalog assets; the console, config, and admin APIs still require the dashboard login.
 
 Sea Chart can also render optional runtime save overlays when another local tool writes `windrose_plus_data/runtime_overlay.json`. That file is intentionally separate from the dashboard core: if it is absent, the map still loads terrain, players, layout overlays, resources, and item data normally; if present, `/api/runtime-overlay` and the token-gated public map path render chest state, buildings, saved player positions, fog reveal, and quest blackboard layers from the same JSON schema.
 
@@ -335,7 +322,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 <details>
 <summary><strong>Troubleshooting</strong></summary>
 
-- **Server crashes on startup** - Check `UE4SS-settings.ini`. As of v1.1.4 only `HookProcessInternal` should be enabled; `HookEngineTick` must be `0` and `DefaultExecuteInGameThreadMethod` must be `ProcessEvent` on Windrose Shipping builds (older guidance to enable `HookEngineTick` is no longer correct).
+- **Server crashes on startup** - Check `UE4SS-settings.ini`. The current Windrose-safe defaults keep `HookProcessInternal = 1`, `HookEngineTick = 0`, `HookUObjectProcessEvent = 0`, and `DefaultExecuteInGameThreadMethod = EngineTick`. Older guidance to enable `HookEngineTick` or switch the dispatcher to `ProcessEvent` is no longer correct.
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.

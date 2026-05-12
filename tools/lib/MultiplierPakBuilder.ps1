@@ -473,7 +473,7 @@ function Build-MultiplierPak {
         }
 
         # stack_size and weight patching intentionally disabled (v1.0.14).
-        # Multiple live production servers with non-default stack_size (or stack+inv) crashed
+        # Field reports with non-default stack_size (or stack+inv) crashed
         # repeatedly with the same R5BLBusinessRule.h:374 "Inventory.Module.Default" data-
         # inconsistency signature as the previously-disabled points_per_level path. Even the
         # narrower `MaxCountInSlot > 1` guard (originally issue #3) did not prevent the engine's

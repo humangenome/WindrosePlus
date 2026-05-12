@@ -345,4 +345,4 @@ No registry, package manager, or build step is needed.
 
 **State does not survive reload.** When hot-reload triggers, all Lua state is destroyed and rebuilt. Persist anything important to files. UE4SS shared variables (via `ModRef:SetSharedVariable`) are an exception -- they survive `RestartMod()`.
 
-**32-bit address space.** The game server runs 32-bit Apache/PHP on Windows endpoints. Large data structures in Lua can contribute to memory pressure. Avoid caching large datasets in memory.
+**Memory pressure.** Large data structures in Lua can contribute to memory and tick pressure inside the game process. Avoid caching large datasets in memory.

@@ -1,5 +1,7 @@
 # Changelog
 
+> **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and offers Windrose servers with Windrose+ pre-installed.
+
 ## [Unreleased]
 
 ## [1.3.4] - 2026-05-12
@@ -17,7 +19,7 @@ Dashboard hardening pass. Closes a public-DoS surface on the layout-runtime rout
 
 - **Auth-gate `/api/layout` and `/api/layout/runtime`.** Both routes previously sat above the auth check, so any unauthenticated client reachable on the dashboard port could trigger the local layout scan plus a 25–30 s outbound runtime fetch against the configured layout provider — and the GET-then-POST seeding path leaked the server's layout fingerprint to that provider with no caller verification. Moved both routes into the authenticated switch. Added `/api/public/layout` and `/api/public/layout/runtime` in the public-map block so the public Sea Chart still gets the curated overlay layers, gated by the same `livemap.public.token` mechanism that already protects `/api/public/livemap`.
 - **Canonical static-file path containment.** The static branch used a `\.\.` substring regex that rejected innocent filenames like `..hidden.txt` and didn't canonicalize before comparing. Replaced with the same `GetFullPath` + `StartsWith(webRoot + sep, OrdinalIgnoreCase)` pattern `/catalog/` already uses.
-- **Loopback bypass for trusted same-host proxies.** Requests from `127.0.0.1`, `::1`, and IPv4-mapped IPv6 forms (`::ffff:127.0.0.1`) skip the auth gate. Restores panel-side proxies that call `/api/layout/runtime` over loopback after the auth-gate move above; those proxies already authenticate users upstream. Source IP is not spoofable for TCP without LAN-level MITM.
+- **Loopback bypass for trusted same-host proxies.** Requests from `127.0.0.1`, `::1`, and IPv4-mapped IPv6 forms (`::ffff:127.0.0.1`) skip the auth gate. Restores same-host proxy integrations that call `/api/layout/runtime` over loopback after the auth-gate move above; those integrations already authenticate users upstream. Source IP is not spoofable for TCP without LAN-level MITM.
 
 ### Changed
 
@@ -168,7 +170,7 @@ Windrose+ v1.3.0 is a Sea Chart and recovery release: a richer map UI, full item
 ### Fixed
 
 - **Harvest INI no longer trips the CurveTable parser.** The first cut of the per-resource harvest feature added `windrose_plus.harvest.ini` to the same INI list used to detect "is there CurveTable customization in play?" That made a harvest-only install (no entities/weapons/food/gear customization) report `ct_config_present = true` and emit a `Default INI missing; cannot evaluate CurveTable config` warning when `windrose_plus.default.ini` was absent. CT-relevant INIs and rebuild-input INIs are now tracked separately in both `WindrosePlus-BuildPak.ps1` and the `/api/pak-status` endpoint; harvest still invalidates the build hash so edits trigger a rebuild, but it no longer drives the CT detection path.
-- **`Read-HarvestIni` now warns on lines it can't parse.** A line like `Wood = 5x` (or any value that fails `[double]::TryParse`) used to be dropped silently, leaving customers wondering why their multiplier didn't take. The reader now emits a `Write-Warning` for both empty values (`Wood =`) and non-numeric values (`Wood = 5x`) so the misformatted line shows up in BuildPak's stderr output.
+- **`Read-HarvestIni` now warns on lines it can't parse.** A line like `Wood = 5x` (or any value that fails `[double]::TryParse`) used to be dropped silently, leaving admins wondering why their multiplier didn't take. The reader now emits a `Write-Warning` for both empty values (`Wood =`) and non-numeric values (`Wood = 5x`) so the misformatted line shows up in BuildPak's stderr output.
 
 ## [1.1.18] - 2026-05-04
 
@@ -187,11 +189,11 @@ Windrose+ v1.3.0 is a Sea Chart and recovery release: a richer map UI, full item
 
 ### Changed
 
-- **`wp.config` and `wp.multipliers` now mark disabled multiplier keys as `(disabled)`** when the customer has set a non-default value. The PAK builder skips `stack_size`, `weight`, `inventory_size`, `points_per_level`, and `crop_speed` for save-safety reasons, but the in-game echo previously reported parsed values without indicating they were no-ops, leading to "I set stack_size=3 but in-game stacks are unchanged" reports (#70). The `wp.doctor` warning already surfaced this; the basic config readout now does too.
+- **`wp.config` and `wp.multipliers` now mark disabled multiplier keys as `(disabled)`** when the server owner has set a non-default value. The PAK builder skips `stack_size`, `weight`, `inventory_size`, `points_per_level`, and `crop_speed` for save-safety reasons, but the in-game echo previously reported parsed values without indicating they were no-ops, leading to "I set stack_size=3 but in-game stacks are unchanged" reports (#70). The `wp.doctor` warning already surfaced this; the basic config readout now does too.
 
 ### Added
 
-- **Multiplier downgrade ratchet for `xp` (#69).** Lowering the `xp` multiplier under a saved character whose level / talent / stat allocations were earned at the higher value causes Windrose's save validator to reject the character on next login (`RewardLevel < CurrentLevel`), with no clean rollback path. The PAK builder now tracks the highest historically applied value of save-state-baking multipliers in `R5/Content/Paks/.windroseplus_multiplier_history.json` and refuses to rebuild with a lower value unless `WINDROSEPLUS_ALLOW_DOWNGRADE=1` is set in the environment. Mirrors the safety guard already present in panel-managed installs.
+- **Multiplier downgrade ratchet for `xp` (#69).** Lowering the `xp` multiplier under a saved character whose level / talent / stat allocations were earned at the higher value causes Windrose's save validator to reject the character on next login (`RewardLevel < CurrentLevel`), with no clean rollback path. The PAK builder now tracks the highest historically applied value of save-state-baking multipliers in `R5/Content/Paks/.windroseplus_multiplier_history.json` and refuses to rebuild with a lower value unless `WINDROSEPLUS_ALLOW_DOWNGRADE=1` is set in the environment.
   - Only `xp` is currently ratcheted because that is the only save-baking key the PAK builder actively applies. The other potentially save-baking keys (`points_per_level`, `inventory_size`, `stack_size`, `weight`, `crop_speed`) are skipped by the builder for unrelated save-safety reasons; if any is unblocked in the future the ratchet list will grow with it.
   - Persistence is atomic (write to `.tmp` + `[System.IO.File]::Replace`), gated on a successful non-dry build, and applied on both the hash-skip success path and the full-build success path. Build exits with code 3 on a refused downgrade and code 4 if the history file cannot be persisted.
 
@@ -283,18 +285,14 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Changed
 
-- **LiveMap default intervals relaxed.** Player position writes 3s → 5s, entity (mob/node) collection 15s → 30s. Cuts the per-tick `FindAllOf("Pawn")` walk frequency in half on busy servers without a visible UI difference — the dashboard's live map polls at 5s anyway. Customers who explicitly set the old shorter intervals via panel config keep them.
+- **LiveMap default intervals relaxed.** Player position writes 3s → 5s, entity (mob/node) collection 15s → 30s. Cuts the per-tick `FindAllOf("Pawn")` walk frequency in half on busy servers without a visible UI difference — the dashboard's live map polls at 5s anyway. Operators who explicitly set the old shorter intervals keep them.
 - **LiveMap drives `WindrosePlus.updatePlayerCount` independently of Query.** Previously the player-count flag (which gates idle/active mode and the LiveMap zero-player short-circuit) was only updated inside `Query._collectAndWrite`. With Query disabled but LiveMap enabled, that flag would freeze and LiveMap would never see the zero-player drop. LiveMap now updates the count from the same `Query.getPlayers()` call it already makes, so each writer is independent of the others' enable state.
-
-### Panel-side
-
-- **WindrosePlus mod redeploy: force on version mismatch.** The deploy gate previously skipped extraction when the zip md5 matched the stored hash and key files existed. A stale `windrose_plus_version.txt` next to the game root could persist past a deploy if the prior extract had partially failed, leaving customers reporting "stuck on v0.2.0" or similar. The gate now also checks `windrose_plus_version.txt` against `$windrosePlusReleaseTag` and forces a full redeploy when they disagree. Fixes the recent ticket cluster: 759505, 759523, 759529, 759537, 759540, 759542.
 
 ## [1.1.5] - 2026-04-28
 
 ### Fixed
 
-- **`DefaultExecuteInGameThreadMethod = ProcessEvent` (set in v1.1.4) prevented unrelated UE4SS mods from loading.** With `HookUObjectProcessEvent = 0` — required to keep UE4SS' `ProcessEvent` detour out of the Windrose Shipping binary — the ProcessEvent dispatch path is also unavailable, and any UE4SS mod that calls `ExecuteInGameThread` without its own fallback (observed: `BPModLoaderMod`, `ConsoleEnablerMod`) errors out at script load. WindrosePlus survived because of the runtime fallback added in the same release (`_hasExecuteInGameThread = false` flips to direct dispatch on first failure), but customers running stacked UE4SS mods lost them. Reverted `DefaultExecuteInGameThreadMethod` to `EngineTick`. WindrosePlus's pcall-wrapped dispatcher catches the `ExecuteInGameThread` unavailable case the same way it caught it under ProcessEvent, so the v1.1.4 crash fixes from #41 still apply. Caught by the v1.1.4 → v1.1.5 smoke test before the hosted deployment pin was bumped.
+- **`DefaultExecuteInGameThreadMethod = ProcessEvent` (set in v1.1.4) prevented unrelated UE4SS mods from loading.** With `HookUObjectProcessEvent = 0` — required to keep UE4SS' `ProcessEvent` detour out of the Windrose Shipping binary — the ProcessEvent dispatch path is also unavailable, and any UE4SS mod that calls `ExecuteInGameThread` without its own fallback (observed: `BPModLoaderMod`, `ConsoleEnablerMod`) errors out at script load. WindrosePlus survived because of the runtime fallback added in the same release (`_hasExecuteInGameThread = false` flips to direct dispatch on first failure), but admins running stacked UE4SS mods lost them. Reverted `DefaultExecuteInGameThreadMethod` to `EngineTick`. WindrosePlus's pcall-wrapped dispatcher catches the `ExecuteInGameThread` unavailable case the same way it caught it under ProcessEvent, so the v1.1.4 crash fixes from #41 still apply.
 
 ## [1.1.4] - 2026-04-28
 
@@ -313,7 +311,7 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Changed
 
-- **Character repair tool: dead-end message replaced with actionable guidance.** When the uploaded save has spent or allocated progression nodes, `Safe` mode (correctly) refuses to edit it automatically. Previously the customer-facing response just said "Safe mode will not edit it automatically" and stopped, which left users with no path forward. The message now points users to send the same zip to their server admin or hosting support so a deeper repair can be run manually.
+- **Character repair tool: dead-end message replaced with actionable guidance.** When the uploaded save has spent or allocated progression nodes, `Safe` mode (correctly) refuses to edit it automatically. Previously the user-facing response just said "Safe mode will not edit it automatically" and stopped, which left users with no path forward. The message now points users to send the same zip to their server admin or hosting support so a deeper repair can be run manually.
 
 ## [1.1.2] - 2026-04-27
 
@@ -345,7 +343,7 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Fixed
 
-- **PAK builder no longer hard-fails when a CurveTable row pattern doesn't match a row in the live game pak ([#39](https://github.com/HumanGenome/WindrosePlus/issues/39)).** When Windrose ships a game update that renames a row name, every customer with an `.ini` override targeting that row had their server unable to start. The builder now emits a warning, drops the unmatched pattern, and continues with the rest of the table. If every override for a table is unmatched, the table is skipped entirely. Thanks to ismenc for the diagnostic output that pinpointed `HealthModifier` in `CT_Mob_StatCorrection_CoopBased` as the renamed row.
+- **PAK builder no longer hard-fails when a CurveTable row pattern doesn't match a row in the live game pak ([#39](https://github.com/HumanGenome/WindrosePlus/issues/39)).** When Windrose ships a game update that renames a row name, every admin with an `.ini` override targeting that row had their server unable to start. The builder now emits a warning, drops the unmatched pattern, and continues with the rest of the table. If every override for a table is unmatched, the table is skipped entirely. Thanks to ismenc for the diagnostic output that pinpointed `HealthModifier` in `CT_Mob_StatCorrection_CoopBased` as the renamed row.
 
 ### Documentation
 
@@ -412,7 +410,7 @@ A more invasive async-handoff refactor (move JSON encode + file I/O off the game
 
 ### Changed
 
-- **Disabled `stack_size`, `weight`, and `inventory_size` multiplier PAK patching.** Production servers with any of these three multipliers crashed repeatedly with the same `R5BLBusinessRule.h:374` "Inventory.Module.Default" validator crash signature as the previously-disabled `points_per_level` path. Even the narrow `MaxCountInSlot > 1` guard for stack_size (issue #3) did not prevent the engine's inventory-module validator from rejecting the resulting state at runtime. The multipliers remain accepted in config for forward compatibility but are no-ops in the PAK builder until a validator-aware patch path exists AND a character-save sanitizer can safely undo saved inflated state. Safe multipliers that still function: `loot`, `xp`, `craft_cost`, `crop_speed`, `cooking_speed`, `harvest_yield`.
+- **Disabled `stack_size`, `weight`, and `inventory_size` multiplier PAK patching.** Crash reports tied these three multipliers to the same `R5BLBusinessRule.h:374` "Inventory.Module.Default" validator signature as the previously-disabled `points_per_level` path. Even the narrow `MaxCountInSlot > 1` guard for stack_size (issue #3) did not prevent the engine's inventory-module validator from rejecting the resulting state at runtime. The multipliers remain accepted in config for forward compatibility but are no-ops in the PAK builder until a validator-aware patch path exists AND a character-save sanitizer can safely undo saved inflated state. Safe multipliers that still function: `loot`, `xp`, `craft_cost`, `crop_speed`, `cooking_speed`, `harvest_yield`.
 
 ### Fixed
 

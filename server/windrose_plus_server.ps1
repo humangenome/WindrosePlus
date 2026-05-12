@@ -1192,12 +1192,10 @@ try {
                 continue
             }
 
-            # All other routes require authentication, except for loopback
-            # callers. Loopback (127.0.0.1 / ::1 / ::ffff:127.0.0.1) is the
-            # trusted local-proxy boundary — used by the sspanel-remote
-            # dashboard proxy on the same host, which already authenticates
-            # customers upstream before forwarding API calls. Source IP is not
-            # spoofable for TCP without LAN-level MITM.
+            # All other routes require authentication, except for trusted
+            # same-host proxy integrations. Loopback source IP is not spoofable
+            # for TCP without LAN-level MITM, and the proxy is expected to
+            # authenticate users before forwarding API calls.
             $remoteAddr = $null
             try { $remoteAddr = $context.Request.RemoteEndPoint.Address } catch {}
             $isLocalRequest = $false
