@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **Sea Chart now renders local POIScan and live entity data without a layout-runtime provider.** The v1.3.x map UI documented POIScan as the self-hosted fallback, but the frontend never fetched `pois.json`, and the live-map route only rendered players. The dashboard now exposes `/api/pois` / `/api/public/pois`, renders POIScan actor markers in the Layers panel, and restores live mobs plus resource nodes from `livemap_data.json` (#91, #67).
 - **POIScan now sanitizes non-JSON actor fields before writing `pois.json`.** The first scan after server start can briefly expose UE userdata fields in actor-derived values; the scanner now drops/coerces those fields, logs the exact payload path once, and still writes the rest of the scan instead of aborting with `json.encode failed: unexpected type 'userdata'` (#93).
 
 ## [1.3.3] - 2026-05-11

@@ -26,6 +26,8 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 .wp-live-marker{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(10,14,20,.82);border:1px solid rgba(200,170,90,.45);box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 10px rgba(126,197,255,.18)}
 .wp-live-marker svg{width:15px;height:15px;stroke:#c8edff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .wp-live-marker-player svg{stroke:#c8edff}
+.wp-live-marker-mob svg{stroke:#ff8a80}
+.wp-live-marker-node svg{stroke:#a4d96c}
 .wt-level-label{background:transparent!important;border:0!important;box-shadow:none!important;color:rgba(237,224,204,.62)!important;font:700 10px/1 monospace;text-shadow:0 1px 2px rgba(0,0,0,.9);pointer-events:none}
 .leaflet-popup-content-wrapper{background:rgba(20,24,32,.95)!important;color:#ede0cc!important;border:1px solid rgba(200,170,90,.3)!important;border-radius:2px!important}
 .leaflet-popup-tip{background:rgba(20,24,32,.95)!important;border:1px solid rgba(200,170,90,.3)!important}
@@ -407,6 +409,10 @@ var STATIC_CATALOG='/catalog/v1';
     })();
 
     var pL = L.layerGroup().addTo(map);
+    var liveMobLayer = L.layerGroup().addTo(map);
+    var liveNodeLayer = L.layerGroup().addTo(map);
+    var liveMobCount = 0;
+    var liveNodeCount = 0;
     // One layer per POI kind so the layer control gives per-class
     // toggle + lets us show fresh counts after each fpoi() refresh.
     var POI_KINDS = ['overlap','audio','marker_scenario','marker_quest','marker_simple','unknown'];
@@ -1414,6 +1420,10 @@ var STATIC_CATALOG='/catalog/v1';
             try {
                 var d = JSON.parse(r.responseText);
                 pL.clearLayers();
+                liveMobLayer.clearLayers();
+                liveNodeLayer.clearLayers();
+                liveMobCount = 0;
+                liveNodeCount = 0;
                 var validPlayers = [];
                 if (d.players) d.players.forEach(function(p) {
                     if (p.x === undefined || p.y === undefined) return;
@@ -1428,6 +1438,36 @@ var STATIC_CATALOG='/catalog/v1';
                 });
                 livePlayers = validPlayers;
 
+                if (Array.isArray(d.mobs)) d.mobs.forEach(function(m) {
+                    if (typeof m.x !== 'number' || typeof m.y !== 'number') return;
+                    if (Math.abs(m.x) < 100 && Math.abs(m.y) < 100) return;
+                    var name = m.name || 'Mob';
+                    var marker = L.marker(wLL(m.x, m.y), { icon: liveIcon('mob'), keyboard: false });
+                    var html = '<b>' + escHtml(name) + '</b><br>type: live mob';
+                    if (typeof m.z === 'number') html += '<br>z: ' + Math.round(m.z);
+                    html += '<br>pos: ' + Math.round(m.x) + ', ' + Math.round(m.y);
+                    marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
+                    marker.bindPopup(html, { maxWidth: 320 });
+                    marker.addTo(liveMobLayer);
+                    registerMapSource(m, m.x, m.y, 'live-mob', marker, 'npc', '');
+                    liveMobCount++;
+                });
+
+                if (Array.isArray(d.nodes)) d.nodes.forEach(function(n) {
+                    if (typeof n.x !== 'number' || typeof n.y !== 'number') return;
+                    if (Math.abs(n.x) < 100 && Math.abs(n.y) < 100) return;
+                    var name = n.name || 'Resource node';
+                    var marker = L.marker(wLL(n.x, n.y), { icon: liveIcon('node'), keyboard: false });
+                    var html = '<b>' + escHtml(name) + '</b><br>type: live resource node';
+                    if (typeof n.z === 'number') html += '<br>z: ' + Math.round(n.z);
+                    html += '<br>pos: ' + Math.round(n.x) + ', ' + Math.round(n.y);
+                    marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
+                    marker.bindPopup(html, { maxWidth: 320 });
+                    marker.addTo(liveNodeLayer);
+                    registerMapSource(n, n.x, n.y, 'live-resource', marker, 'resource', '');
+                    liveNodeCount++;
+                });
+
                 // On first load, zoom to fit all players
                 if (!initialZoomDone) {
                     initialZoomDone = true;
@@ -1437,14 +1477,14 @@ var STATIC_CATALOG='/catalog/v1';
                         map.fitBounds(playerBounds.pad(0.3), { maxZoom: maxZoom });
                     }
                 }
+                rebuildLayerControl();
             } catch (e) {}
         };
         r.send();
     }
 
-    // Optional POIScan-style output. The open-source map does not require a
-    // separate scanner feed because the layout runtime already supplies
-    // marker and biome overlays.
+    // POIScan output from the Lua actor scanner. This is the self-hosted
+    // fallback when no curated layout-runtime provider is configured.
     var lastPoiTimestamp = 0;
     var poiStatus = 'loading'; // loading | ok | empty | error
     function clearPoiKinds() {
@@ -1454,9 +1494,69 @@ var STATIC_CATALOG='/catalog/v1';
         });
     }
     function fpoi() {
-        clearPoiKinds();
-        poiStatus = 'empty';
-        rebuildLayerControl();
+        var r = new XMLHttpRequest();
+        r.open('GET', withPublicToken(isPublicMap ? '/api/public/pois' : '/api/pois'));
+        r.timeout = 15000;
+        r.onload = function() {
+            if (r.status === 404 || r.status === 503) {
+                clearPoiKinds();
+                poiStatus = 'empty';
+                rebuildLayerControl();
+                return;
+            }
+            if (r.status !== 200) {
+                clearPoiKinds();
+                poiStatus = 'error';
+                rebuildLayerControl();
+                return;
+            }
+            try {
+                var d = JSON.parse(r.responseText);
+                var ts = d && typeof d.timestamp === 'number' ? d.timestamp : 0;
+                if (ts && ts === lastPoiTimestamp && poiStatus === 'ok') {
+                    rebuildLayerControl();
+                    return;
+                }
+                lastPoiTimestamp = ts;
+                clearPoiKinds();
+                var list = Array.isArray(d && d.pois) ? d.pois : [];
+                list.forEach(function(p) {
+                    if (typeof p.x !== 'number' || typeof p.y !== 'number') return;
+                    if (Math.abs(p.x) < 100 && Math.abs(p.y) < 100) return;
+                    var kind = POI_KINDS.indexOf(p.kind) >= 0 ? p.kind : 'unknown';
+                    var style = poiStyle(kind);
+                    var marker = L.circleMarker(wLL(p.x, p.y), {
+                        radius: style.radius,
+                        color: style.color,
+                        fillColor: style.fill,
+                        fillOpacity: 0.82,
+                        weight: 1.2,
+                        opacity: 0.95
+                    });
+                    var cls = shortClass(p.class || '');
+                    var label = cls || POI_LABEL[kind] || 'POI';
+                    var html = '<b>' + escHtml(label) + '</b><br>kind: ' + escHtml(POI_LABEL[kind] || kind);
+                    if (p.islandId !== undefined && p.islandId !== null) html += '<br>island: ' + escHtml(String(p.islandId));
+                    if (p.poiSubType !== undefined && p.poiSubType !== null) html += '<br>subtype: ' + escHtml(String(p.poiSubType));
+                    if (p.poiId) html += '<br>poi: ' + escHtml(String(p.poiId));
+                    html += '<br>pos: ' + Math.round(p.x) + ', ' + Math.round(p.y);
+                    marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
+                    marker.bindPopup(html, { maxWidth: 420 });
+                    marker.addTo(poiKindLayers[kind]);
+                    registerMapSource(p, p.x, p.y, 'poiscan', marker, 'misc', '');
+                    poiCounts[kind] = (poiCounts[kind] || 0) + 1;
+                });
+                poiStatus = list.length ? 'ok' : 'empty';
+                rebuildLayerControl();
+            } catch (e) {
+                clearPoiKinds();
+                poiStatus = 'error';
+                rebuildLayerControl();
+            }
+        };
+        r.onerror = function() { clearPoiKinds(); poiStatus = 'error'; rebuildLayerControl(); };
+        r.ontimeout = function() { clearPoiKinds(); poiStatus = 'error'; rebuildLayerControl(); };
+        r.send();
     }
 
 
@@ -1852,8 +1952,11 @@ var STATIC_CATALOG='/catalog/v1';
         }, true);
     }
     function layerDefaultOn(key) {
+        if (key.indexOf('poiscan:') === 0 && wtStatus === 'unconfigured') return true;
         return {
             'base:players': true,
+            'base:mobs': true,
+            'base:resource_nodes': true,
             'wt:main_quest': true,
             'wt:side_quest': true,
             'wt:dungeon': true,
@@ -1958,6 +2061,8 @@ var STATIC_CATALOG='/catalog/v1';
     function rebuildLayerControl() {
         layerEntries = [];
         addLayerEntry('Essentials', 'base:players', 'Players', pL, pL.getLayers().length);
+        if (liveMobCount > 0) addLayerEntry('Live entities', 'base:mobs', 'Mobs', liveMobLayer, liveMobCount);
+        if (liveNodeCount > 0) addLayerEntry('Live entities', 'base:resource_nodes', 'Resource nodes', liveNodeLayer, liveNodeCount);
 
         // Curated layout overlay categories
         if (wtStatus === 'loading') {
@@ -2042,7 +2147,9 @@ var STATIC_CATALOG='/catalog/v1';
     flayout();
     foverlay();
     setInterval(fp, 10000);
-    setInterval(fpoi, 30 * 60 * 1000);
+    // POIScan can land shortly after first player join. Poll cheaply and skip
+    // redraw when the timestamp has not changed.
+    setInterval(fpoi, 60 * 1000);
     // Re-poll the layout overlay every 10 minutes to pick up refreshed data
     // for the same fingerprint and detect fingerprint shifts after RocksDB
     // compaction. The WP+ HTTP server caches by fingerprint so a no-op poll is

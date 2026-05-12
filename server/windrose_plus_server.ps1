@@ -221,11 +221,25 @@ function ConvertTo-PublicLiveMapData($data) {
         }
     }
 
+    $nodes = @()
+    if ($data.nodes) {
+        foreach ($n in @($data.nodes)) {
+            $item = [ordered]@{}
+            if ($n.name) { $item["name"] = [string]$n.name }
+            if ($null -ne $n.x) { $item["x"] = [double]$n.x }
+            if ($null -ne $n.y) { $item["y"] = [double]$n.y }
+            if ($null -ne $n.z) { $item["z"] = [double]$n.z }
+            $nodes += [PSCustomObject]$item
+        }
+    }
+
     $publicData = [ordered]@{
         players = $players
         mobs = $mobs
+        nodes = $nodes
         player_count = $players.Count
         mob_count = $mobs.Count
+        node_count = $nodes.Count
         timestamp = $data.timestamp
     }
     if ($data.degraded) {
@@ -234,6 +248,20 @@ function ConvertTo-PublicLiveMapData($data) {
         $publicData["cache_age_sec"] = $data.cache_age_sec
     }
     return [PSCustomObject]$publicData
+}
+
+function Send-PoiScanData($context) {
+    $poiFile = Join-Path $dataDir "pois.json"
+    if (Test-Path -LiteralPath $poiFile) {
+        try {
+            $data = Get-Content $poiFile -Raw | ConvertFrom-Json
+            Send-Json $context $data
+        } catch {
+            Send-Json $context @{ error = "POIScan data is not readable" } 503
+        }
+    } else {
+        Send-Json $context @{ error = "No POIScan data" } 503
+    }
 }
 
 function Get-RuntimeOverlayData {
@@ -1076,6 +1104,11 @@ try {
                     continue
                 }
 
+                if ($path -eq "/api/public/pois") {
+                    Send-PoiScanData $context
+                    continue
+                }
+
                 if ($path -eq "/api/public/runtime-overlay") {
                     $overlay = Get-RuntimeOverlayData
                     if ($overlay.Ok) {
@@ -1226,6 +1259,9 @@ try {
                     } else {
                         Send-Json $context @{ error = "No livemap data" } 503
                     }
+                }
+                "/api/pois" {
+                    Send-PoiScanData $context
                 }
                 "/api/runtime-overlay" {
                     $overlay = Get-RuntimeOverlayData
