@@ -174,7 +174,7 @@ jq 'select(.ev=="admin.command") | {ts, admin_user, command, status}' logs/2026-
 
 ## Installation
 
-You need a Windrose Dedicated Server already set up on Windows. If you do not have one yet, install the official Windrose Dedicated Server tool first, then extract Windrose+ into that server folder.
+You need a Windrose Dedicated Server already set up on Windows. If you do not have one yet, you can start with [SurvivalServers.com Windrose hosting](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme_install&utm_campaign=windrose_plus) with Windrose+ pre-installed, or install the official Windrose Dedicated Server tool yourself and extract Windrose+ into that server folder.
 
 ### Step 1: Download and Install
 
