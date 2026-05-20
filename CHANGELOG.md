@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-05-19
+
+### Fixed
+
+- **Dashboard `/login` now accepts `multipart/form-data` in addition to `application/x-www-form-urlencoded`.** Scripted callers using `curl -F password=...` were silently rejected by the login form because the handler only parsed urlencoded bodies and treated multipart bodies as a single un-decoded blob, so `formPassword` ended up empty and the page re-rendered with "Invalid password". Both content types now produce the same field extraction and session cookie. The browser form behavior is unchanged (still urlencoded). (#108)
+
 ## [1.3.4] - 2026-05-12
 
 ### Fixed

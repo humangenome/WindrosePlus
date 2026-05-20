@@ -1011,10 +1011,44 @@ try {
                     $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
                     $body = $reader.ReadToEnd()
                     $formPassword = ""
-                    foreach ($pair in $body -split "&") {
-                        $kv = $pair -split "=", 2
-                        if ($kv[0] -eq "password") {
-                            $formPassword = [System.Uri]::UnescapeDataString($kv[1].Replace("+", " "))
+                    # Accept both application/x-www-form-urlencoded (browser <form>) and
+                    # multipart/form-data (curl -F, some HTTP clients). The HTML form
+                    # itself is urlencoded, but the field name + value are identical, so
+                    # supporting both keeps scripted callers like `curl -F password=...`
+                    # working without forcing them to switch to --data.
+                    $contentType = ""
+                    if ($context.Request.ContentType) { $contentType = $context.Request.ContentType }
+                    if ($contentType -match "(?i)^multipart/form-data") {
+                        $boundary = $null
+                        if ($contentType -match "(?i)boundary=(?:""([^""]+)""|([^;]+))") {
+                            $boundary = if ($matches[1]) { $matches[1].Trim() } else { $matches[2].Trim() }
+                        }
+                        if ($boundary) {
+                            $parts = $body -split [regex]::Escape("--$boundary")
+                            foreach ($part in $parts) {
+                                if ($part -notmatch '(?i)Content-Disposition:[^\r\n]*name="password"') { continue }
+                                $headerEnd = $part.IndexOf("`r`n`r`n")
+                                $sepLen = 4
+                                if ($headerEnd -lt 0) {
+                                    $headerEnd = $part.IndexOf("`n`n")
+                                    $sepLen = 2
+                                }
+                                if ($headerEnd -lt 0) { continue }
+                                $valStart = $headerEnd + $sepLen
+                                if ($valStart -ge $part.Length) { continue }
+                                $val = $part.Substring($valStart)
+                                # Strip the trailing CRLF that precedes the next boundary delimiter.
+                                $val = $val -replace "(\r\n|\r|\n)+$", ""
+                                $formPassword = $val
+                                break
+                            }
+                        }
+                    } else {
+                        foreach ($pair in $body -split "&") {
+                            $kv = $pair -split "=", 2
+                            if ($kv[0] -eq "password") {
+                                $formPassword = [System.Uri]::UnescapeDataString($kv[1].Replace("+", " "))
+                            }
                         }
                     }
                     if ($null -eq $currentPassword) {
