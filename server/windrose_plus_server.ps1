@@ -1090,6 +1090,21 @@ try {
                 continue
             }
 
+            # Static self-hosted vendor files - no auth.
+            # Those are libraries used in any pages, private or public
+            if ($path.StartsWith("/vendor/")) {
+                $vendorRoot = [System.IO.Path]::GetFullPath((Join-Path $webDir "vendor"))
+                $candidate   = [System.IO.Path]::GetFullPath((Join-Path $webDir ($path.TrimStart("/").Replace("/", "\"))))
+
+                if (-not $candidate.StartsWith($vendorRoot + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $context.Response.StatusCode = 403
+                    $context.Response.Close()
+                    continue
+                }
+                Send-File $context $candidate
+                continue
+            }
+
             # Static game-catalog assets (item metadata + icons) — no auth.
             # This is generic Windrose game data, identical on every server,
             # no player or server identifying information. Letting public
