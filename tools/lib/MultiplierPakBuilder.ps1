@@ -214,6 +214,9 @@ function Get-ResourceFamily {
     if ($LootItemPath -match '(?:Resource|Mineral)_([A-Za-z][A-Za-z0-9]*)_T[0-9]') {
         return $Matches[1]
     }
+    if ($LootItemPath -match '/SegmentTrees/(?:(?:BPDummyTrees|BPSegmentTrees)/)?BP_(?:Dummy_)?Segment_') {
+        return "Wood"
+    }
     return $null
 }
 
@@ -228,6 +231,21 @@ function ConvertTo-DropInt {
         return [Math]::Max(1, [int][Math]::Ceiling($scaled - 0.000001))
     }
     return [Math]::Max(1, [int][Math]::Floor($scaled + 0.000001))
+}
+
+function Get-HarvestCollections {
+    param($Data)
+
+    $collections = @()
+    if ($Data.Variants) {
+        foreach ($variant in @($Data.Variants)) {
+            if ($variant.Collection) { $collections += ,$variant.Collection }
+        }
+    }
+    if ($Data.Collection) {
+        $collections += ,$Data.Collection
+    }
+    return $collections
 }
 
 function Build-MultiplierPak {
@@ -613,16 +631,17 @@ function Build-MultiplierPak {
                 $json = Invoke-RepakGet -Repak $repak -AesKey $AesKey -PakPath $pak -FilePath $hf.Trim()
                 if (-not $json) { continue }
                 $data = $json | ConvertFrom-Json
-                if (-not $data.Variants) { continue }
+                $collections = @(Get-HarvestCollections -Data $data)
+                if ($collections.Count -eq 0) { continue }
                 $changed = $false
-                foreach ($variant in $data.Variants) {
-                    if (-not $variant.Collection) { continue }
-                    foreach ($entry in $variant.Collection) {
+                foreach ($collection in $collections) {
+                    foreach ($entry in @($collection)) {
                         if ($null -ne $entry.Amount -and $null -ne $entry.Amount.Min -and $null -ne $entry.Amount.Max) {
                             $resMult = 1.0
-                            # ResourceSpawner entries reference one or more BP
-                            # asset paths via Assets[] (e.g. BP_Mineral_Clay_T01).
-                            # Use the first that yields a family.
+                            # ResourceSpawner entries reference one or more BP asset
+                            # paths via Assets[] (e.g. BP_Mineral_Clay_T01). Some
+                            # files use Variants[].Collection[], others use a root
+                            # Collection[]; both schemas share this entry shape.
                             $family = $null
                             if ($entry.Assets) {
                                 foreach ($a in $entry.Assets) {

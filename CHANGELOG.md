@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-06-21
+
+### Fixed
+
+- **Harvest yield now covers root-level resource-spawner collections.** Current Windrose dedicated-server builds include some resource spawner assets with a top-level `Collection[]` instead of `Variants[].Collection[]` (for example several tree and pickup-resource collections). The multiplier PAK builder now scales `Amount.Min/Max` in both schemas, so `harvest_yield` is applied consistently across resource spawner assets instead of silently skipping the root-collection shape. (#113)
+
 ## [1.3.6] - 2026-06-21
 
 ### Fixed

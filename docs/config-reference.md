@@ -176,7 +176,7 @@ Keys are UE asset family names. The matcher reads the
 
 | Key | Default | Where it applies |
 |-----|---------|------------------|
-| `Wood` | `1.0` | Tree drops + `SegmentTreesAndMineralDestroy` contextual scores |
+| `Wood` | `1.0` | Tree drops, resource-spawner tree collections, and `SegmentTreesAndMineralDestroy` contextual scores |
 | `Bark` | `1.0` | Higher-tier tree drops |
 | `FiberPlant` | `1.0` | Grasses, agave, hemp, flax bushes |
 | `Stone` | `1.0` | Stone outcrops |
