@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-06-21
+
+### Fixed
+
+- **Public Sea Chart now loads self-hosted vendor assets without dashboard auth.** `/public-map` already allowed unauthenticated access when public map sharing is enabled, but the page's local Leaflet CSS/JS and fonts under `/vendor/` still hit the dashboard auth gate after v1.3.3 removed third-party CDN dependencies. The dashboard HTTP server now serves `/vendor/*` with the same canonical-path containment used for `/catalog/*`, so public map links render correctly without exposing private API routes. (#117)
+
 ## [1.3.5] - 2026-05-19
 
 ### Fixed
