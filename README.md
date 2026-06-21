@@ -178,7 +178,7 @@ You need a Windrose Dedicated Server already set up on Windows. If you do not ha
 
 ### Step 1: Download and Install
 
-1. Download the latest release from [GitHub Releases](https://github.com/HumanGenome/WindrosePlus/releases/latest).
+1. Download `WindrosePlus.zip` from the latest [GitHub Release](https://github.com/HumanGenome/WindrosePlus/releases/latest). Do not use GitHub's "Source code" zip for installation; generated tool binaries such as `tools/bin/repak.exe` and `tools/bin/retoc.exe` are added to the release asset only.
 2. Extract the zip into your Windrose Dedicated Server folder (e.g. `C:\WindroseServer\`).
 3. Open PowerShell in that folder and run:
 
