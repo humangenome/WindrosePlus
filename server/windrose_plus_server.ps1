@@ -149,6 +149,72 @@ function Get-CurrentConfig {
     return $null
 }
 
+function Get-ConfigPropertyValue {
+    param($Object, [string]$Name, $Default)
+
+    if ($null -eq $Object) { return $Default }
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -eq $prop -or $null -eq $prop.Value) { return $Default }
+    return $prop.Value
+}
+
+function Get-ConfigDouble {
+    param($Object, [string]$Name, [double]$Default = 0.0)
+
+    $raw = Get-ConfigPropertyValue $Object $Name $null
+    if ($null -eq $raw) { return $Default }
+    $value = 0.0
+    if ([double]::TryParse([string]$raw, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+        return $value
+    }
+    return $Default
+}
+
+function Get-ConfigBool {
+    param($Object, [string]$Name, [bool]$Default = $false)
+
+    $raw = Get-ConfigPropertyValue $Object $Name $null
+    if ($null -eq $raw) { return $Default }
+    if ($raw -is [bool]) { return $raw }
+    $s = ([string]$raw).Trim().ToLowerInvariant()
+    if ($s -in @("1", "true", "yes", "on")) { return $true }
+    if ($s -in @("0", "false", "no", "off")) { return $false }
+    return $Default
+}
+
+function Get-SeaChartOverlayTransform {
+    param($Config)
+
+    $transform = $null
+    if ($Config -and $Config.livemap -and $Config.livemap.overlay_transform) {
+        $transform = $Config.livemap.overlay_transform
+    }
+
+    return [PSCustomObject]@{
+        enabled        = (Get-ConfigBool $transform "enabled" $false)
+        offset_x       = (Get-ConfigDouble $transform "offset_x" 0.0)
+        offset_y       = (Get-ConfigDouble $transform "offset_y" 0.0)
+        scale          = (Get-ConfigDouble $transform "scale" 1.0)
+        scale_x        = (Get-ConfigDouble $transform "scale_x" 1.0)
+        scale_y        = (Get-ConfigDouble $transform "scale_y" 1.0)
+        origin_x       = (Get-ConfigDouble $transform "origin_x" 0.0)
+        origin_y       = (Get-ConfigDouble $transform "origin_y" 0.0)
+        rotate_degrees = (Get-ConfigDouble $transform "rotate_degrees" 0.0)
+        flip_x         = (Get-ConfigBool $transform "flip_x" $false)
+        flip_y         = (Get-ConfigBool $transform "flip_y" $false)
+        swap_xy        = (Get-ConfigBool $transform "swap_xy" $false)
+    }
+}
+
+function Add-SeaChartMapInfoConfig {
+    param($MapInfo)
+
+    $cfg = Get-CurrentConfig
+    if ($null -eq $cfg) { return $MapInfo }
+    $MapInfo | Add-Member -NotePropertyName overlay_transform -NotePropertyValue (Get-SeaChartOverlayTransform $cfg) -Force
+    return $MapInfo
+}
+
 # Re-read public map settings on every request so hosts can enable, disable, or
 # rotate the optional share token without restarting the dashboard process.
 function Get-CurrentPublicMapConfig {
@@ -1216,6 +1282,7 @@ try {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
+                        $data = Add-SeaChartMapInfoConfig $data
                         Send-Json $context $data
                     } else {
                         $generation = $null
@@ -1569,6 +1636,7 @@ try {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
+                        $data = Add-SeaChartMapInfoConfig $data
                         Send-Json $context $data
                     } else {
                         $generation = $null

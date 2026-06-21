@@ -288,6 +288,8 @@ Then share `/public-map` or `/public-map?token=optional-share-token`. This expos
 
 Sea Chart can also render optional runtime save overlays when another local tool writes `windrose_plus_data/runtime_overlay.json`. That file is intentionally separate from the dashboard core: if it is absent, the map still loads terrain, players, layout overlays, resources, and item data normally; if present, `/api/runtime-overlay` and the token-gated public map path render chest state, buildings, saved player positions, fog reveal, and quest blackboard layers from the same JSON schema.
 
+If a curated layout overlay from your provider is consistently shifted from the generated terrain, use `livemap.overlay_transform` in `windrose_plus.json` to calibrate the overlay. It can shift, scale, rotate, flip, or swap X/Y for curated markers and polygons without moving terrain tiles, live players, mobs, or teleport clicks.
+
 ### Commands
 
 Type `wp.help` in the console to see all available commands. Common ones:

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-06-21
+
+### Added
+
+- **Sea Chart curated-overlay calibration.** `livemap.overlay_transform` in `windrose_plus.json` can now shift, scale, rotate, flip, or swap X/Y for curated layout/runtime overlay data without moving generated terrain tiles, live players, mobs, live resource nodes, teleport clicks, or raw save overlays. This gives self-hosted admins a safe way to correct provider overlays that are consistently offset from the generated terrain. (#119)
+
 ## [1.3.7] - 2026-06-21
 
 ### Fixed

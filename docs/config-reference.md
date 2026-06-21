@@ -51,6 +51,11 @@ Live map writer and public Sea Chart settings.
 | `entity_interval_ms` | `30000` | Creature/resource position write interval. |
 | `public.enabled` | `false` | Enable the map-only public route at `/public-map`. |
 | `public.token` | `""` | Optional share token. If set, visitors must use `/public-map?token=<token>`. |
+| `overlay_transform.enabled` | `false` | Enable calibration for curated Sea Chart overlays. Terrain tiles and live player positions stay unchanged. |
+| `overlay_transform.offset_x` / `offset_y` | `0` | Shift curated overlay markers and polygons in world units. |
+| `overlay_transform.scale` / `scale_x` / `scale_y` | `1.0` | Scale curated overlay coordinates around `origin_x` / `origin_y`. |
+| `overlay_transform.rotate_degrees` | `0` | Rotate curated overlay coordinates around `origin_x` / `origin_y`. |
+| `overlay_transform.flip_x` / `flip_y` / `swap_xy` | `false` | Optional curated-overlay orientation correction for mismatched provider coordinates. |
 
 Example:
 
@@ -61,10 +66,26 @@ Example:
         "public": {
             "enabled": true,
             "token": "change-this-or-leave-blank"
+        },
+        "overlay_transform": {
+            "enabled": false,
+            "offset_x": 0,
+            "offset_y": 0,
+            "scale": 1.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0,
+            "origin_x": 0,
+            "origin_y": 0,
+            "rotate_degrees": 0,
+            "flip_x": false,
+            "flip_y": false,
+            "swap_xy": false
         }
     }
 }
 ```
+
+`overlay_transform` applies only to curated layout/runtime overlay data: markers, manual POIs, layout graph lines, biome polygons, resource hints derived from those markers, and item-source search hits. It does not move the generated terrain tiles, live players, live mobs, live resource nodes, teleport clicks, or raw runtime save overlays.
 
 ### Layout Runtime Provider (Optional)
 

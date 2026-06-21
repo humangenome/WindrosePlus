@@ -430,6 +430,49 @@ var STATIC_CATALOG='/catalog/v1';
     var livePlayers = [];
     var initialZoomDone = false;
     function wLL(x, y) { return L.latLng(y, x); }
+    var overlayTransform = manifest.overlay_transform || {};
+    function asNumber(v, fallback) {
+        v = Number(v);
+        return isFinite(v) ? v : fallback;
+    }
+    function asBool(v) {
+        return v === true || v === 1 || v === '1' || v === 'true' || v === 'yes' || v === 'on';
+    }
+    function overlayPoint(x, y) {
+        if (!overlayTransform || !asBool(overlayTransform.enabled)) return { x: x, y: y };
+        var originX = asNumber(overlayTransform.origin_x, 0);
+        var originY = asNumber(overlayTransform.origin_y, 0);
+        var dx = x - originX;
+        var dy = y - originY;
+        if (asBool(overlayTransform.swap_xy)) {
+            var tmp = dx;
+            dx = dy;
+            dy = tmp;
+        }
+        if (asBool(overlayTransform.flip_x)) dx = -dx;
+        if (asBool(overlayTransform.flip_y)) dy = -dy;
+        var deg = asNumber(overlayTransform.rotate_degrees, 0);
+        if (deg) {
+            var rad = deg * Math.PI / 180;
+            var cos = Math.cos(rad);
+            var sin = Math.sin(rad);
+            var rx = dx * cos - dy * sin;
+            var ry = dx * sin + dy * cos;
+            dx = rx;
+            dy = ry;
+        }
+        var commonScale = asNumber(overlayTransform.scale, 1);
+        var scaleX = commonScale * asNumber(overlayTransform.scale_x, 1);
+        var scaleY = commonScale * asNumber(overlayTransform.scale_y, 1);
+        return {
+            x: originX + dx * scaleX + asNumber(overlayTransform.offset_x, 0),
+            y: originY + dy * scaleY + asNumber(overlayTransform.offset_y, 0)
+        };
+    }
+    function overlayLL(x, y) {
+        var p = overlayPoint(x, y);
+        return wLL(p.x, p.y);
+    }
     function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
     function escAttr(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -808,9 +851,11 @@ var STATIC_CATALOG='/catalog/v1';
         (d.rollPath || []).forEach(function(v) { values.push(v); });
         return sourceTokens(values);
     }
-    function registerMapSource(raw, x, y, kind, marker, catKey, iconFile) {
+    function registerMapSource(raw, x, y, kind, marker, catKey, iconFile, viewPoint) {
         if (!raw || typeof x !== 'number' || typeof y !== 'number') return;
         if (!isFinite(x) || !isFinite(y)) return;
+        var vx = viewPoint && typeof viewPoint.x === 'number' && isFinite(viewPoint.x) ? viewPoint.x : x;
+        var vy = viewPoint && typeof viewPoint.y === 'number' && isFinite(viewPoint.y) ? viewPoint.y : y;
         var popupHtml = '';
         if (marker && marker.getPopup) {
             var popup = marker.getPopup();
@@ -835,6 +880,8 @@ var STATIC_CATALOG='/catalog/v1';
             iconFile: iconFile || '',
             x: x,
             y: y,
+            viewX: vx,
+            viewY: vy,
             tokens: sourceTokens([wtCategoryLabel(catKey), popupHtml]).concat(sourceMarkerTokens(raw)),
             marker: marker || null,
             popupHtml: popupHtml
@@ -940,7 +987,10 @@ var STATIC_CATALOG='/catalog/v1';
                 var anchors = resourcePoiLocations(zone);
                 anchors.forEach(function(anchor) {
                     var cat = resourceMarkerCategory(id);
-                    var marker = L.marker(wLL(anchor.x, anchor.y), {
+                    var marker = L.marker(wLL(
+                        typeof anchor.viewX === 'number' ? anchor.viewX : anchor.x,
+                        typeof anchor.viewY === 'number' ? anchor.viewY : anchor.y
+                    ), {
                         icon: wtIconFromFile(cat, resourceIconFile(id)),
                         keyboard: false
                     });
@@ -995,6 +1045,8 @@ var STATIC_CATALOG='/catalog/v1';
                 kind: m.kind,
                 x: m.x,
                 y: m.y,
+                viewX: m.viewX,
+                viewY: m.viewY,
                 score: score,
                 matchedTokens: common
             };
@@ -1028,7 +1080,10 @@ var STATIC_CATALOG='/catalog/v1';
         var bounds = [];
         (sources || []).forEach(function(src) {
             if (!src || typeof src.x !== 'number' || typeof src.y !== 'number') return;
-            var ll = wLL(src.x, src.y);
+            var ll = wLL(
+                typeof src.viewX === 'number' ? src.viewX : src.x,
+                typeof src.viewY === 'number' ? src.viewY : src.y
+            );
             var title = src.name || src.poiId || 'Loot source';
             var m = L.circleMarker(ll, {
                 radius: 8,
@@ -1084,7 +1139,10 @@ var STATIC_CATALOG='/catalog/v1';
         index = parseInt(index, 10);
         if (!isFinite(index) || !mapSourceMarkers[index]) return false;
         var src = mapSourceMarkers[index];
-        var ll = wLL(src.x, src.y);
+        var ll = wLL(
+            typeof src.viewX === 'number' ? src.viewX : src.x,
+            typeof src.viewY === 'number' ? src.viewY : src.y
+        );
         map.setView(ll, Math.max(map.getZoom(), 4), { animate: true });
         if (src.marker && map.hasLayer(src.marker) && src.marker.openPopup) {
             setTimeout(function() { src.marker.openPopup(); }, 180);
@@ -1268,12 +1326,13 @@ var STATIC_CATALOG='/catalog/v1';
                     if (typeof m.worldX !== 'number' || typeof m.worldY !== 'number') return;
                     var cat = wtCategorize(m.type);
                     var iconFile = wtIconFile(m.type, cat);
-                    var marker = L.marker(wLL(m.worldX, m.worldY), { icon: wtIcon(cat, m.type), keyboard: false });
+                    var viewPoint = overlayPoint(m.worldX, m.worldY);
+                    var marker = L.marker(wLL(viewPoint.x, viewPoint.y), { icon: wtIcon(cat, m.type), keyboard: false });
                     var label = m.name || wtPretty(m.type) || cat;
                     marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(wtPopupHtml(m, cat, m.type), { maxWidth: 380, autoPanPaddingTopLeft: [40, 60] });
                     marker.addTo(wtCategoryLayers[cat]);
-                    registerMapSource(m, m.worldX, m.worldY, 'runtime-marker', marker, cat, iconFile);
+                    registerMapSource(m, m.worldX, m.worldY, 'runtime-marker', marker, cat, iconFile, viewPoint);
                     wtCounts[cat] = (wtCounts[cat] || 0) + 1;
                 });
 
@@ -1301,7 +1360,7 @@ var STATIC_CATALOG='/catalog/v1';
                     var a = nodeCoord(nodeById[String(sourceId)]);
                     var b = nodeCoord(nodeById[String(targetId)]);
                     if (!a || !b) return;
-                    L.polyline([wLL(a.x, a.y), wLL(b.x, b.y)], {
+                    L.polyline([overlayLL(a.x, a.y), overlayLL(b.x, b.y)], {
                         color: '#6f8fb3',
                         weight: 1,
                         opacity: 0.38,
@@ -1314,7 +1373,7 @@ var STATIC_CATALOG='/catalog/v1';
                     var nx = (typeof n.worldX === 'number') ? n.worldX : n.x;
                     var ny = (typeof n.worldY === 'number') ? n.worldY : n.y;
                     if (typeof nx === 'number' && typeof ny === 'number') {
-                        var dot = L.circleMarker(wLL(nx, ny), {
+                        var dot = L.circleMarker(overlayLL(nx, ny), {
                             radius: 3, color: '#404040', fillColor: '#606060',
                             fillOpacity: 0.6, weight: 1, opacity: 0.6
                         });
@@ -1333,12 +1392,13 @@ var STATIC_CATALOG='/catalog/v1';
                         if (typeof x !== 'number' || typeof y !== 'number') return;
                         var cat = wtManualCategory(m);
                         var iconFile = wtIconFile(m.iconAssetPath || m.type, cat);
-                        var marker = L.marker(wLL(x, y), { icon: wtIcon(cat, m.iconAssetPath || m.type), keyboard: false });
+                        var viewPoint = overlayPoint(x, y);
+                        var marker = L.marker(wLL(viewPoint.x, viewPoint.y), { icon: wtIcon(cat, m.iconAssetPath || m.type), keyboard: false });
                         var mlabel = m.name || m.title || 'POI';
                         marker.bindTooltip(escHtml(mlabel), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                         marker.bindPopup(wtPopupHtml(m, cat, m.iconAssetPath || m.type), { maxWidth: 380 });
                         marker.addTo(manualPoiLayer);
-                        registerMapSource(m, x, y, 'manual-poi', marker, cat, iconFile);
+                        registerMapSource(m, x, y, 'manual-poi', marker, cat, iconFile, viewPoint);
                         manualPoiCount++;
                     });
 
@@ -1349,8 +1409,8 @@ var STATIC_CATALOG='/catalog/v1';
                         var pts = Array.isArray(p) ? p : (p && (p.points || p.polygon || p.coords)) || [];
                         if (!Array.isArray(pts) || pts.length < 3) return;
                         var latlngs = pts.map(function(pt) {
-                            if (Array.isArray(pt)) return wLL(pt[0], pt[1]);
-                            return wLL(pt.x !== undefined ? pt.x : pt.worldX, pt.y !== undefined ? pt.y : pt.worldY);
+                            if (Array.isArray(pt)) return overlayLL(pt[0], pt[1]);
+                            return overlayLL(pt.x !== undefined ? pt.x : pt.worldX, pt.y !== undefined ? pt.y : pt.worldY);
                         }).filter(function(ll) { return ll && isFinite(ll.lat) && isFinite(ll.lng); });
                         if (latlngs.length < 3) return;
                         var color = (p && p.color) || nodeColor;
@@ -1370,7 +1430,7 @@ var STATIC_CATALOG='/catalog/v1';
                             className: 'wt-level-label',
                             opacity: 1,
                             interactive: false
-                        }).setLatLng(wLL(nx, ny)).setContent(escHtml(levelLabel)).addTo(levelLabelLayer);
+                        }).setLatLng(overlayLL(nx, ny)).setContent(escHtml(levelLabel)).addTo(levelLabelLayer);
                     }
                 });
                 renderResourceZones(nodes);
