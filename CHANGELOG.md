@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-06-22
+
+### Fixed
+
+- **Stopped auto-loading the experimental native probe.** The v1.3.11 probe remains available as a manual research DLL, but the installer now keeps `WindroseNativeProbe` out of `mods.txt` and removes any existing auto-load entry. Normal installs continue to load Windrose+ and `HeightmapExporter`; the hidden `wp.nativeprobe` command now explicitly requires manually enabling the experimental C++ mod on a test server. (#18, #37, #38, #56, #86, #106)
+
 ## [1.3.11] - 2026-06-22
 
 ### Changed

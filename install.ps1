@@ -182,10 +182,10 @@ if (Test-Path -LiteralPath $modSource) {
                 Copy-Item $_.FullName (Join-Path $modDest $_.Name) -Force
             }
         }
-        # Install bundled C++ mods if included
+        # Install bundled C++ mods if included. WindroseNativeProbe is
+        # diagnostic-only and is not auto-loaded on normal servers.
         $cppMods = @(
-            @{ Name = "HeightmapExporter"; Source = "cpp-mods\HeightmapExporter\HeightmapExporter.dll" },
-            @{ Name = "WindroseNativeProbe"; Source = "cpp-mods\WindroseNativeProbe\WindroseNativeProbe.dll" }
+            @{ Name = "HeightmapExporter"; Source = "cpp-mods\HeightmapExporter\HeightmapExporter.dll" }
         )
         foreach ($cppMod in $cppMods) {
             $dllSrc = Join-Path $scriptDir $cppMod.Source
@@ -198,6 +198,10 @@ if (Test-Path -LiteralPath $modSource) {
                     Set-Content $enabledPath "1"
                 }
             }
+        }
+        $wnpEnabledPath = Join-Path $modsDir "WindroseNativeProbe\enabled.txt"
+        if (Test-Path -LiteralPath $wnpEnabledPath) {
+            Remove-Item -LiteralPath $wnpEnabledPath -Force -ErrorAction SilentlyContinue
         }
 
         Write-Host " done" -ForegroundColor Green
@@ -214,16 +218,16 @@ if (Test-Path -LiteralPath $modSource) {
 $modsTxt = Join-Path $modsDir "mods.txt"
 if (Test-Path -LiteralPath $modsTxt) {
     $content = Get-Content $modsTxt -Raw
-    # Strip legacy IdleCpuLimiter entry if a prior install added it.
-    if ($content -match "(?mi)^\s*IdleCpuLimiter\s*:") {
-        $content = [regex]::Replace($content, "(?mi)^\s*IdleCpuLimiter\s*:\s*\d+\s*\r?\n?", "")
+    # Strip legacy/diagnostic entries that should not auto-load.
+    if ($content -match "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe)\s*:") {
+        $content = [regex]::Replace($content, "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe)\s*:\s*\d+\s*\r?\n?", "")
         Set-Content $modsTxt $content
     }
     if ($content -notmatch "WindrosePlus") {
         Add-Content $modsTxt "`nWindrosePlus : 1`n"
         $content += "`nWindrosePlus : 1`n"
     }
-    foreach ($cppModName in @("HeightmapExporter", "WindroseNativeProbe")) {
+    foreach ($cppModName in @("HeightmapExporter")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
         if (Test-Path -LiteralPath $cppMainDll) {
             if ($content -match "(?m)^\s*$cppModName\s*:") {
@@ -237,7 +241,7 @@ if (Test-Path -LiteralPath $modsTxt) {
     }
 } else {
     $modsContent = "WindrosePlus : 1`n"
-    foreach ($cppModName in @("HeightmapExporter", "WindroseNativeProbe")) {
+    foreach ($cppModName in @("HeightmapExporter")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
         if (Test-Path -LiteralPath $cppMainDll) {
             $modsContent += "$cppModName : 1`n"

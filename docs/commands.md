@@ -558,7 +558,9 @@ Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 
 ### wp.nativeprobe
 
-Hidden debug command that triggers the bundled `WindroseNativeProbe` C++ mod.
+Hidden debug command that triggers the experimental `WindroseNativeProbe` C++
+mod. The native probe is not auto-enabled by the installer; only enable it on a
+non-production test server when collecting runtime research data.
 It writes a read-only runtime reflection dump to
 `windrose_plus_data/native_probe.json`. The JSON includes a full lightweight
 `classIndex` for every matching class and a priority-ordered detailed `classes`
@@ -570,7 +572,7 @@ Usage: wp.nativeprobe
 
 ```
 > wp.nativeprobe
-Native probe requested. Check windrose_plus_data\native_probe.json after a few seconds; during early server boot the native mod waits up to 30 seconds before scanning.
+Native probe requested. Check windrose_plus_data\native_probe.json after a few seconds.
 ```
 
 ---

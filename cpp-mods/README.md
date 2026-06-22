@@ -9,8 +9,9 @@ You do **not** need to build these yourself. Download the pre-built DLLs from th
 ## Included Mods
 
 - `HeightmapExporter` exports terrain height data for the live map.
-- `WindroseNativeProbe` writes a read-only runtime UObject reflection dump for
-  player, inventory, storage, progression, chat, and network research.
+- `WindroseNativeProbe` is an experimental read-only runtime UObject reflection
+  dump for player, inventory, storage, progression, chat, and network research.
+  It is not enabled by the installer; use it only on non-production test servers.
 
 ## Building from Source (Contributors)
 
