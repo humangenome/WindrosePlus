@@ -50,6 +50,7 @@ jobs:
       CPP_MOD_ASSET_TAG: "cppmods-v1.3.11"
       HEIGHTMAP_EXPORTER_SHA256: "238fc6e44955d1467cf03d91897135a2bb17a6cfff7231ca3c14232357f77d54"
       WINDROSE_NATIVE_PROBE_SHA256: "1b90bf01425d43252bc27e94f7843b60d3fe59dd486739cb2eda1e5eb7dea072"
+      WINDROSE_PLUS_NATIVE_SHA256: "66fb9a72724385a4ba530c5d6c3201db6a5825342b96a677240acbdcff40f6c5"
 
     steps:
       - name: Checkout
@@ -102,13 +103,16 @@ jobs:
         # so release ZIP contents cannot change because "latest" moved or a
         # release asset was replaced.
         run: |
-          mkdir -p cpp-mods/HeightmapExporter cpp-mods/WindroseNativeProbe
+          mkdir -p cpp-mods/HeightmapExporter cpp-mods/WindroseNativeProbe cpp-mods/WindrosePlusNative
           curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/HeightmapExporter.dll" \
             -o cpp-mods/HeightmapExporter/HeightmapExporter.dll
           echo "${HEIGHTMAP_EXPORTER_SHA256}  cpp-mods/HeightmapExporter/HeightmapExporter.dll" | sha256sum -c -
           curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/WindroseNativeProbe.dll" \
             -o cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll
           echo "${WINDROSE_NATIVE_PROBE_SHA256}  cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll" | sha256sum -c -
+          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/WindrosePlusNative.dll" \
+            -o cpp-mods/WindrosePlusNative/WindrosePlusNative.dll
+          echo "${WINDROSE_PLUS_NATIVE_SHA256}  cpp-mods/WindrosePlusNative/WindrosePlusNative.dll" | sha256sum -c -
 
       - name: Download windrose-heal
         uses: actions/download-artifact@v4
@@ -198,4 +202,5 @@ jobs:
             --notes-file release_notes.md \
             WindrosePlus.zip \
             cpp-mods/HeightmapExporter/HeightmapExporter.dll \
-            cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll
+            cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll \
+            cpp-mods/WindrosePlusNative/WindrosePlusNative.dll

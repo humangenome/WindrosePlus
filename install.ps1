@@ -185,7 +185,8 @@ if (Test-Path -LiteralPath $modSource) {
         # Install bundled C++ mods if included. WindroseNativeProbe is
         # diagnostic-only and is not auto-loaded on normal servers.
         $cppMods = @(
-            @{ Name = "HeightmapExporter"; Source = "cpp-mods\HeightmapExporter\HeightmapExporter.dll" }
+            @{ Name = "HeightmapExporter"; Source = "cpp-mods\HeightmapExporter\HeightmapExporter.dll" },
+            @{ Name = "WindrosePlusNative"; Source = "cpp-mods\WindrosePlusNative\WindrosePlusNative.dll" }
         )
         foreach ($cppMod in $cppMods) {
             $dllSrc = Join-Path $scriptDir $cppMod.Source
@@ -229,7 +230,7 @@ if (Test-Path -LiteralPath $modsTxt) {
         Add-Content $modsTxt "`nWindrosePlus : 1`n"
         $content += "`nWindrosePlus : 1`n"
     }
-    foreach ($cppModName in @("HeightmapExporter")) {
+    foreach ($cppModName in @("HeightmapExporter", "WindrosePlusNative")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
         if (Test-Path -LiteralPath $cppMainDll) {
             if ($content -match "(?m)^\s*$cppModName\s*:") {
@@ -243,7 +244,7 @@ if (Test-Path -LiteralPath $modsTxt) {
     }
 } else {
     $modsContent = "WindrosePlus : 1`n"
-    foreach ($cppModName in @("HeightmapExporter")) {
+    foreach ($cppModName in @("HeightmapExporter", "WindrosePlusNative")) {
         $cppMainDll = Join-Path $modsDir "$cppModName\dlls\main.dll"
         if (Test-Path -LiteralPath $cppMainDll) {
             $modsContent += "$cppModName : 1`n"

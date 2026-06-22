@@ -1938,14 +1938,98 @@ function Admin._registerCommands()
         end
     }
 
-    -- wp.kick / wp.netid / wp.say are deferred until native helper work. UE4SS Lua only binds
-    -- UFunctions and a tiny set of native helpers (GetClass / IsValid / ToString /
-    -- GetFName / GetFullName). It cannot call the C++ virtual methods needed for
-    -- player disconnect (UNetConnection::Close, AActor::Destroy on remotely-owned
-    -- PCs, UWorld::Exec, APlayerController::ConsoleCommand) and cannot deref
-    -- USTRUCT-by-value properties like FUniqueNetIdRepl. All three features need a
-    -- native UE4SS C++ mod (DLL) in the same release.
+    -- wp.kick / wp.ban / wp.unban: server-side moderation. UE4SS Lua cannot call
+    -- the C++ disconnect path itself, so these hand off to the WindrosePlusNative
+    -- C++ mod via a command file (windrose_plus_data\wpn_command.txt); the native
+    -- mod kicks via APlayerController::ClientReturnToMainMenuWithTextReason on the
+    -- game thread. The ban list is a plain file (wpn_bans.txt) the native mod
+    -- enforces on a timer, so wp.listbans reads it directly.
 
+    Admin._commands["wp.kick"] = {
+        description = "Kick a connected player by name",
+        usage = "wp.kick <player> [reason]",
+        category = "players",
+        examples = {"wp.kick Alice", "wp.kick Bob Griefing the build"},
+        handler = function(args)
+            if #args < 1 then return "Usage: wp.kick <player> [reason]" end
+            local name = args[1]
+            local reason = (#args >= 2) and table.concat({table.unpack(args, 2)}, " ") or ""
+            return Admin._wpnSend("kick", name, reason, "Kick requested for " .. name)
+        end
+    }
+
+    Admin._commands["wp.ban"] = {
+        description = "Ban a player by name (adds to ban list and kicks if present)",
+        usage = "wp.ban <player> [reason]",
+        category = "players",
+        examples = {"wp.ban Alice", "wp.ban Bob Repeated griefing"},
+        handler = function(args)
+            if #args < 1 then return "Usage: wp.ban <player> [reason]" end
+            local name = args[1]
+            local reason = (#args >= 2) and table.concat({table.unpack(args, 2)}, " ") or ""
+            return Admin._wpnSend("ban", name, reason, "Ban requested for " .. name)
+        end
+    }
+
+    Admin._commands["wp.unban"] = {
+        description = "Remove a player from the ban list",
+        usage = "wp.unban <player>",
+        category = "players",
+        examples = {"wp.unban Alice"},
+        handler = function(args)
+            if #args < 1 then return "Usage: wp.unban <player>" end
+            return Admin._wpnSend("unban", args[1], "", "Unban requested for " .. args[1])
+        end
+    }
+
+    Admin._commands["wp.listbans"] = {
+        description = "List banned players",
+        usage = "wp.listbans",
+        category = "players",
+        handler = function(args)
+            local bans = Admin._wpnReadBans()
+            if #bans == 0 then return "No bans" end
+            local lines = {"Banned (" .. #bans .. "):"}
+            for i, b in ipairs(bans) do table.insert(lines, "  " .. i .. ". " .. b) end
+            return table.concat(lines, "\n")
+        end
+    }
+
+end
+
+-- Hand a moderation command to the WindrosePlusNative C++ mod via the command
+-- file it polls on the game thread. Tab-separated: <verb>\t<arg1>\t<arg2>.
+-- Fire-and-forget: the native mod executes within ~1s and the player drops;
+-- confirm via wp.players. Returns a friendly message (or an error if the native
+-- mod isn't deployed / game dir unknown).
+function Admin._wpnSend(verb, arg1, arg2, okMsg)
+    if not Admin._gameDir then return "Game directory not initialized" end
+    local dataDir = Admin._gameDir .. "windrose_plus_data"
+    local cmdPath = dataDir .. "\\wpn_command.txt"
+    local parts = { verb }
+    if arg1 ~= nil and arg1 ~= "" then parts[#parts + 1] = arg1 end
+    if arg2 ~= nil and arg2 ~= "" then parts[#parts + 1] = arg2 end
+    local f = io.open(cmdPath, "w")
+    if not f then return "Failed to write command at " .. cmdPath .. " (is the WindrosePlusNative mod deployed?)" end
+    f:write(table.concat(parts, "\t"))
+    f:close()
+    Log.info("Admin", "WPN command queued: " .. verb .. " " .. (arg1 or ""))
+    return okMsg
+end
+
+-- Read the WindrosePlusNative ban list file directly (it owns wpn_bans.txt).
+function Admin._wpnReadBans()
+    local bans = {}
+    if not Admin._gameDir then return bans end
+    local path = Admin._gameDir .. "windrose_plus_data\\wpn_bans.txt"
+    local f = io.open(path, "r")
+    if not f then return bans end
+    for line in f:lines() do
+        local t = line:gsub("^%s+", ""):gsub("%s+$", "")
+        if t ~= "" then bans[#bans + 1] = t end
+    end
+    f:close()
+    return bans
 end
 
 -- Delegate to shared helper in WindrosePlus global

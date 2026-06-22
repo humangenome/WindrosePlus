@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-06-22
+
+### Added
+
+- **Server-side moderation: kick and ban.** New `WindrosePlusNative` C++ mod adds working `wp.kick`, `wp.ban`, `wp.unban`, and `wp.listbans` commands. Kicking calls the player controller's return-to-menu path natively (which UE4SS Lua cannot reach), and the ban list is enforced on a timer so banned names are removed when they rejoin. Bans persist in `windrose_plus_data\wpn_bans.txt`. (#37)
+
 ## [1.3.13] - 2026-06-22
 
 ### Fixed
