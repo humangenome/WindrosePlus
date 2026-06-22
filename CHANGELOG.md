@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-06-22
+
+### Changed
+
+- **Improved the native probe dump for runtime research.** `WindroseNativeProbe` now writes a complete lightweight `classIndex` for every matching runtime class, then emits detailed property/function data for the most relevant R5, player, inventory, storage, item, chat, and network classes first. This keeps generic engine ability classes from crowding out the Windrose-specific objects needed for the native-helper research behind the blocked admin features, and early boot trigger files now wait for a short native warm-up before scanning. (#18, #37, #38, #56, #86, #106)
+
 ## [1.3.10] - 2026-06-22
 
 ### Added

@@ -47,9 +47,9 @@ jobs:
       # Pinned tool versions. Bump here (and rerun the release tag) to upgrade.
       REPAK_VERSION: "0.2.3"
       RETOC_VERSION: "0.1.5"
-      CPP_MOD_ASSET_TAG: "cppmods-v1.3.10"
+      CPP_MOD_ASSET_TAG: "cppmods-v1.3.11"
       HEIGHTMAP_EXPORTER_SHA256: "238fc6e44955d1467cf03d91897135a2bb17a6cfff7231ca3c14232357f77d54"
-      WINDROSE_NATIVE_PROBE_SHA256: "01017908d8ba1f6af3f34aab4d964ca777dc548ba2beffaa1e70aa31dd1b584d"
+      WINDROSE_NATIVE_PROBE_SHA256: "1b90bf01425d43252bc27e94f7843b60d3fe59dd486739cb2eda1e5eb7dea072"
 
     steps:
       - name: Checkout

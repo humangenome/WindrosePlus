@@ -61,9 +61,10 @@ native read-only probe:
 wp.nativeprobe
 ```
 
-It writes `windrose_plus_data/native_probe.json` with class, property, function,
-and selected live-object summaries without calling gameplay UFunctions or
-mutating UObject state.
+It writes `windrose_plus_data/native_probe.json` with a complete lightweight
+`classIndex`, priority-ordered class/property/function details, and selected
+live-object summaries without calling gameplay UFunctions or mutating UObject
+state.
 
 Useful filter families to try with `wp.fields` and `wp.methods`:
 

@@ -26,6 +26,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -116,22 +117,45 @@ static std::filesystem::path resolve_data_dir() {
     return "windrose_plus_data";
 }
 
-static const std::vector<std::wstring> kInterestTokens = {
-    STR("R5Player"), STR("PlayerController"), STR("PlayerState"), STR("GameMode"),
-    STR("GameState"), STR("Character"), STR("Pawn"), STR("Controller"),
-    STR("Inventory"), STR("Storage"), STR("Proximity"), STR("BuildingCenter"),
-    STR("Interaction"), STR("Interact"), STR("GameplayAbility"), STR("Ability"),
-    STR("Requirement"), STR("Attribute"), STR("Progression"), STR("Experience"),
-    STR("Talent"), STR("Stat"), STR("Item"), STR("R5BL"), STR("BusinessRule"),
-    STR("Chat"), STR("Message"), STR("Notification"), STR("HUD"), STR("Session"),
-    STR("Net"), STR("Unique"), STR("Ban"), STR("Kick")
+struct InterestToken {
+    std::wstring token;
+    int priority;
 };
 
-static bool interesting_class_name(const std::wstring& n) {
+static const std::vector<InterestToken> kInterestTokens = {
+    {STR("BP_R5"), 0}, {STR("R5Player"), 0}, {STR("R5GameMode"), 0},
+    {STR("R5GameState"), 0}, {STR("R5BL"), 0},
+
+    {STR("PlayerController"), 10}, {STR("PlayerState"), 10},
+    {STR("Character"), 10}, {STR("Pawn"), 10}, {STR("Controller"), 10},
+    {STR("Unique"), 10}, {STR("Session"), 10}, {STR("Net"), 10},
+    {STR("Ban"), 10}, {STR("Kick"), 10},
+
+    {STR("Inventory"), 20}, {STR("Storage"), 20}, {STR("Container"), 20},
+    {STR("Chest"), 20}, {STR("Proximity"), 20}, {STR("BuildingCenter"), 20},
+    {STR("Requirement"), 20}, {STR("BusinessRule"), 20},
+
+    {STR("Item"), 30}, {STR("Progression"), 30}, {STR("Experience"), 30},
+    {STR("Talent"), 30}, {STR("Stat"), 30}, {STR("Attribute"), 30},
+
+    {STR("Chat"), 40}, {STR("Message"), 40}, {STR("Notification"), 40},
+    {STR("HUD"), 40}, {STR("Interaction"), 40}, {STR("Interact"), 40},
+
+    {STR("GameplayAbility"), 60}, {STR("Ability"), 80}
+};
+
+static int class_priority(const std::wstring& n) {
+    int best = 1000;
     for (const auto& tok : kInterestTokens) {
-        if (n.find(tok) != std::wstring::npos) return true;
+        if (n.find(tok.token) != std::wstring::npos && tok.priority < best) {
+            best = tok.priority;
+        }
     }
-    return false;
+    return best;
+}
+
+static bool interesting_class_name(const std::wstring& n) {
+    return class_priority(n) < 1000;
 }
 
 static bool read_fstring(FProperty* p, UObject* o, std::string& out) {
@@ -393,6 +417,19 @@ static void run_probe(const std::filesystem::path& outDir) {
         return RC::LoopAction::Continue;
     });
 
+    std::vector<ClassBucket*> ordered;
+    ordered.reserve(buckets.size());
+    for (auto& [_, b] : buckets) ordered.push_back(&b);
+    std::sort(ordered.begin(), ordered.end(), [](const ClassBucket* a, const ClassBucket* b) {
+        int ap = class_priority(a->class_name);
+        int bp = class_priority(b->class_name);
+        if (ap != bp) return ap < bp;
+        if ((a->live > 0) != (b->live > 0)) return a->live > 0;
+        if (a->live != b->live) return a->live > b->live;
+        if (a->total != b->total) return a->total > b->total;
+        return a->class_name < b->class_name;
+    });
+
     std::filesystem::path tmpPath = outDir / "native_probe.json.tmp";
     std::filesystem::path outPath = outDir / "native_probe.json";
     std::ofstream out(tmpPath);
@@ -400,13 +437,27 @@ static void run_probe(const std::filesystem::path& outDir) {
     out << "  \"version\": 1,\n";
     out << "  \"readOnly\": true,\n";
     out << "  \"classCount\": " << buckets.size() << ",\n";
+    out << "  \"classIndex\": [\n";
+    bool indexFirst = true;
+    for (auto* bp : ordered) {
+        if (!bp) continue;
+        if (!indexFirst) out << ",\n";
+        indexFirst = false;
+        out << "    {\"class\":" << q(wide_to_utf8(bp->class_name))
+            << ",\"countTotal\":" << bp->total
+            << ",\"countLive\":" << bp->live
+            << ",\"priority\":" << class_priority(bp->class_name) << "}";
+    }
+    out << "\n  ],\n";
     out << "  \"classes\": [\n";
 
     bool first = true;
     int emitted = 0;
-    const int maxClasses = 260;
-    for (auto& [_, b] : buckets) {
+    const int maxClasses = 320;
+    for (auto* bp : ordered) {
         if (emitted >= maxClasses) break;
+        if (!bp) continue;
+        ClassBucket& b = *bp;
         UObject* sample = b.sample_live ? b.sample_live : b.sample_any;
         UClass* sc = sample ? sample->GetClassPrivate() : nullptr;
         if (!sc) continue;
@@ -417,7 +468,8 @@ static void run_probe(const std::filesystem::path& outDir) {
 
         out << "    {\"class\":" << q(wide_to_utf8(b.class_name))
             << ",\"countTotal\":" << b.total
-            << ",\"countLive\":" << b.live;
+            << ",\"countLive\":" << b.live
+            << ",\"priority\":" << class_priority(b.class_name);
         if (sample) {
             out << ",\"samplePath\":" << q(obj_path(sample))
                 << ",\"sampleIsCDO\":" << (b.sample_live ? "false" : "true");
@@ -429,7 +481,11 @@ static void run_probe(const std::filesystem::path& outDir) {
         out << "}";
     }
     out << "\n  ]";
-    if (emitted >= maxClasses) out << ",\n  \"truncatedClasses\": true,\n  \"classLimit\": " << maxClasses;
+    out << ",\n  \"emittedClassCount\": " << emitted;
+    if (emitted >= maxClasses) {
+        out << ",\n  \"truncatedClasses\": true,\n  \"truncatedDetailedClasses\": true,\n  \"classLimit\": " << maxClasses
+            << ",\n  \"omittedDetailedClassCount\": " << (ordered.size() - emitted);
+    }
     out << "\n}\n";
     out.close();
 
@@ -451,7 +507,8 @@ class WindroseNativeProbe : public CppUserModBase {
 public:
     WindroseNativeProbe() : CppUserModBase() {
         ModName = STR("WindroseNativeProbe");
-        ModVersion = STR("1.0.0");
+        ModVersion = STR("1.0.1");
+        m_startedMs = GetTickCount64();
     }
 
     ~WindroseNativeProbe() override {}
@@ -462,6 +519,7 @@ public:
 
     auto on_update() -> void override {
         m_frameCount++;
+        if (GetTickCount64() - m_startedMs < 30000) return;
         if (m_frameCount % 300 != 0) return;
         auto outDir = resolve_data_dir();
         auto trigger = outDir / "native_probe_trigger";
@@ -482,6 +540,7 @@ public:
 
 private:
     int m_frameCount = 0;
+    ULONGLONG m_startedMs = 0;
 };
 
 extern "C" __declspec(dllexport) RC::CppUserModBase* start_mod() {

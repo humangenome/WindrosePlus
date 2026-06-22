@@ -1206,7 +1206,7 @@ function Admin._registerCommands()
             f:close()
 
             Log.info("Admin", "Native probe requested")
-            return "Native probe requested. Check windrose_plus_data\\native_probe.json after a few seconds. Requires WindroseNativeProbe C++ mod."
+            return "Native probe requested. Check windrose_plus_data\\native_probe.json after a few seconds; during early server boot the native mod waits up to 30 seconds before scanning. Requires WindroseNativeProbe C++ mod."
         end
     }
 

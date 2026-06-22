@@ -560,7 +560,9 @@ Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 
 Hidden debug command that triggers the bundled `WindroseNativeProbe` C++ mod.
 It writes a read-only runtime reflection dump to
-`windrose_plus_data/native_probe.json`.
+`windrose_plus_data/native_probe.json`. The JSON includes a full lightweight
+`classIndex` for every matching class and a priority-ordered detailed `classes`
+array for R5, player, inventory, storage, item, chat, and network research.
 
 ```
 Usage: wp.nativeprobe
@@ -568,7 +570,7 @@ Usage: wp.nativeprobe
 
 ```
 > wp.nativeprobe
-Native probe requested. Check windrose_plus_data\native_probe.json after a few seconds.
+Native probe requested. Check windrose_plus_data\native_probe.json after a few seconds; during early server boot the native mod waits up to 30 seconds before scanning.
 ```
 
 ---

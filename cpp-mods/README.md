@@ -35,10 +35,10 @@ git clone https://github.com/UE4SS-RE/RE-UE4SS.git
 
 ```bash
 cmake -B build -S . -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+cmake --build build --config Game__Shipping__Win64
 ```
 
-Output DLLs will be in `build/Release/`.
+Output DLLs will be under each mod's `Game__Shipping__Win64/` directory.
 
 ## Adding a New C++ Mod
 
