@@ -199,9 +199,11 @@ if (Test-Path -LiteralPath $modSource) {
                 }
             }
         }
-        $wnpEnabledPath = Join-Path $modsDir "WindroseNativeProbe\enabled.txt"
-        if (Test-Path -LiteralPath $wnpEnabledPath) {
-            Remove-Item -LiteralPath $wnpEnabledPath -Force -ErrorAction SilentlyContinue
+        foreach ($diagnosticMod in @("WindroseNativeProbe", "MapMaterializerExporter", "MappingsDumperMod")) {
+            $enabledPath = Join-Path $modsDir "$diagnosticMod\enabled.txt"
+            if (Test-Path -LiteralPath $enabledPath) {
+                Remove-Item -LiteralPath $enabledPath -Force -ErrorAction SilentlyContinue
+            }
         }
 
         Write-Host " done" -ForegroundColor Green
@@ -219,8 +221,8 @@ $modsTxt = Join-Path $modsDir "mods.txt"
 if (Test-Path -LiteralPath $modsTxt) {
     $content = Get-Content $modsTxt -Raw
     # Strip legacy/diagnostic entries that should not auto-load.
-    if ($content -match "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe)\s*:") {
-        $content = [regex]::Replace($content, "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe)\s*:\s*\d+\s*\r?\n?", "")
+    if ($content -match "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe|MapMaterializerExporter|MappingsDumperMod)\s*:") {
+        $content = [regex]::Replace($content, "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe|MapMaterializerExporter|MappingsDumperMod)\s*:\s*\d+\s*\r?\n?", "")
         Set-Content $modsTxt $content
     }
     if ($content -notmatch "WindrosePlus") {

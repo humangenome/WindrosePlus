@@ -12,6 +12,8 @@ You do **not** need to build these yourself. Download the pre-built DLLs from th
 - `WindroseNativeProbe` is an experimental read-only runtime UObject reflection
   dump for player, inventory, storage, progression, chat, and network research.
   It is not enabled by the installer; use it only on non-production test servers.
+- `MapMaterializerExporter` is development-only research tooling and is not
+  enabled by the installer.
 
 ## Building from Source (Contributors)
 

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-06-22
+
+### Fixed
+
+- **Strip UE4SS diagnostic dumpers during install.** The installer now removes `MappingsDumperMod`, `WindroseNativeProbe`, and `MapMaterializerExporter` from automatic startup when present. These tools are useful for development research, but normal Windrose+ servers should boot only Windrose+, `HeightmapExporter`, and the safe UE4SS support mods.
+
 ## [1.3.12] - 2026-06-22
 
 ### Fixed
