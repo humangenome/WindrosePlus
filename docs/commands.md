@@ -556,6 +556,21 @@ Usage: wp.mapexport
 Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
 ```
 
+### wp.nativeprobe
+
+Hidden debug command that triggers the bundled `WindroseNativeProbe` C++ mod.
+It writes a read-only runtime reflection dump to
+`windrose_plus_data/native_probe.json`.
+
+```
+Usage: wp.nativeprobe
+```
+
+```
+> wp.nativeprobe
+Native probe requested. Check windrose_plus_data\native_probe.json after a few seconds.
+```
+
 ---
 
 ## HTTP API Endpoints
@@ -579,6 +594,7 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 | GET | `/api/layout/runtime` | Yes | Cached layout runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
 | GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |
+| GET | `/api/pak-status` | Yes | Generated PAK status, stale-config detection, and recent CurveTable patch summary. |
 | GET | `/api/mapinfo` | Yes | Map coordinate metadata for tile rendering |
 | GET | `/api/rcon/log` | Yes | Recent RCON command audit log |
 | POST | `/api/rcon` | Yes | Execute an RCON command |

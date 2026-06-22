@@ -1437,6 +1437,7 @@ try {
                 "/api/pak-status" {
                     $multPak = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_Multipliers_P.pak"
                     $ctPak   = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_CurveTables_P.pak"
+                    $ctManifest = Join-Path $gameDir "windrose_plus_data\.windroseplus_curvetables_manifest.json"
                     $wrapper = Join-Path $gameDir "StartWindrosePlusServer.bat"
                     $jsonPath = Join-Path $gameDir "windrose_plus.json"
                     $iniPath  = Join-Path $gameDir "windrose_plus.ini"
@@ -1474,6 +1475,12 @@ try {
                         ct_config_present       = $ctConfigPresent
                         multiplier_pak_disabled = $multiplierPakDisabled
                         multiplier_config_present = $false
+                        curvetables_manifest_present = (Test-Path -LiteralPath $ctManifest)
+                        curvetables_manifest_mtime_utc = $null
+                        curvetables_last_build_utc = $null
+                        curvetables_changes_total = $null
+                        curvetables_tables = @()
+                        curvetables_recent_changes = @()
                         stale                   = $false
                         stale_reason            = $null
                     }
@@ -1599,6 +1606,19 @@ try {
 
                             $status.stale = $stale
                             $status.stale_reason = $reason
+                        }
+                    }
+
+                    if (Test-Path -LiteralPath $ctManifest) {
+                        try {
+                            $ctm = Get-Content -LiteralPath $ctManifest -Raw | ConvertFrom-Json
+                            $status.curvetables_manifest_mtime_utc = (Get-Item -LiteralPath $ctManifest).LastWriteTimeUtc.ToString("o")
+                            $status.curvetables_last_build_utc = $ctm.built_at_utc
+                            $status.curvetables_changes_total = $ctm.changes_total
+                            $status.curvetables_tables = @($ctm.changes | ForEach-Object { $_.Table } | Sort-Object -Unique)
+                            $status.curvetables_recent_changes = @($ctm.changes | Select-Object -First 20 Table,Row,OriginalValue,NewValue)
+                        } catch {
+                            $status.curvetables_manifest_error = "Could not parse CurveTables manifest: $_"
                         }
                     }
 

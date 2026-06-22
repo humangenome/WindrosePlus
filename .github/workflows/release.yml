@@ -47,8 +47,9 @@ jobs:
       # Pinned tool versions. Bump here (and rerun the release tag) to upgrade.
       REPAK_VERSION: "0.2.3"
       RETOC_VERSION: "0.1.5"
-      CPP_MOD_ASSET_TAG: "v1.0.10"
+      CPP_MOD_ASSET_TAG: "cppmods-v1.3.10"
       HEIGHTMAP_EXPORTER_SHA256: "238fc6e44955d1467cf03d91897135a2bb17a6cfff7231ca3c14232357f77d54"
+      WINDROSE_NATIVE_PROBE_SHA256: "01017908d8ba1f6af3f34aab4d964ca777dc548ba2beffaa1e70aa31dd1b584d"
 
     steps:
       - name: Checkout
@@ -101,10 +102,13 @@ jobs:
         # so release ZIP contents cannot change because "latest" moved or a
         # release asset was replaced.
         run: |
-          mkdir -p cpp-mods/HeightmapExporter
+          mkdir -p cpp-mods/HeightmapExporter cpp-mods/WindroseNativeProbe
           curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/HeightmapExporter.dll" \
             -o cpp-mods/HeightmapExporter/HeightmapExporter.dll
           echo "${HEIGHTMAP_EXPORTER_SHA256}  cpp-mods/HeightmapExporter/HeightmapExporter.dll" | sha256sum -c -
+          curl -fsSL "https://github.com/humangenome/WindrosePlus/releases/download/${CPP_MOD_ASSET_TAG}/WindroseNativeProbe.dll" \
+            -o cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll
+          echo "${WINDROSE_NATIVE_PROBE_SHA256}  cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll" | sha256sum -c -
 
       - name: Download windrose-heal
         uses: actions/download-artifact@v4
@@ -193,4 +197,5 @@ jobs:
             --title "Windrose+ $TAG" \
             --notes-file release_notes.md \
             WindrosePlus.zip \
-            cpp-mods/HeightmapExporter/HeightmapExporter.dll
+            cpp-mods/HeightmapExporter/HeightmapExporter.dll \
+            cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll

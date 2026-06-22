@@ -85,10 +85,11 @@ $paksDir = Join-Path $ServerDir "R5\Content\Paks"
 $stateDir = Join-Path $ServerDir "windrose_plus_data"
 $binDir  = Join-Path $PSScriptRoot "bin"
 $multiplierPakFile = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
+$curvetableManifestFile = Join-Path $stateDir ".windroseplus_curvetables_manifest.json"
 $disableMultiplierPak = "$env:WINDROSEPLUS_DISABLE_MULTIPLIER_PAK".Trim().ToLowerInvariant() -in @("1","true","yes","on")
 
 if (-not (Test-Path -LiteralPath $stateDir) -and -not $DryRun) {
-    New-Item -ItemType Directory -Force -LiteralPath $stateDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 }
 
 # Older builds wrote state dotfiles into R5\Content\Paks. Current Windrose
@@ -104,7 +105,7 @@ foreach ($legacyName in @(".windroseplus_build.hash", ".windroseplus_multiplier_
     }
     try {
         if (-not (Test-Path -LiteralPath $stateDir)) {
-            New-Item -ItemType Directory -Force -LiteralPath $stateDir | Out-Null
+            New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
         }
         if (Test-Path -LiteralPath $newPath) {
             Remove-Item -LiteralPath $legacyPath -Force -ErrorAction Stop
@@ -213,7 +214,7 @@ function Save-MultiplierHistory {
     }
 
     if (-not (Test-Path -LiteralPath $dir)) {
-        New-Item -ItemType Directory -Force -LiteralPath $dir | Out-Null
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
     }
 
     $tmp = "$Path.tmp"
@@ -590,6 +591,7 @@ if ($hasCT) {
 
     $changedTables = ($ctConfig.Keys | ForEach-Object { "$_ ($($ctConfig[$_].overrides.Count) changes)" }) -join ", "
     Write-Host "  Tables: $changedTables"
+    $ctPatchManifest = [System.Collections.ArrayList]::new()
 
     $retocDir = Join-Path $ServerDir "WindrosePlus\curvetable_cache"
     $gamePak = Join-Path $paksDir "pakchunk0-WindowsServer.pak"
@@ -743,6 +745,15 @@ if ($hasCT) {
             }
 
             Write-Host "    Patched $($patchResult.ChangesApplied) values (verified)" -ForegroundColor Green
+            foreach ($change in $patchResult.Changes) {
+                $null = $ctPatchManifest.Add(@{
+                    Table = $basename
+                    Row = $change.RowName
+                    OriginalValue = $change.OriginalValue
+                    NewValue = $change.NewValue
+                    Offset = $change.Offset
+                })
+            }
             $totalChanges += $patchResult.ChangesApplied
             $tablesModified++
         }
@@ -763,9 +774,24 @@ if ($hasCT) {
                 exit 3
             }
             $size = (Get-Item $outPak).Length
+            if ($ctPatchManifest.Count -gt 0) {
+                $manifest = @{
+                    built_at_utc = [DateTimeOffset]::UtcNow.ToString("o")
+                    output_pak = $outPak
+                    output_size = $size
+                    tables_modified = $tablesModified
+                    changes_total = $totalChanges
+                    changes = $ctPatchManifest.ToArray()
+                }
+                $manifestJson = $manifest | ConvertTo-Json -Depth 8
+                $tmpManifest = "$curvetableManifestFile.tmp"
+                Set-Content -LiteralPath $tmpManifest -Value $manifestJson -Encoding UTF8
+                Move-Item -LiteralPath $tmpManifest -Destination $curvetableManifestFile -Force
+            }
             Write-Host "  OK: $tablesModified tables, $totalChanges values -> $outPak ($size bytes)" -ForegroundColor Green
         } else {
             Write-Host "  No CurveTable changes needed" -ForegroundColor DarkGray
+            Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
         }
     } finally {
         Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
@@ -812,6 +838,7 @@ if ($RemoveStalePak -and -not $DryRun) {
             Remove-Item $stale -Force
             Write-Host "Removed stale $stale"
         }
+        Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
     }
 }
 

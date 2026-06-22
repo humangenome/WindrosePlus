@@ -54,6 +54,17 @@ wp.methods R5ProximityStorageComponent request
 wp.peek R5ProximityStorageComponent <field_from_wp_fields>
 ```
 
+For objects that hang or are unsafe through the Lua bridge, use the bundled
+native read-only probe:
+
+```text
+wp.nativeprobe
+```
+
+It writes `windrose_plus_data/native_probe.json` with class, property, function,
+and selected live-object summaries without calling gameplay UFunctions or
+mutating UObject state.
+
 Useful filter families to try with `wp.fields` and `wp.methods`:
 
 ```text

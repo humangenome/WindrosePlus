@@ -1186,6 +1186,30 @@ function Admin._registerCommands()
         end
     }
 
+    Admin._commands["wp.nativeprobe"] = {
+        hidden = true, category = "debug",
+        description = "Trigger read-only native UObject reflection dump",
+        usage = "wp.nativeprobe",
+        handler = function(args)
+            if not Admin._gameDir then return "Game directory not initialized" end
+            local dataDir = Admin._gameDir .. "windrose_plus_data"
+            local triggerPath = dataDir .. "\\native_probe_trigger"
+            local donePath = dataDir .. "\\native_probe_done"
+            local errorPath = dataDir .. "\\native_probe_error"
+
+            pcall(function() os.remove(donePath) end)
+            pcall(function() os.remove(errorPath) end)
+
+            local f = io.open(triggerPath, "w")
+            if not f then return "Failed to write native probe trigger at " .. triggerPath end
+            f:write(tostring(os.time()) .. "\n")
+            f:close()
+
+            Log.info("Admin", "Native probe requested")
+            return "Native probe requested. Check windrose_plus_data\\native_probe.json after a few seconds. Requires WindroseNativeProbe C++ mod."
+        end
+    }
+
     Admin._commands["wp.modreload"] = {
         hidden = true, category = "debug",
         description = "Force WP+ Lua state restart (UE4SS RestartMod). Use to pick up Scripts/ changes without bouncing the server.",

@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-06-22
+
+### Added
+
+- **Added a bundled read-only native probe for blocked runtime research.** `WindroseNativeProbe` is now installed alongside `HeightmapExporter` and can be triggered with the hidden `wp.nativeprobe` command. It writes `windrose_plus_data\native_probe.json` with class/property/function summaries for player, inventory, storage, progression, chat, and network-related runtime objects. The probe is read-only and exists to unblock the native-helper research behind give XP/points, give item, kick/ban, broadcast, storage locking, and runtime inventory multiplier work without using unsafe Lua UObject traversal. (#18, #37, #38, #56, #86, #106)
+
+### Changed
+
+- **CurveTable PAK builds now leave a host-side patch manifest.** When food/weapon/gear/entity INI overrides are baked, the builder writes `windrose_plus_data\.windroseplus_curvetables_manifest.json` listing the exact rows and values that passed byte verification, and `/api/pak-status` returns a compact summary. This makes reports like "food changes built but did not apply in-game" easier to separate into parser/PAK issues versus runtime mount/load-order issues. (#92)
+
 ## [1.3.9] - 2026-06-22
 
 ### Changed

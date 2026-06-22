@@ -492,7 +492,9 @@ Food, consumable, and alchemy stats. Durations in seconds, attribute buffs are a
 After editing food values, fully restart the Windrose server process through
 `StartWindrosePlusServer.bat`. The builder output should include
 `CT_Food_GE_Values` and `Patched ... values (verified)`. If the generated PAK
-needs manual verification, run
+needs host-side verification, check
+`windrose_plus_data\.windroseplus_curvetables_manifest.json` or `/api/pak-status`
+for the exact patched rows. For manual PAK listing, run
 `windrose_plus\tools\bin\repak.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.pak | findstr /i CT_Food_GE_Values`
 and confirm both the `.uasset` and `.uexp` are present.
 
