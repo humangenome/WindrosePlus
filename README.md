@@ -61,8 +61,8 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
     "player_count": 3
   },
   "players": [
-    { "name": "HumanGenome", "alive": true, "x": 14520, "y": -8340 },
-    { "name": "CaptainMorgan", "alive": true, "x": 6200, "y": 1100 }
+    { "name": "HumanGenome", "player_id": 12, "session_id": "player:12", "actor_id": "BP_R5Character_C_2147418445", "alive": true, "x": 14520, "y": -8340 },
+    { "name": "CaptainMorgan", "player_id": 17, "session_id": "player:17", "actor_id": "BP_R5Character_C_2147418362", "alive": true, "x": 6200, "y": 1100 }
   ],
   "multipliers": {
     "xp": 3.0, "loot": 2.0,
@@ -70,6 +70,8 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
   }
 }
 ```
+
+`player_id` / `session_id` are server-local live-session identifiers from Windrose's `PlayerState.PlayerId`. They are useful for disambiguating two online players with the same display name, but they are not persistent Steam IDs and should not be used for permanent bans.
 
 ### 2,400+ Server Settings & Multipliers
 Adjust XP, loot, crafting costs, cooking/smelting speed, harvest yield, and more through a simple JSON file. Go deeper with 2,400+ individual INI settings for player stats, weapons, food effects, creature stats, co-op scaling, swimming, and rest bonuses.
@@ -330,6 +332,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
 - **Sea Chart layers say "Curated overlay not configured"** - The curated POI / quest / biome / marker / item-source layers come from an optional layout-runtime provider. The base map (terrain, players, your own POIScan output, item catalog) works without one. To enable the curated layers, point `server.layout_runtime_url` in `windrose_plus.json` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) at any compatible provider. The HTTP contract — GET, seeding POST, and response payload shape — is documented in [`docs/config-reference.md`](docs/config-reference.md#layout-runtime-provider-optional) so you can run your own.
 - **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, make sure you are on v1.0.14 or newer; older builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
+- **Food / weapon / gear INI changes build but do not show in-game** - The game reads CurveTable overrides only when the process starts. Fully stop every `WindroseServer-Win64-Shipping.exe` process, run the server through `StartWindrosePlusServer.bat`, and confirm the builder prints `CurveTables PAK` plus `Patched ... values (verified)`. To verify the food asset is inside the generated PAK, run `windrose_plus\tools\bin\repak.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.pak | findstr /i CT_Food_GE_Values`; it should list both `.uasset` and `.uexp`.
 - **Multiplier PAK / save issues / full recovery** - See [Multiplier PAK safety](#multiplier-pak-safety) for the disable env var, recovery steps, and save-backup guidance.
 
 </details>

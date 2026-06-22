@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-06-22
+
+### Changed
+
+- **Player status output now includes live-session disambiguators.** `server_status.json`, `wp.players`, and player-targeted admin commands now expose/accept Windrose's server-local `PlayerState.PlayerId` as `player_id` / `session_id` / `player:<id>` when available. This helps server-manager tools target one of two online players with the same display name. It is explicitly session-local and not a persistent Steam ID, so permanent ban identity remains blocked on native/network-id work. (#37)
+- **Storage hook research now lists the current pre-transfer candidates.** The research note records the gameplay ability, requirement, and inventory-view paths found in the current dedicated-server assets, while keeping chest locking marked unsupported until a live pre-change denial hook is proven. (#56)
+- **Food CurveTable troubleshooting now includes generated-PAK verification steps.** The README and food config reference explain how to confirm `CT_Food_GE_Values` was packed and why a full server-process restart is required before in-game food values can change. (#92)
+
 ## [1.3.8] - 2026-06-21
 
 ### Added

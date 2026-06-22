@@ -76,6 +76,23 @@ Permission
 Lock
 ```
 
+Current asset-scan candidates worth probing first:
+
+```text
+/Game/Gameplay/Character/Player/GameplayAbilities/Interaction/GA_InteractionOption_CollectAllInventory
+/Game/Gameplay/Character/Player/GameplayAbilities/Interaction/GA_InteractionOption_CollectFromInventory
+/Game/Gameplay/Interaction/Options/DA_InteractOption_CollectAllInventory_CanMoveAllItemsToInstigator
+/Script/R5.R5Requirement_CanAddItemFromInventoryItem
+/Script/R5.R5BLInventoryView
+/Game/UI/System/BP_QuestObserverStorage_SC
+/Game/UI/System/HFSM/OverlayUI/ShipMeta/BP_HFSM_ShipInventory
+```
+
+Treat the UI/HFSM paths as lower-confidence on a dedicated server. The
+gameplay ability and requirement paths are the better candidates for a
+pre-transfer gate, but they still need live proof that they fire before state
+changes and expose enough context to deny the action.
+
 If a candidate hook fires before storage open or item transfer, the next proof should log:
 
 ```text

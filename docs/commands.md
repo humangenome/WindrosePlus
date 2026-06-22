@@ -131,7 +131,8 @@ Config reloaded
 
 List all online players with their world positions. Each entry shows the
 actor ID (canonical, used by other commands like `wp.tp`) followed by the
-player's display name in parentheses when known.
+player's display name in parentheses when known. When Windrose exposes
+`PlayerState.PlayerId`, it also shows a session-local `player:<id>` token.
 
 ```
 Usage: wp.players
@@ -140,9 +141,13 @@ Usage: wp.players
 ```
 > wp.players
 Online (2):
-  1. BP_R5Character_C_2147418445 (HumanGenome) @ 14520, -8340, 150
-  2. BP_R5Character_C_2147418362 (CaptainMorgan) @ 6200, 1100, 85
+  1. BP_R5Character_C_2147418445 (HumanGenome) [player:12] @ 14520, -8340, 150
+  2. BP_R5Character_C_2147418362 (CaptainMorgan) [player:17] @ 6200, 1100, 85
 ```
+
+The `player:<id>` token is only stable for the live session. It is useful for
+targeting one of two online players with the same display name, but it is not a
+persistent Steam ID.
 
 ### wp.pos
 
@@ -200,11 +205,11 @@ Usage: wp.playerinfo [player]
 
 ```
 > wp.playerinfo HumanGenome
-HumanGenome:
+HumanGenome  (BP_R5Character_C_2147418445)
+  Player ID: 12
   Position: 14520, -8340, 150
-  Health: 85/100
-  Alive: Yes
-  Session: 2h 15m
+  Status:    Alive
+  Vitals:    HP 85/100
 ```
 
 ### wp.playtime
@@ -393,7 +398,8 @@ Connections:
 ### wp.speed
 
 Set movement speed multiplier for one or all players. Accepts `[player]` argument.
-The player argument can be either the display name or the actor ID shown by `wp.players`.
+The player argument can be the display name, the actor ID shown by `wp.players`,
+or the session-local `player:<id>` token.
 
 ```
 Usage: wp.speed [player] <multiplier>
@@ -410,6 +416,9 @@ Speed set to 1.5x for humangenome
 
 > wp.speed BP_R5Character_C_2147418445 4
 Speed set to 4x for bp_r5character_c_2147418445
+
+> wp.speed player:12 1.25
+Speed set to 1.25x for player:12
 ```
 
 ---

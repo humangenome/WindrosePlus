@@ -489,6 +489,13 @@ Food, consumable, and alchemy stats. Durations in seconds, attribute buffs are a
 
 **16 sections, 522 keys total.**
 
+After editing food values, fully restart the Windrose server process through
+`StartWindrosePlusServer.bat`. The builder output should include
+`CT_Food_GE_Values` and `Patched ... values (verified)`. If the generated PAK
+needs manual verification, run
+`windrose_plus\tools\bin\repak.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.pak | findstr /i CT_Food_GE_Values`
+and confirm both the `.uasset` and `.uexp` are present.
+
 ### Sections
 
 **Cooked Food** (CurveTable: `CT_Food_GE_Values`): `Food_Dough`, `Food_Drink`, `Food_Raw`, `Food_RumBottle`, `Food_Second`, `Food_Skewer`, `Food_Soup`, `Food_Sweet`

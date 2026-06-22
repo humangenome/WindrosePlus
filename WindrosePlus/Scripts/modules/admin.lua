@@ -211,6 +211,9 @@ function Admin._registerCommands()
                 if p.displayName and p.displayName ~= label then
                     label = label .. " (" .. p.displayName .. ")"
                 end
+                if p.playerId then
+                    label = label .. " [player:" .. tostring(math.floor(p.playerId)) .. "]"
+                end
                 table.insert(lines, "  " .. i .. ". " .. label .. posStr)
             end
             return table.concat(lines, "\n")
@@ -330,7 +333,7 @@ function Admin._registerCommands()
     Admin._lastAppliedPawn = Admin._lastAppliedPawn or {}
 
     local function getPlayerName(pc)
-        local pName = nil
+        local pName, playerId = nil, nil
         pcall(function()
             local ps = pc.PlayerState
             if ps and ps:IsValid() then
@@ -339,9 +342,14 @@ function Admin._registerCommands()
                     local ok, str = pcall(function() return val:ToString() end)
                     if ok and str then pName = str end
                 end
+                local pid = ps.PlayerId
+                if pid ~= nil then
+                    local n = tonumber(tostring(pid))
+                    if n then playerId = n end
+                end
             end
         end)
-        return pName
+        return pName, playerId
     end
 
     local function getControlledPawn(pc)
@@ -453,9 +461,9 @@ function Admin._registerCommands()
         local count = 0
         for _, pc in ipairs(pcs) do
             if pc:IsValid() then
-                local pName = getPlayerName(pc)
+                local pName, playerId = getPlayerName(pc)
                 local pawn, pawnName, pawnFullName = getControlledPawn(pc)
-                if playerTargetMatches(targetName, pName, pawnName, pawnFullName) then
+                if playerTargetMatches(targetName, pName, pawnName, pawnFullName, playerId) then
                     pcall(function()
                         if pawn and pawn:IsValid() then
                             local mc = pawn.CharacterMovement or pawn.MovementComponent
@@ -632,9 +640,9 @@ function Admin._registerCommands()
             local anyTeleported = false
             for _, pc in ipairs(pcs) do
                 if pc:IsValid() then
-                    local pName = getPlayerName(pc)
+                    local pName, playerId = getPlayerName(pc)
                     local pawn, pawnName, pawnFullName = getControlledPawn(pc)
-                    if playerTargetMatches(targetName, pName, pawnName, pawnFullName) then
+                    if playerTargetMatches(targetName, pName, pawnName, pawnFullName, playerId) then
                         matched = matched + 1
                         pcall(function()
                             if not (pawn and pawn:IsValid()) then
@@ -1906,7 +1914,7 @@ function Admin._registerCommands()
         end
     }
 
-    -- wp.kick / wp.netid / wp.say are deferred to v1.3.0. UE4SS Lua only binds
+    -- wp.kick / wp.netid / wp.say are deferred until native helper work. UE4SS Lua only binds
     -- UFunctions and a tiny set of native helpers (GetClass / IsValid / ToString /
     -- GetFName / GetFullName). It cannot call the C++ virtual methods needed for
     -- player disconnect (UNetConnection::Close, AActor::Destroy on remotely-owned
@@ -1950,12 +1958,18 @@ end
 -- _registerCommands() that the movement commands use, hoisted here so
 -- _findPlayersByName can share it (per maintainer review of PR #68 — avoid
 -- drift between the movement and info-command targeting paths).
-function Admin._playerTargetMatches(targetName, displayName, actorName, actorFullName)
+function Admin._playerTargetMatches(targetName, displayName, actorName, actorFullName, playerId)
     if not targetName then return true end
     local target = targetName:lower()
     if displayName and displayName:lower() == target then return true end
     if actorName and actorName:lower() == target then return true end
     if actorFullName and actorFullName:lower() == target then return true end
+    if playerId then
+        local id = tostring(math.floor(playerId))
+        if target == id or target == ("player:" .. id) or target == ("id:" .. id) or target == ("#" .. id) then
+            return true
+        end
+    end
     return false
 end
 
@@ -2034,7 +2048,7 @@ function Admin._findPlayersByName(targetName)
     for _, p in ipairs(players) do
         -- Use the shared matcher so info-commands and movement-commands stay
         -- in lockstep (per maintainer review of PR #68).
-        if Admin._playerTargetMatches(targetName, p.displayName, p.actorName, p.actorFullName)
+        if Admin._playerTargetMatches(targetName, p.displayName, p.actorName, p.actorFullName, p.playerId)
            or (p.name and p.name:lower() == targetName:lower()) then
             table.insert(matched, p)
         end

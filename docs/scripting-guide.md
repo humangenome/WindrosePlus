@@ -128,7 +128,7 @@ The returned handle includes `path`, `attempts`, `registered`, `failed`, `cancel
 ### Data Access
 
 ```lua
--- Current online players (array of {name, x, y, z})
+-- Current online players (array of {name, display_name, player_id, session_id, actor_id, x, y, z})
 local players = API.getPlayers()
 
 -- Server info table (name, version, etc.)

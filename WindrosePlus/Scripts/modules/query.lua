@@ -173,6 +173,55 @@ function Query._isConnected(pc)
     return WindrosePlus._isConnected(pc)
 end
 
+local function readPlayerIdentity(ps)
+    local displayName, playerId = nil, nil
+    local valid = false
+    pcall(function() valid = ps and ps:IsValid() == true end)
+    if valid then
+        pcall(function()
+            local val = ps.PlayerNamePrivate
+            if val then
+                local sok, str = pcall(function() return val:ToString() end)
+                if sok and str and str ~= "" then
+                    displayName = str
+                end
+            end
+        end)
+        pcall(function()
+            local pid = ps.PlayerId
+            if pid ~= nil then
+                local n = tonumber(tostring(pid))
+                if n then playerId = math.floor(n) end
+            end
+        end)
+    end
+
+    local fallbackName = displayName or (playerId and ("Player " .. tostring(playerId))) or "Player"
+    return displayName, playerId, fallbackName
+end
+
+local function applyPlayerIdentity(p, ps)
+    local displayName, playerId, fallbackName = readPlayerIdentity(ps)
+    p.name = fallbackName
+    if displayName then p.display_name = displayName end
+    if playerId then
+        p.player_id = playerId
+        p.session_id = "player:" .. tostring(playerId)
+    end
+end
+
+local function applyActorId(p, actor)
+    local valid = false
+    pcall(function() valid = actor and actor:IsValid() == true end)
+    if not valid then return end
+    pcall(function()
+        local fullName = actor:GetFullName()
+        if fullName and fullName ~= "" then
+            p.actor_id = fullName:match("([^%.]+)$") or fullName
+        end
+    end)
+end
+
 function Query.getPlayers()
     local players = {}
     local pcs = FindAllOf("PlayerController")
@@ -183,23 +232,7 @@ function Query.getPlayers()
 
                 pcall(function()
                     local ps = pc.PlayerState
-                    if ps and ps:IsValid() then
-                        pcall(function()
-                            local val = ps.PlayerNamePrivate
-                            if val then
-                                local sok, str = pcall(function() return val:ToString() end)
-                                if sok and str and str ~= "" then
-                                    p.name = str
-                                end
-                            end
-                        end)
-                        if not p.name then
-                            pcall(function()
-                                local pid = ps.PlayerId
-                                if pid then p.name = "Player " .. tostring(pid) end
-                            end)
-                        end
-                    end
+                    applyPlayerIdentity(p, ps)
                 end)
 
                 if not p.name then p.name = "Player" end
@@ -207,6 +240,7 @@ function Query.getPlayers()
                 pcall(function()
                     local pawn = pc.Pawn
                     if pawn and pawn:IsValid() then
+                        applyActorId(p, pawn)
                         -- K2_GetActorLocation() traverses the attachment hierarchy and returns
                         -- true world coords. ReplicatedMovement.Location stops giving world
                         -- coords when the pawn is attached to a moving parent (e.g. on a ship),
@@ -264,28 +298,13 @@ function Query._getPlayersFromCharacters()
 
                 pcall(function()
                     local ps = controller.PlayerState
-                    if ps and ps:IsValid() then
-                        pcall(function()
-                            local val = ps.PlayerNamePrivate
-                            if val then
-                                local sok, str = pcall(function() return val:ToString() end)
-                                if sok and str and str ~= "" then
-                                    p.name = str
-                                end
-                            end
-                        end)
-                        if not p.name then
-                            pcall(function()
-                                local pid = ps.PlayerId
-                                if pid then p.name = "Player " .. tostring(pid) end
-                            end)
-                        end
-                    end
+                    applyPlayerIdentity(p, ps)
                 end)
 
                 if not p.name then p.name = "Player" end
 
                 pcall(function()
+                    applyActorId(p, char)
                     pcall(function()
                         local loc = char:K2_GetActorLocation()
                         if loc then p.x = loc.X; p.y = loc.Y; p.z = loc.Z end
