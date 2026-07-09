@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-07-09
+
+### Fixed
+
+- **Hold native moderation out of normal startup.** `WindrosePlusNative` is no longer installed or enabled automatically while the native helper is revalidated against the current Windrose dedicated-server build. Existing installs also remove its `mods.txt` entry during upgrade. Lua/dashboard features and `HeightmapExporter` remain enabled normally.
+
 ## [1.3.14] - 2026-06-22
 
 ### Added
