@@ -71,22 +71,41 @@ $ErrorActionPreference = "Stop"
 
 # The CurveTable override ships as an IoStore container (.utoc/.ucas plus a stub
 # .pak that makes the engine discover the container). All three parts share one
-# base name and must be created and removed together.
-$script:CurveTableOutputParts = @(
+# base name and must live and die together.
+#
+# Order matters both ways. The stub .pak is what makes the engine find the
+# container — with no .pak the .utoc/.ucas are never mounted. So the .pak is
+# written LAST and removed FIRST. Any interruption then leaves the server with
+# no override, which is harmless. The opposite order can leave a discoverable
+# but incomplete container, and that is a fatal boot error in UE5, not a
+# silent no-op.
+$script:CurveTableWriteOrder = @(
+    "WindrosePlus_CurveTables_P.ucas",
+    "WindrosePlus_CurveTables_P.utoc",
+    "WindrosePlus_CurveTables_P.pak"
+)
+$script:CurveTableRemoveOrder = @(
     "WindrosePlus_CurveTables_P.pak",
     "WindrosePlus_CurveTables_P.utoc",
     "WindrosePlus_CurveTables_P.ucas"
 )
+# Order-independent membership checks.
+$script:CurveTableOutputParts = $script:CurveTableWriteOrder
 
 function Remove-CurveTableContainer {
     param([string]$PaksDir, [switch]$Announce)
-    foreach ($part in $script:CurveTableOutputParts) {
+    $stillPresent = @()
+    foreach ($part in $script:CurveTableRemoveOrder) {
         $path = Join-Path $PaksDir $part
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-            if ($Announce) { Write-Host "Removed stale $path" }
+            $stillPresent += $part
+        } elseif ($Announce) {
+            Write-Host "Removed stale $path"
         }
     }
+    return $stillPresent
 }
 
 function Test-CurveTableContainerWritable {
@@ -499,7 +518,7 @@ if (-not $hasMultipliers -and -not $hasCT) {
             Remove-Item $stale -Force
             Write-Host "Removed stale $stale"
         }
-        Remove-CurveTableContainer -PaksDir $paksDir -Announce
+        $null = Remove-CurveTableContainer -PaksDir $paksDir -Announce
     }
     exit 0
 }
@@ -674,6 +693,7 @@ if ($hasCT) {
 
     $retocDir = Join-Path $ServerDir "WindrosePlus\curvetable_cache"
     $gamePak = Join-Path $paksDir "pakchunk0-WindowsServer.pak"
+    $cacheExtractedThisRun = $false
 
     if ((Test-Path -LiteralPath $retocDir) -and (Test-Path -LiteralPath $gamePak)) {
         $cacheTime = (Get-Item $retocDir).LastWriteTime
@@ -705,10 +725,26 @@ if ($hasCT) {
             Write-Error "Game utoc not found: $utocPath. Is the server installed correctly?"
             exit 2
         }
+
+        # retoc extracts from every container in the Paks folder, and our own
+        # override is a container that sits in that folder and outranks the
+        # game's. Extracting with it still in place seeds the cache with
+        # previously-patched values instead of vanilla — and because every later
+        # build patches off the cache, the error compounds silently. This bites
+        # right after a game update, which is exactly when the cache is thrown
+        # away and rebuilt. So take our container out of the way first, and
+        # refuse to extract if it cannot be removed.
+        $blockedBeforeExtract = Remove-CurveTableContainer -PaksDir $paksDir
+        if ($blockedBeforeExtract.Count -gt 0) {
+            Write-Error "Cannot rebuild the CurveTable cache while the previous override is still in $paksDir ($($blockedBeforeExtract -join ', ')) — the Windrose server is holding it open. Extracting now would read back the patched values instead of the game's originals. Stop the server and run this again."
+            exit 3
+        }
+
         Write-Host "  Extracting CurveTable assets with retoc..."
         New-Item -ItemType Directory -Force -Path $retocDir | Out-Null
         $retocOutput = @(& $retocExe -a $aesKey to-legacy $paksDir $retocDir 2>&1)
         $retocExit = $LASTEXITCODE
+        $cacheExtractedThisRun = $true
 
         $extractedFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
         if ($retocExit -ne 0 -or -not $extractedFiles -or $extractedFiles.Count -eq 0) {
@@ -729,6 +765,7 @@ if ($hasCT) {
     }
     $totalChanges = 0
     $tablesModified = 0
+    $tablesTried = 0
     $pendingCtTables = @{}
     foreach ($tableName in $ctConfig.Keys) {
         if ($ctConfig[$tableName].overrides -and $ctConfig[$tableName].overrides.Count -gt 0) {
@@ -745,6 +782,7 @@ if ($hasCT) {
             $tableOverrides = if ($ctConfig.Contains($basename)) { $ctConfig[$basename] } else { $null }
             if (-not $tableOverrides -or $tableOverrides.overrides.Count -eq 0) { continue }
             $null = $pendingCtTables.Remove($basename)
+            $tablesTried++
 
             Write-Host "  Parsing $basename..."
             $manifest = Parse-CurveTable -UAssetPath $ctFile.FullName
@@ -884,8 +922,17 @@ if ($hasCT) {
                     Write-Error "retoc to-zen failed to build the CurveTable container (exit $zenExit, engine $engineVersion).`nIf this Windrose build uses a different engine version, rerun with -EngineVersion (UE5_5, UE5_7, ...).`nretoc output:`n$zenDetails"
                     exit 3
                 }
-                Remove-CurveTableContainer -PaksDir $paksDir
-                foreach ($part in $script:CurveTableOutputParts) {
+                # Swap the container in. The stub .pak goes last (see the
+                # write-order note at the top): until it lands the engine does
+                # not look at the .utoc/.ucas at all, so an interruption here
+                # leaves the server with no override rather than a partial
+                # container it would fatal on.
+                $blocked = Remove-CurveTableContainer -PaksDir $paksDir
+                if ($blocked.Count -gt 0) {
+                    Write-Error "Could not remove the existing CurveTable container ($($blocked -join ', ')) — the Windrose server is holding it open. Stop the server and run this again."
+                    exit 3
+                }
+                foreach ($part in $script:CurveTableWriteOrder) {
                     Move-Item -LiteralPath (Join-Path $zenDir $part) -Destination (Join-Path $paksDir $part) -Force
                 }
             } finally {
@@ -911,9 +958,21 @@ if ($hasCT) {
                 Move-Item -LiteralPath $tmpManifest -Destination $curvetableManifestFile -Force
             }
             Write-Host "  OK: $tablesModified tables, $totalChanges values -> $outUtoc ($size bytes)" -ForegroundColor Green
+        } elseif ($tablesTried -gt 0 -and -not $cacheExtractedThisRun) {
+            # Only values that differ from the documented defaults ever reach
+            # $ctConfig, so "tables matched but nothing needed changing" means
+            # the cached source assets already hold the configured values —
+            # a cache extracted while a previous override was still in Paks.
+            # Building from it would produce an override that does nothing, so
+            # drop the cache and stop rather than repeat the silent failure.
+            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+            $null = Remove-CurveTableContainer -PaksDir $paksDir
+            Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
+            Write-Error "The CurveTable cache already contained the configured values, which means it was extracted from a server that still had an override in place. The cache has been cleared — run this again (or start the server through StartWindrosePlusServer.bat) to rebuild it from the game's own assets."
+            exit 3
         } else {
             Write-Host "  No CurveTable changes needed" -ForegroundColor DarkGray
-            Remove-CurveTableContainer -PaksDir $paksDir
+            $null = Remove-CurveTableContainer -PaksDir $paksDir
             Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
         }
     } finally {
@@ -956,7 +1015,7 @@ if ($RemoveStalePak -and -not $DryRun) {
         }
     }
     if (-not $hasCT) {
-        Remove-CurveTableContainer -PaksDir $paksDir -Announce
+        $null = Remove-CurveTableContainer -PaksDir $paksDir -Announce
         Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
     }
 }

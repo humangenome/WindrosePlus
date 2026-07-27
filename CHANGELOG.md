@@ -2,6 +2,14 @@
 
 > **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and offers Windrose servers with Windrose+ pre-installed.
 
+## [1.3.17] - 2026-07-27
+
+### Fixed
+
+- **A game update could poison the CurveTable cache.** The builder extracts the game's CurveTable assets out of `R5\Content\Paks`, and since v1.3.16 our own override container lives in that folder and outranks the game's. So the extraction that runs after a Windrose update — exactly when the cache is thrown away and rebuilt — read back the *previously patched* values instead of the game's originals, and every later build then patched on top of already-patched source. Reproduced on a live server: with an override in place holding `Hero_DefencePwr = 200`, a fresh extraction returned 200 where the game ships 90. The builder now moves its own container out of the way before extracting, and refuses to extract at all if it cannot (a running server holds it open). Same run after the fix returns the vanilla 90.
+- **An interrupted container write could leave a server that will not boot.** The stub `.pak` is what makes the engine discover the container, so writing it first meant a crash, a full disk or a killed process between that and the `.utoc`/`.ucas` left a discoverable but incomplete container — which is a fatal startup error, not an inert no-op. The three parts are now written `.ucas` → `.utoc` → `.pak` and removed in the reverse order, so any interruption degrades to "no override". Verified both ways on a live server: `.ucas` + `.utoc` with no `.pak` boots normally with the override simply absent, while `.pak` + `.utoc` with no `.ucas` fails the mount and takes the process down.
+- **A build that would silently do nothing now stops instead.** Only values that differ from the documented defaults ever reach the builder, so "tables matched but nothing needed changing" means the cache already holds the configured values. That case now clears the cache and fails with an explanation rather than shipping an override with no effect.
+
 ## [1.3.16] - 2026-07-27
 
 ### Fixed
