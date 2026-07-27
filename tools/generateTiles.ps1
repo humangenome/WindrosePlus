@@ -97,6 +97,10 @@ $wminx = $cx - $side / 2; $wmaxx = $cx + $side / 2
 $wminy = $cy - $side / 2; $wmaxy = $cy + $side / 2
 $worldW = $wmaxx - $wminx; $worldH = $wmaxy - $wminy
 
+# Map space (north-up): image right = world Y, image down = -world X.
+$mapMinX = $wminy
+$mapMinY = -$wmaxx
+
 Write-Host "World bounds: ($wminx, $wminy) to ($wmaxx, $wmaxy)"
 
 # Preload all heightfield data into memory
@@ -221,7 +225,13 @@ public static class TileRenderer {
         return pixels;
     }
 
-    public static byte[] RenderTile(int tileSize, double tileWx, double tileWy,
+    // Tiles are rendered in MAP space, which is world space turned a quarter
+    // turn so the image reads north-up like the in-game chart:
+    //     map x (image right) =  world Y  (east)
+    //     map y (image down)  = -world X  (south)
+    // The livemap CRS uses the same mapping, so terrain and every marker layer
+    // move together.
+    public static byte[] RenderTile(int tileSize, double tileMx, double tileMy,
                                      double tileWorldSize, CompData[] comps) {
         byte[] pixels = RenderSolidTile(tileSize, oceanRGB[0], oceanRGB[1], oceanRGB[2]);
 
@@ -229,30 +239,34 @@ public static class TileRenderer {
         byte[] color = new byte[3];
 
         foreach (var c in comps) {
+            // Component bounds expressed in map space
+            double cmx1 = c.wy,   cmx2 = c.wy2;
+            double cmy1 = -c.wx2, cmy2 = -c.wx;
+
             // Check overlap
-            if (c.wx2 <= tileWx || c.wx >= tileWx + tileWorldSize) continue;
-            if (c.wy2 <= tileWy || c.wy >= tileWy + tileWorldSize) continue;
+            if (cmx2 <= tileMx || cmx1 >= tileMx + tileWorldSize) continue;
+            if (cmy2 <= tileMy || cmy1 >= tileMy + tileWorldSize) continue;
 
             double compW = c.wx2 - c.wx;
             double compH = c.wy2 - c.wy;
 
             // Pixel range in tile that this component covers
-            int px1 = Math.Max(0, (int)((c.wx - tileWx) / tileWorldSize * tileSize));
-            int py1 = Math.Max(0, (int)((c.wy - tileWy) / tileWorldSize * tileSize));
-            int px2 = Math.Min(tileSize, (int)Math.Ceiling((c.wx2 - tileWx) / tileWorldSize * tileSize));
-            int py2 = Math.Min(tileSize, (int)Math.Ceiling((c.wy2 - tileWy) / tileWorldSize * tileSize));
+            int px1 = Math.Max(0, (int)((cmx1 - tileMx) / tileWorldSize * tileSize));
+            int py1 = Math.Max(0, (int)((cmy1 - tileMy) / tileWorldSize * tileSize));
+            int px2 = Math.Min(tileSize, (int)Math.Ceiling((cmx2 - tileMx) / tileWorldSize * tileSize));
+            int py2 = Math.Min(tileSize, (int)Math.Ceiling((cmy2 - tileMy) / tileWorldSize * tileSize));
 
             for (int py = py1; py < py2; py++) {
-                double worldY = tileWy + (py + 0.5) * pixelSize;
-                double fy = (worldY - c.wy) / compH;
-                int hy = (int)(fy * c.res);
-                if (hy < 0) hy = 0; if (hy >= c.res) hy = c.res - 1;
+                double worldX = -(tileMy + (py + 0.5) * pixelSize);
+                double fx = (worldX - c.wx) / compW;
+                int hx = (int)(fx * c.res);
+                if (hx < 0) hx = 0; if (hx >= c.res) hx = c.res - 1;
 
                 for (int px = px1; px < px2; px++) {
-                    double worldX = tileWx + (px + 0.5) * pixelSize;
-                    double fx = (worldX - c.wx) / compW;
-                    int hx = (int)(fx * c.res);
-                    if (hx < 0) hx = 0; if (hx >= c.res) hx = c.res - 1;
+                    double worldY = tileMx + (px + 0.5) * pixelSize;
+                    double fy = (worldY - c.wy) / compH;
+                    int hy = (int)(fy * c.res);
+                    if (hy < 0) hy = 0; if (hy >= c.res) hy = c.res - 1;
 
                     int dataIdx = 4 + (hy * c.res + hx) * 2;
                     if (dataIdx + 1 >= c.data.Length) continue;
@@ -398,14 +412,14 @@ for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
     $zoomTiles = 0
     for ($row = 0; $row -lt $tps; $row++) {
         for ($col = 0; $col -lt $tps; $col++) {
-            $tileWx = $wminx + $col * $tileWorldSize
-            $tileWy = $wminy + $row * $tileWorldSize
+            $tileMx = $mapMinX + $col * $tileWorldSize
+            $tileMy = $mapMinY + $row * $tileWorldSize
 
-            # Skip tiles with no overlapping land components
+            # Skip tiles with no overlapping land components (map space, see RenderTile)
             $hasOverlap = $false
             foreach ($ci in $compIndex) {
-                if ($ci.wx2 -gt $tileWx -and $ci.wx -lt ($tileWx + $tileWorldSize) -and
-                    $ci.wy2 -gt $tileWy -and $ci.wy -lt ($tileWy + $tileWorldSize)) {
+                if ($ci.wy2 -gt $tileMx -and $ci.wy -lt ($tileMx + $tileWorldSize) -and
+                    (-$ci.wx) -gt $tileMy -and (-$ci.wx2) -lt ($tileMy + $tileWorldSize)) {
                     $hasOverlap = $true; break
                 }
             }
@@ -415,7 +429,7 @@ for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
                 $pixels = [TileRenderer]::RenderSolidTile($tileSize, 20, 35, 65)
                 [PngWriter]::SaveRgb((Join-Path $zoomDir "${col}-${row}.png"), $tileSize, $tileSize, $pixels)
             } else {
-                $pixels = [TileRenderer]::RenderTile($tileSize, $tileWx, $tileWy, $tileWorldSize, $csharpComps)
+                $pixels = [TileRenderer]::RenderTile($tileSize, $tileMx, $tileMy, $tileWorldSize, $csharpComps)
                 [PngWriter]::SaveRgb((Join-Path $zoomDir "${col}-${row}.png"), $tileSize, $tileSize, $pixels)
             }
             $zoomTiles++
@@ -448,6 +462,11 @@ $mapCoords = @{
     world_min_x = $wminx; world_min_y = $wminy
     world_max_x = $wmaxx; world_max_y = $wmaxy
     tile_size = $tileSize; max_zoom = $MaxZoom
+    # Tells the map viewer how these tiles are laid out. Viewers fall back to
+    # the old world-X-right / world-Y-down layout when this is absent, so a
+    # server with tiles from an older build keeps terrain and markers aligned
+    # until the tiles are regenerated.
+    orientation = "north-up"
     total_components = $landComps.Count
     island_bounds = @{
         min_x = $ibMinX; min_y = $ibMinY

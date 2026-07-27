@@ -9,11 +9,17 @@
       1. WindrosePlus_Multipliers_P.pak  — JSON-based overrides (loot, XP, stack size,
                                            craft cost, crop speed, weight, inventory
                                            size, points per level)
-      2. WindrosePlus_CurveTables_P.pak  — Binary CurveTable overrides (player stats,
-                                           talents, weapons, food, gear, entities,
-                                           co-op scaling, combat tuning)
+      2. WindrosePlus_CurveTables_P.utoc/.ucas/.pak — Binary CurveTable overrides
+                                           (player stats, talents, weapons, food, gear,
+                                           entities, co-op scaling, combat tuning),
+                                           written as an IoStore container
 
-    Both use the _P suffix so UE5 loads them as priority overrides over base assets.
+    Both use the _P suffix so UE5 mounts them ahead of the base game. The multipliers
+    output is a legacy pak because it overrides loose .json files that live in the
+    game's legacy pak. The CurveTable output has to be an IoStore container because
+    those assets live in the game's IoStore container, and UE5 resolves such packages
+    through the container package store — a legacy pak carrying the same package is
+    never read.
 
     Hash cache at windrose_plus_data\.windroseplus_build.hash lets repeat invocations
     exit quickly when inputs haven't changed.
@@ -42,6 +48,11 @@
     When no overrides are present, delete any leftover override PAK files. Default
     is to leave them alone so external PAK builders are not disturbed.
 
+.PARAMETER EngineVersion
+    Unreal Engine version tag passed to retoc when building the CurveTable IoStore
+    container (UE5_4, UE5_5, UE5_6, UE5_7, ...). Auto-detected from the server logs
+    when omitted, falling back to UE5_6.
+
 .EXAMPLE
     .\WindrosePlus-BuildPak.ps1 -ServerDir "C:\MyServer"
     .\WindrosePlus-BuildPak.ps1 -DryRun
@@ -52,10 +63,76 @@ param(
     [string]$DefaultPath = "",
     [switch]$DryRun,
     [switch]$ForceExtract,
-    [switch]$RemoveStalePak
+    [switch]$RemoveStalePak,
+    [string]$EngineVersion = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# The CurveTable override ships as an IoStore container (.utoc/.ucas plus a stub
+# .pak that makes the engine discover the container). All three parts share one
+# base name and must be created and removed together.
+$script:CurveTableOutputParts = @(
+    "WindrosePlus_CurveTables_P.pak",
+    "WindrosePlus_CurveTables_P.utoc",
+    "WindrosePlus_CurveTables_P.ucas"
+)
+
+function Remove-CurveTableContainer {
+    param([string]$PaksDir, [switch]$Announce)
+    foreach ($part in $script:CurveTableOutputParts) {
+        $path = Join-Path $PaksDir $part
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            if ($Announce) { Write-Host "Removed stale $path" }
+        }
+    }
+}
+
+function Test-CurveTableContainerWritable {
+    # A running Windrose server keeps the mounted .ucas open without sharing
+    # delete rights, so the container cannot be replaced underneath it. Probe
+    # before touching anything: replacing only part of the trio would leave a
+    # container the engine cannot read.
+    param([string]$PaksDir)
+    foreach ($part in $script:CurveTableOutputParts) {
+        $path = Join-Path $PaksDir $part
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        try {
+            $handle = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $handle.Close()
+        } catch {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Get-RetocEngineVersion {
+    param([string]$ServerDir, [string]$Override)
+
+    if ($Override) { return $Override }
+
+    # Windrose does not stamp a usable engine version into the server exe
+    # (it reports "UE5-CL-0"), so read it out of the newest engine log, which
+    # carries a line like: LogInit: Engine Version: 5.6.1-0+UE5
+    $logDir = Join-Path $ServerDir "R5\Saved\Logs"
+    if (Test-Path -LiteralPath $logDir) {
+        $logs = @(Get-ChildItem -LiteralPath $logDir -Filter "*.log" -File -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 3)
+        foreach ($log in $logs) {
+            try {
+                $line = Select-String -LiteralPath $log.FullName -Pattern "Engine Version:\s*(\d+)\.(\d+)" -List -ErrorAction SilentlyContinue
+            } catch { continue }
+            if ($line -and $line.Matches.Count -gt 0) {
+                $major = $line.Matches[0].Groups[1].Value
+                $minor = $line.Matches[0].Groups[2].Value
+                return "UE${major}_${minor}"
+            }
+        }
+    }
+    return "UE5_6"
+}
 
 . (Join-Path $PSScriptRoot "lib\IniConfigParser.ps1")
 . (Join-Path $PSScriptRoot "lib\CurveTableParser.ps1")
@@ -417,13 +494,12 @@ $hasCT = ($ctConfig.Count -gt 0)
 if (-not $hasMultipliers -and -not $hasCT) {
     Write-Host "No config overrides found — nothing to build."
     if ($RemoveStalePak -and -not $DryRun) {
-        foreach ($p in @("WindrosePlus_Multipliers_P.pak", "WindrosePlus_CurveTables_P.pak")) {
-            $stale = Join-Path $paksDir $p
-            if (Test-Path -LiteralPath $stale) {
-                Remove-Item $stale -Force
-                Write-Host "Removed stale $stale"
-            }
+        $stale = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
+        if (Test-Path -LiteralPath $stale) {
+            Remove-Item $stale -Force
+            Write-Host "Removed stale $stale"
         }
+        Remove-CurveTableContainer -PaksDir $paksDir -Announce
     }
     exit 0
 }
@@ -513,7 +589,10 @@ $currentHash = Get-BuildInputHash -ServerDir $ServerDir -ScriptRoot $PSScriptRoo
 
 $expectedPaks = @()
 if ($hasMultipliers) { $expectedPaks += "WindrosePlus_Multipliers_P.pak" }
-if ($hasCT) { $expectedPaks += "WindrosePlus_CurveTables_P.pak" }
+# All three container parts are checked: an install left over from a build that
+# emitted the CurveTable override as a legacy pak has only the .pak, and must be
+# rebuilt so the override actually reaches the runtime.
+if ($hasCT) { $expectedPaks += $script:CurveTableOutputParts }
 
 $allExpectedExist = $true
 foreach ($p in $expectedPaks) {
@@ -766,18 +845,61 @@ if ($hasCT) {
         if ($DryRun) {
             Write-Host "  [DRY RUN] Would patch $totalChanges values" -ForegroundColor DarkGray
         } elseif ($totalChanges -gt 0) {
-            $outPak = Join-Path $paksDir "WindrosePlus_CurveTables_P.pak"
-            & $repakExe pack $stageDir $outPak 2>&1 | Out-Null
-            $repakExit = $LASTEXITCODE
-            if ($repakExit -ne 0 -or -not (Test-Path -LiteralPath $outPak)) {
-                Write-Error "repak failed to create $outPak (exit $repakExit)"
+            # CurveTable assets live inside the game's IoStore container
+            # (pakchunk0-WindowsServer.utoc), not in the legacy pak. UE5 resolves
+            # those packages through the container package store, so a legacy
+            # .pak carrying the same package never wins and the override is
+            # silently ignored at runtime. Emit an IoStore container instead:
+            # retoc writes .utoc + .ucas + a small stub .pak, and the _P suffix
+            # gives it a higher mount order than the game container.
+            if (-not $retocExe) {
+                Write-Error "retoc.exe not found at tools\bin\retoc.exe. It is required to build the CurveTable container. Reinstall WindrosePlus, and if antivirus quarantined it add an exclusion for the windrose_plus folder."
+                exit 2
+            }
+            if (-not (Test-CurveTableContainerWritable -PaksDir $paksDir)) {
+                Write-Error "The CurveTable container in $paksDir is locked, which means the Windrose server is still running. Stop the server and run this again — the container cannot be replaced while it is mounted."
                 exit 3
             }
-            $size = (Get-Item $outPak).Length
+            $outPak  = Join-Path $paksDir "WindrosePlus_CurveTables_P.pak"
+            $outUtoc = Join-Path $paksDir "WindrosePlus_CurveTables_P.utoc"
+            $outUcas = Join-Path $paksDir "WindrosePlus_CurveTables_P.ucas"
+            $engineVersion = Get-RetocEngineVersion -ServerDir $ServerDir -Override $EngineVersion
+            Write-Host "  Packing as IoStore container (engine $engineVersion)"
+
+            # Build into a temp directory first so a failed conversion never
+            # leaves a partial container (a .utoc without its .ucas) in Paks.
+            $zenDir = Join-Path ([System.IO.Path]::GetTempPath()) ("WindrosePlus_ct_zen_" + [guid]::NewGuid().ToString("N"))
+            New-Item -ItemType Directory -Force -Path $zenDir | Out-Null
+            try {
+                $zenUtoc = Join-Path $zenDir "WindrosePlus_CurveTables_P.utoc"
+                $zenOutput = @(& $retocExe to-zen --version $engineVersion $stageDir $zenUtoc 2>&1)
+                $zenExit = $LASTEXITCODE
+                $zenParts = $script:CurveTableOutputParts | ForEach-Object { Join-Path $zenDir $_ }
+                $zenComplete = $true
+                foreach ($zenPart in $zenParts) {
+                    if (-not (Test-Path -LiteralPath $zenPart)) { $zenComplete = $false }
+                }
+                if ($zenExit -ne 0 -or -not $zenComplete) {
+                    $zenDetails = ($zenOutput | Select-Object -Last 8 | ForEach-Object { $_.ToString() }) -join "`n"
+                    Write-Error "retoc to-zen failed to build the CurveTable container (exit $zenExit, engine $engineVersion).`nIf this Windrose build uses a different engine version, rerun with -EngineVersion (UE5_5, UE5_7, ...).`nretoc output:`n$zenDetails"
+                    exit 3
+                }
+                Remove-CurveTableContainer -PaksDir $paksDir
+                foreach ($part in $script:CurveTableOutputParts) {
+                    Move-Item -LiteralPath (Join-Path $zenDir $part) -Destination (Join-Path $paksDir $part) -Force
+                }
+            } finally {
+                Remove-Item -Recurse -Force $zenDir -ErrorAction SilentlyContinue
+            }
+            $size = (Get-Item $outUcas).Length + (Get-Item $outUtoc).Length + (Get-Item $outPak).Length
             if ($ctPatchManifest.Count -gt 0) {
                 $manifest = @{
                     built_at_utc = [DateTimeOffset]::UtcNow.ToString("o")
                     output_pak = $outPak
+                    output_utoc = $outUtoc
+                    output_ucas = $outUcas
+                    output_format = "iostore"
+                    engine_version = $engineVersion
                     output_size = $size
                     tables_modified = $tablesModified
                     changes_total = $totalChanges
@@ -788,9 +910,10 @@ if ($hasCT) {
                 Set-Content -LiteralPath $tmpManifest -Value $manifestJson -Encoding UTF8
                 Move-Item -LiteralPath $tmpManifest -Destination $curvetableManifestFile -Force
             }
-            Write-Host "  OK: $tablesModified tables, $totalChanges values -> $outPak ($size bytes)" -ForegroundColor Green
+            Write-Host "  OK: $tablesModified tables, $totalChanges values -> $outUtoc ($size bytes)" -ForegroundColor Green
         } else {
             Write-Host "  No CurveTable changes needed" -ForegroundColor DarkGray
+            Remove-CurveTableContainer -PaksDir $paksDir
             Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
         }
     } finally {
@@ -833,11 +956,7 @@ if ($RemoveStalePak -and -not $DryRun) {
         }
     }
     if (-not $hasCT) {
-        $stale = Join-Path $paksDir "WindrosePlus_CurveTables_P.pak"
-        if (Test-Path -LiteralPath $stale) {
-            Remove-Item $stale -Force
-            Write-Host "Removed stale $stale"
-        }
+        Remove-CurveTableContainer -PaksDir $paksDir -Announce
         Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
     }
 }

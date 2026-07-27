@@ -45,7 +45,7 @@ Save-safety notes:
 - Disabled keys are ignored by the PAK builder and dashboard PAK-status check. They do not trigger generated multiplier PAK output.
 - `xp` is ratcheted: once a value above `1` has been built, lowering it is refused because the shrunken reward curve can lock existing characters out on next login. Back up `SaveProfiles`, then either delete `windrose_plus_data\.windroseplus_multiplier_history.json` or set `WINDROSEPLUS_ALLOW_DOWNGRADE=1` for one build.
 - To keep Windrose+ runtime features but disable generated multiplier PAKs, set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. This removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`. JSON and harvest multipliers will not apply while the switch is set.
-- To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`.
+- To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and all three parts of the CurveTable container (`WindrosePlus_CurveTables_P.pak`, `.utoc`, `.ucas`), then delete `windrose_plus_data\.windroseplus_build.hash`.
 
 Example:
 
@@ -297,6 +297,10 @@ do.
 ---
 
 ## windrose_plus.ini (Main Config)
+
+Everything in this file and in the type-specific INIs (`.weapons`, `.food`, `.gear`, `.entities`) is applied by patching the game's CurveTable assets and shipping them back as an override. **This requires Windrose+ v1.3.16 or newer.** Up to v1.3.15 the override was written as a legacy `.pak`; Windrose ships those assets in an IoStore container and UE5 resolves them from the container, so the patch was built and byte-verified but never reached the running game. On v1.3.16+ the override is written as an IoStore container (`WindrosePlus_CurveTables_P.utoc` / `.ucas` / `.pak`), which does take precedence.
+
+The container is rebuilt by `StartWindrosePlusServer.bat` and cannot be replaced while the server is running, so INI changes need a full stop and start — not a `wp.reload`.
 
 ### [Server]
 
@@ -550,9 +554,8 @@ After editing food values, fully restart the Windrose server process through
 `CT_Food_GE_Values` and `Patched ... values (verified)`. If the generated PAK
 needs host-side verification, check
 `windrose_plus_data\.windroseplus_curvetables_manifest.json` or `/api/pak-status`
-for the exact patched rows. For manual PAK listing, run
-`windrose_plus\tools\bin\repak.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.pak | findstr /i CT_Food_GE_Values`
-and confirm both the `.uasset` and `.uexp` are present.
+for the exact patched rows. To list the container contents, run
+`windrose_plus\tools\bin\retoc.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.utoc | findstr /i CT_Food_GE_Values`.
 
 ### Sections
 

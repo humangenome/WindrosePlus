@@ -330,19 +330,36 @@ var STATIC_CATALOG='/catalog/v1';
     var S = Math.max(W.maxX - W.minX, W.maxY - W.minY);
     var maxZoom = manifest.max_zoom || 4;
     var fx = 256 / S, fy = 256 / S;
+
+    // Tiles built before the north-up change lay world X across and world Y
+    // down, which puts north on the right. Newer tiles are a quarter turn from
+    // that: right = world Y (east), down = -world X (south). The manifest says
+    // which layout the tiles on disk use, and everything below — terrain, CRS,
+    // markers, overlays, the click inverse — follows this one flag, so a server
+    // that has not regenerated tiles yet still lines up.
+    var northUp = (manifest.orientation === 'north-up');
     var CRS = L.Util.extend({}, L.CRS.Simple, {
-        transformation: new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
+        transformation: northUp
+            ? new L.Transformation(fx, -W.minY * fx, -fy, W.maxX * fy)
+            : new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
     });
+    // World coords -> Leaflet LatLng, and back. Every layer goes through these.
+    function wLL(x, y) { return northUp ? L.latLng(x, y) : L.latLng(y, x); }
+    function llX(latlng) { return northUp ? latlng.lat : latlng.lng; }
+    function llY(latlng) { return northUp ? latlng.lng : latlng.lat; }
+    function wBounds(minX, minY, maxX, maxY) {
+        return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
+    }
 
     // Island bounds from manifest or fallback
     var IB;
     if (manifest.island_bounds) {
         var ib = manifest.island_bounds;
-        IB = L.latLngBounds([ib.min_y, ib.min_x], [ib.max_y, ib.max_x]);
+        IB = wBounds(ib.min_x, ib.min_y, ib.max_x, ib.max_y);
     } else {
-        IB = L.latLngBounds(
-            [W.minY + S * 0.02, W.minX + S * 0.05],
-            [W.minY + S * 0.85, W.minX + S * 0.70]
+        IB = wBounds(
+            W.minX + S * 0.05, W.minY + S * 0.02,
+            W.minX + S * 0.70, W.minY + S * 0.85
         );
     }
 
@@ -355,7 +372,7 @@ var STATIC_CATALOG='/catalog/v1';
     var tileLayer = L.tileLayer(TU, {
         minZoom: 0, maxZoom: maxZoom, maxNativeZoom: maxZoom,
         tileSize: 256, noWrap: true,
-        bounds: L.latLngBounds([W.minY, W.minX], [W.maxY, W.maxX]),
+        bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY),
         keepBuffer: 100,              // never unload tiles from DOM (small tileset fits in memory)
         updateWhenZooming: false,     // don't flicker during zoom animation
         updateWhenIdle: true,
@@ -365,13 +382,13 @@ var STATIC_CATALOG='/catalog/v1';
     // Start with island bounds, will zoom to players after first fetch
     map.fitBounds(IB);
     map.on('mousemove', function(e) {
-        postEmbedMessage('map-hover', { x: Math.round(e.latlng.lng), y: Math.round(e.latlng.lat) });
+        postEmbedMessage('map-hover', { x: Math.round(llX(e.latlng)), y: Math.round(llY(e.latlng)) });
     });
     map.on('mouseout', function() {
         postEmbedMessage('map-leave');
     });
     map.on('click', function(e) {
-        postEmbedMessage('map-click', { x: Math.round(e.latlng.lng), y: Math.round(e.latlng.lat) });
+        postEmbedMessage('map-click', { x: Math.round(llX(e.latlng)), y: Math.round(llY(e.latlng)) });
     });
 
     // Preload all tiles for all zoom levels (small tileset ~5K tiles, fits in browser cache)
@@ -429,7 +446,6 @@ var STATIC_CATALOG='/catalog/v1';
     var poiCounts = {};
     var livePlayers = [];
     var initialZoomDone = false;
-    function wLL(x, y) { return L.latLng(y, x); }
     var overlayTransform = manifest.overlay_transform || {};
     function asNumber(v, fallback) {
         v = Number(v);
@@ -1837,7 +1853,7 @@ var STATIC_CATALOG='/catalog/v1';
                         var y1 = y0 + fogCell;
                         if (x1 < W.minX || x0 > W.maxX || y1 < W.minY || y0 > W.maxY) return;
                         var tip = 'Fog chunk ' + c.chunk_idx + ' (' + col + ', ' + row + ')';
-                        L.rectangle([[y0, x0], [y1, x1]], {
+                        L.rectangle(wBounds(x0, y0, x1, y1), {
                             color: fogColor,
                             weight: 1,
                             opacity: 0.75,

@@ -2,23 +2,35 @@
 
 > **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and offers Windrose servers with Windrose+ pre-installed.
 
-## [Unreleased]
-
-### Added
-
-- **`SECURITY.md`.** Documents where to send a vulnerability report privately, and what is in and out of scope for Windrose+ specifically (dashboard/RCON auth, path traversal, command injection, generated-PAK escalation).
-- **The 11 undocumented commands are now in `docs/commands.md`.** `wp.tp`, `wp.jump`, `wp.gravity`, the `wp.kick` / `wp.ban` / `wp.unban` / `wp.listbans` moderation set, and the hidden `wp.fields` / `wp.methods` / `wp.peek` / `wp.modreload` debug commands. All 43 registered commands are now covered.
-- **`windrose_plus.json` sections `multipliers`, `rcon`, `query`, `admin`, and `poiscan` in the config reference.** Previously only `server` and `livemap` were documented for that file.
+## [1.3.16] - 2026-07-27
 
 ### Fixed
 
+- **Every `windrose_plus.ini` setting now actually applies in-game.** The CurveTable override was written as a legacy `.pak`. Windrose keeps those assets in an IoStore container, and UE5 resolves such packages through the container package store, so the override mounted but was never read — the whole advanced-INI surface (player stats, talents, weapons, food, gear, creatures, co-op scaling, swimming, rest, hearth) built and byte-verified correctly and then did nothing at runtime. The builder now writes the override as an IoStore container (`WindrosePlus_CurveTables_P.utoc` / `.ucas` / `.pak`), which mounts above the game's own container. Verified on a live server: with the old legacy pak a deliberately truncated `CT_CharactersAttributes` loaded cleanly, proving the file was never read; with the container the same corruption produced an immediate serialization error for that package. Multipliers in `windrose_plus.json` were never affected — they patch loose `.json` files, where a legacy pak does win. (#92, #12, #22, #39)
+- **The Sea Chart is north-up.** Terrain was drawn with world X across and world Y down, which put in-game north on the right and made the map read as mirrored against the in-game chart. Terrain tiles, the map CRS, live players, mobs, resource nodes, POI markers, the fog grid, curated overlays, island bounds and the click-to-teleport inverse now all use the same north-up mapping. Regenerate tiles with `wp.mapgen`; until you do, the viewer keeps the old layout so markers stay on the terrain. (#114)
+- **Disabled multipliers are labelled everywhere they are printed.** `wp.status` echoed `stack_size`, `crop_speed` and `weight` as if they applied. All three commands that print multipliers (`wp.status`, `wp.config`, `wp.multipliers`) now suffix `(disabled)` on keys the PAK builder skips. The keys and their values stay in the output so anything parsing it keeps working.
+- **The builder refuses to write a half-replaced CurveTable container.** A running server holds the mounted `.ucas` open. The build checks that before it starts and stops with a clear "stop the server first" message instead of leaving a `.utoc` without its `.ucas`.
 - **Multipliers are documented where they actually work.** The config reference described multipliers under `windrose_plus.ini` `[Multipliers]`, which the PAK builder explicitly ignores with a warning. That table now lives under `windrose_plus.json`, and the INI section says what it is: ignored.
 - **Release notes no longer open with "Bug fix and improvement release."** That line was hardcoded onto every release, including feature releases. Release bodies now lead with the CHANGELOG section for the tag.
 - **Removed the dead Integrations link.** The linked Windrose Server Manager repository is gone (404).
 - **Documented that the moderation commands need `WindrosePlusNative`,** which the installer does not enable as of v1.3.15. Without it, `wp.kick` / `wp.ban` / `wp.unban` queue a request nothing consumes.
 
+### Changed
+
+- **`SECURITY.md` points at GitHub's private vulnerability reporting** instead of an email address that did not resolve. Private reporting is enabled on the repository.
+- **Removed the `features` block from `windrose_plus.json`.** `unlock_all_recipes` and `unlock_all_ships` parsed and merged since v1.0.0 but were never wired to anything. A config key that does nothing is worse than no key.
+
+### Added
+
+- **`SECURITY.md`.** Where to report a vulnerability privately, and what is in and out of scope for Windrose+ specifically (dashboard/RCON auth, path traversal, command injection, generated-override escalation).
+- **The 11 undocumented commands are now in `docs/commands.md`.** `wp.tp`, `wp.jump`, `wp.gravity`, the `wp.kick` / `wp.ban` / `wp.unban` / `wp.listbans` moderation set, and the hidden `wp.fields` / `wp.methods` / `wp.peek` / `wp.modreload` debug commands. All 43 registered commands are now covered.
+- **`windrose_plus.json` sections `multipliers`, `rcon`, `query`, `admin`, and `poiscan` in the config reference.** Previously only `server` and `livemap` were documented for that file.
+- **`-EngineVersion` on `WindrosePlus-BuildPak.ps1`** for the IoStore conversion. Auto-detected from the server logs, defaulting to UE5_6.
+
 ### Documentation
 
+- The README and config reference say plainly that INI settings need v1.3.16 or newer, and why. Recovery and troubleshooting steps cover all three container files.
+- `docs/commands.md` samples show the `(disabled)` markers.
 - `cpp-mods/README.md` lists `WindrosePlusNative` and states which C++ mod the installer actually enables.
 - `CONTRIBUTING.md` says what to include in a bug report and points managed-hosting questions at the host instead of the issue tracker.
 - Stale examples corrected: the query-response sample reported `1.3.4`, and `wp.version` / `wp.status` samples reported `Windrose+ v1.0.0` instead of the `WindrosePlus v<version>` string the command actually prints.

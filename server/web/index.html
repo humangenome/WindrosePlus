@@ -2080,15 +2080,29 @@
                 var SIDE = Math.max(W.maxX - W.minX, W.maxY - W.minY);
                 var maxZoom = mapInfo.max_zoom || 4;
                 var fx = 256 / SIDE, fy = 256 / SIDE;
+                // Tiles generated before the north-up change lay world X across and
+                // world Y down, which puts north on the right. Newer tiles are a quarter
+                // turn from that: right = world Y (east), down = -world X (south). The
+                // manifest says which layout is on disk, and the CRS, markers and the
+                // click-to-teleport inverse all follow this one flag together.
+                var northUp = (mapInfo.orientation === 'north-up');
                 var GameCRS = L.Util.extend({}, L.CRS.Simple, {
-                    transformation: new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
+                    transformation: northUp
+                        ? new L.Transformation(fx, -W.minY * fx, -fy, W.maxX * fy)
+                        : new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
                 });
+                function wLL(x, y) { return northUp ? L.latLng(x, y) : L.latLng(y, x); }
+                function llX(latlng) { return northUp ? latlng.lat : latlng.lng; }
+                function llY(latlng) { return northUp ? latlng.lng : latlng.lat; }
+                function wBounds(minX, minY, maxX, maxY) {
+                    return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
+                }
                 var IB;
                 if (mapInfo.island_bounds) {
                     var ib = mapInfo.island_bounds;
-                    IB = L.latLngBounds([ib.min_y, ib.min_x], [ib.max_y, ib.max_x]);
+                    IB = wBounds(ib.min_x, ib.min_y, ib.max_x, ib.max_y);
                 } else {
-                    IB = L.latLngBounds([W.minY, W.minX], [W.maxY, W.maxX]);
+                    IB = wBounds(W.minX, W.minY, W.maxX, W.maxY);
                 }
 
                 seachartMap = L.map('seachart-map', {
@@ -2109,7 +2123,7 @@
                     maxNativeZoom: maxZoom,
                     tileSize: 256,
                     noWrap: true,
-                    bounds: L.latLngBounds([W.minY, W.minX], [W.maxY, W.maxX]),
+                    bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY),
                     // Truly transparent 1×1 RGBA PNG. The previous literal here decoded to
                     // rgba(255,0,0,127) — Leaflet stretched it to fill every missing tile slot,
                     // turning the whole map crimson whenever a zoom level had no rendered tiles.
@@ -2149,7 +2163,7 @@
                 // into the player row's coords field and the hint banner.
                 seachartMap.on('mousemove', function(e) {
                     if (!tpArmedPlayer) return;
-                    updateTeleportPreview(Math.round(e.latlng.lng), Math.round(e.latlng.lat));
+                    updateTeleportPreview(Math.round(llX(e.latlng)), Math.round(llY(e.latlng)));
                 });
                 seachartMap.on('mouseout', function() {
                     if (!tpArmedPlayer) return;
@@ -2157,9 +2171,9 @@
                 });
 
                 // Click-to-teleport. Active only when a player is armed via the TELEPORT
-                // button in the player list. Leaflet's CRS already maps lat/lng to world
-                // Y/X 1:1 (see L.marker(L.latLng(p.y, p.x)) below), so click coords are
-                // world coords directly — no projection math.
+                // button in the player list. llX/llY are the exact inverse of wLL, which
+                // is what places every marker, so a click returns the world coords of
+                // whatever is under the cursor — no projection math.
                 //
                 // For Z: we ask /api/terrain_height to sample the exported heightmap at
                 // (X, Y). Sea level is Z=0 in Windrose's heightfield. Different clearances
@@ -2181,8 +2195,8 @@
 
                 seachartMap.on('click', function(e) {
                     if (!tpArmedPlayer) return;
-                    var x = Math.round(e.latlng.lng);
-                    var y = Math.round(e.latlng.lat);
+                    var x = Math.round(llX(e.latlng));
+                    var y = Math.round(llY(e.latlng));
                     var player = tpArmedPlayer;
                     var fallbackZ = tpArmedPlayerZ;  // captured at arm time
                     disarmTeleport();
@@ -2225,7 +2239,7 @@
                                     html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #c9a959;box-shadow:0 0 8px rgba(212,160,74,0.5);"></div><div style="position:absolute;top:18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;color:#ede0cc;font-family:IBM Plex Mono,monospace;text-shadow:0 1px 3px rgba(0,0,0,0.8);">' + escHtml(p.name || 'Player') + '</div>',
                                     iconSize: [14, 14], iconAnchor: [7, 7]
                                 });
-                                L.marker(L.latLng(p.y, p.x), { icon: icon }).addTo(playerLayer);
+                                L.marker(wLL(p.x, p.y), { icon: icon }).addTo(playerLayer);
                             });
                         }
                         mobLayer.clearLayers();
@@ -2237,7 +2251,7 @@
                                     html: '<div style="width:8px;height:8px;border-radius:50%;background:#cc5544;border:1px solid #aa3322;" title="' + escHtml(m.name || 'Mob') + '"></div>',
                                     iconSize: [8, 8], iconAnchor: [4, 4]
                                 });
-                                L.marker(L.latLng(m.y, m.x), { icon: icon }).addTo(mobLayer);
+                                L.marker(wLL(m.x, m.y), { icon: icon }).addTo(mobLayer);
                             });
                         }
                     }).catch(function() {});

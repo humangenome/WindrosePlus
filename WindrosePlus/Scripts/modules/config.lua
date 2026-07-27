@@ -40,7 +40,6 @@ function Config.reload()
         Events.record("config.load", {
             path = Config._path,
             multipliers = Config._data.multipliers,
-            features = Config._data.features,
             rcon_enabled = Config._data.rcon and Config._data.rcon.enabled or false,
             query_enabled = Config._data.query and Config._data.query.enabled,
             log_level = Config._data.debug and Config._data.debug.log_level,
@@ -210,10 +209,6 @@ function Config.isAdmin(steamId)
     return false
 end
 
-function Config.isFeatureEnabled(feature)
-    return Config.get("features", feature) == true
-end
-
 function Config._defaults()
     return {
         server = { http_port = 8780, bind_ip = "" },
@@ -242,7 +237,6 @@ function Config._defaults()
         poiscan = { enabled = true, refresh_seconds = 4 * 60 * 60 },
         admin = { steam_ids = {} },
         multipliers = { xp = 1.0, loot = 1.0, stack_size = 1.0, craft_efficiency = 1.0, crop_speed = 1.0, weight = 1.0, inventory_size = 1.0, cooking_speed = 1.0, harvest_yield = 1.0 },
-        features = { unlock_all_recipes = false, unlock_all_ships = false },
         debug = { log_level = "info" }
     }
 end

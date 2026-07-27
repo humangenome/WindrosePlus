@@ -4,7 +4,7 @@
 
 If you've found a security issue in Windrose+ (the Lua mod, the web dashboard, the RCON listener, the PAK builder, or the C++ mods), please **do not** open a public GitHub issue.
 
-Email security reports to: **security@humangenome.dev**, or open a private security advisory on GitHub at https://github.com/HumanGenome/WindrosePlus/security/advisories/new — that's the preferred channel.
+Report it privately through GitHub: **[Security → Advisories → Report a vulnerability](https://github.com/HumanGenome/WindrosePlus/security/advisories/new)**. Only you and the maintainers can see the report, and it stays private until a fix ships.
 
 Include:
 - A description of the vulnerability

@@ -28,6 +28,10 @@ Usage: wp.status
 
 Show server status including player count, all multipliers, and version.
 
+Multipliers marked `(disabled)` are stored but not applied — the PAK builder skips
+them because patching those values corrupts character saves. See
+[Multipliers](config-reference.md#multipliers).
+
 ```
 Usage: wp.status
 ```
@@ -37,11 +41,11 @@ Usage: wp.status
 Players: 3
 Loot: 2x
 XP: 3x
-Stack Size: 5x
+Stack Size: 5x (disabled)
 Craft Efficiency: 2x
-Crop Speed: 2x
-Weight: 5x
-WindrosePlus v1.3.15
+Crop Speed: 2x (disabled)
+Weight: 5x (disabled)
+WindrosePlus v1.3.16
 ```
 
 ### wp.version
@@ -54,7 +58,7 @@ Usage: wp.version
 
 ```
 > wp.version
-WindrosePlus v1.3.15
+WindrosePlus v1.3.16
 ```
 
 ### wp.config
@@ -70,13 +74,16 @@ Usage: wp.config
 WindrosePlus Config:
   Loot: 2x
   XP: 3x
-  Stack Size: 5x
+  Stack Size: 5x (disabled)
   Craft Efficiency: 2x
-  Crop Speed: 2x
-  Weight: 5x
+  Crop Speed: 2x (disabled)
+  Weight: 5x (disabled)
   RCON: enabled
   Mods: 1
 ```
+
+Multipliers marked `(disabled)` are stored but not applied. See
+[Multipliers](config-reference.md#multipliers).
 
 ### wp.multipliers
 
@@ -91,11 +98,14 @@ Usage: wp.multipliers
 Multipliers:
   Loot: 2x
   XP: 3x
-  Stack Size: 5x
+  Stack Size: 5x (disabled)
   Craft Efficiency: 2x
-  Crop Speed: 2x
-  Weight: 5x
+  Crop Speed: 2x (disabled)
+  Weight: 5x (disabled)
 ```
+
+Multipliers marked `(disabled)` are stored but not applied. See
+[Multipliers](config-reference.md#multipliers).
 
 ### wp.uptime
 
@@ -245,7 +255,7 @@ Recorded audit note: HumanGenome +3 stat +2 talent. This does not change the cha
 
 These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up on the game thread within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked on a timer, so a banned name is removed again if it rejoins.
 
-`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.15** while it is revalidated against the current Windrose dedicated-server build. Until it is re-enabled, `wp.kick` / `wp.ban` / `wp.unban` queue a request that nothing consumes, and `wp.listbans` reads an empty list. Confirm a kick took effect with `wp.players`.
+`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Until it is re-enabled, `wp.kick` / `wp.ban` / `wp.unban` queue a request that nothing consumes, and `wp.listbans` reads an empty list. Confirm a kick took effect with `wp.players`.
 
 #### wp.kick
 
@@ -794,7 +804,7 @@ Execute a command via the RCON interface.
 ```json
 {
     "status": "ok",
-    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrosePlus v1.3.15"
+    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrosePlus v1.3.16"
 }
 ```
 

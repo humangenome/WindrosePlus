@@ -1436,7 +1436,9 @@ try {
                 }
                 "/api/pak-status" {
                     $multPak = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_Multipliers_P.pak"
-                    $ctPak   = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_CurveTables_P.pak"
+                    # The CurveTable override ships as an IoStore container; the .utoc is
+                    # the part the engine actually resolves packages from, so status keys off it.
+                    $ctPak   = Join-Path $gameDir "R5\Content\Paks\WindrosePlus_CurveTables_P.utoc"
                     $ctManifest = Join-Path $gameDir "windrose_plus_data\.windroseplus_curvetables_manifest.json"
                     $wrapper = Join-Path $gameDir "StartWindrosePlusServer.bat"
                     $jsonPath = Join-Path $gameDir "windrose_plus.json"

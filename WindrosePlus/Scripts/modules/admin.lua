@@ -14,6 +14,23 @@ Admin._playerJoinTimes = {}  -- track session join times for wp.playtime
 Admin._DEFAULT_PROCESS_NAME = "WindroseServer-Win64-Shipping.exe"
 Admin._bootTime = os.time()  -- track server start for uptime (no wmic needed)
 
+-- Keys whose PAK patch path is currently disabled in the builder (save-safety /
+-- engine-validator hazards). Mirrored from the wp.doctor block. The key stays in
+-- the wp.status / wp.config / wp.multipliers output so anything parsing it keeps
+-- working, with a `(disabled)` suffix so operators can see the value is stored
+-- but never applied.
+local _disabledMultiplierEcho = {
+    stack_size = true, weight = true, inventory_size = true,
+    points_per_level = true, crop_speed = true,
+}
+local function _fmtMultiplierLine(label, value, disabledKey, indent)
+    local s = (indent or "") .. label .. ": " .. tostring(value) .. "x"
+    if disabledKey and _disabledMultiplierEcho[disabledKey] then
+        s = s .. " (disabled)"
+    end
+    return s
+end
+
 function Admin.init(config, gameDir)
     Admin._config = config
     Admin._gameDir = gameDir
@@ -179,12 +196,12 @@ function Admin._registerCommands()
             end
             local lines = {
                 "Players: " .. playerCount,
-                "Loot: " .. Admin._config.getLootMultiplier() .. "x",
-                "XP: " .. Admin._config.getXpMultiplier() .. "x",
-                "Stack Size: " .. Admin._config.getStackSizeMultiplier() .. "x",
-                "Craft Efficiency: " .. Admin._config.getCraftEfficiencyMultiplier() .. "x",
-                "Crop Speed: " .. Admin._config.getCropSpeedMultiplier() .. "x",
-                "Weight: " .. Admin._config.getWeightMultiplier() .. "x",
+                _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()),
+                _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()),
+                _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"),
+                _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()),
+                _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"),
+                _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"),
                 "WindrosePlus v" .. (WindrosePlus and WindrosePlus.VERSION or "?")
             }
             return table.concat(lines, "\n")
@@ -1289,23 +1306,6 @@ function Admin._registerCommands()
     -- New Commands: Server Info
     -- =========================================
 
-    -- Keys whose PAK patch path is currently disabled in the open-source builder
-    -- (save-safety / engine-validator hazards). Mirrored from the wp.doctor
-    -- block below. Suffix `(disabled)` on the wp.config / wp.multipliers echo
-    -- when the server owner has set a non-1 value, so the in-game output does not
-    -- mislead operators into thinking a value is being applied when it is not.
-    local _disabledMultiplierEcho = {
-        stack_size = true, weight = true, inventory_size = true,
-        points_per_level = true, crop_speed = true,
-    }
-    local function _fmtMultiplierLine(label, value, disabledKey)
-        local s = "  " .. label .. ": " .. tostring(value) .. "x"
-        if disabledKey and _disabledMultiplierEcho[disabledKey] and value ~= 1 then
-            s = s .. " (disabled)"
-        end
-        return s
-    end
-
     Admin._commands["wp.config"] = {
         description = "Show current config values",
         usage = "wp.config",
@@ -1313,12 +1313,12 @@ function Admin._registerCommands()
         examples = {"wp.config"},
         handler = function(args)
             local lines = {"WindrosePlus Config:"}
-            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
-            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"))
-            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"))
+            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
+            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
+            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
             table.insert(lines, "  RCON: " .. (Admin._config.isRconEnabled() and "enabled" or "disabled"))
             local mods = WindrosePlus._modules.Mods
             if mods then
@@ -1335,12 +1335,12 @@ function Admin._registerCommands()
         examples = {"wp.multipliers"},
         handler = function(args)
             local lines = {"Multipliers:"}
-            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"))
-            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()))
-            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"))
-            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"))
+            table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
+            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
+            table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
             return table.concat(lines, "\n")
         end
     }
