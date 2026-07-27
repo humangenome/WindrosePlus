@@ -18,6 +18,84 @@ Windrose+ uses `windrose_plus.json` for everyday settings and optional `.ini` fi
 
 This file is created automatically on first start. Edit it for common server-owner changes.
 
+### multipliers
+
+Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half. These are baked into `WindrosePlus_Multipliers_P.pak` by the PAK builder, so an edit needs a rebuild before the next launch — `StartWindrosePlusServer.bat` does that for you.
+
+Multipliers belong in this file, not in `windrose_plus.ini`. A `[Multipliers]` section in the INI is ignored with a warning so the in-game `wp.config` output cannot disagree with what was actually applied.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `loot` | `1` | Loot drop quantity from chests / containers / enemies. Equipment drops are excluded so gear can't be duplicated. Use `harvest_yield` for resource nodes. |
+| `xp` | `1` | Experience gain. Faster leveling means more talent/stat point payouts; that's the natural game progression, not a separate multiplier. |
+| `craft_efficiency` | `1` | Crafting efficiency. Higher = cheaper recipes (`2.0` = half cost, `0.5` = double cost). The legacy key `craft_cost` is still accepted with identical semantics for backward compatibility. |
+| `cooking_speed` | `1` | Cooking / fermentation / smelting speed (`2.0` = twice as fast). |
+| `harvest_yield` | `1` | Resource node yield (berries, ore, wood, herbs, etc.). Scales `Amount.Min`/`Max` per node; minimum stays at `1` after rounding. For per-resource overrides (e.g. wood-only), see the [windrose_plus.harvest.ini](#windrose_plusharvestini-per-resource-yield) section below. |
+| `stack_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item stacks. |
+| `crop_speed` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change crop timing. |
+| `weight` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item weight. |
+| `inventory_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change slot counts. |
+| `points_per_level` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not grant points. |
+
+Save-safety notes:
+
+- `inventory_size`, `stack_size`, and `weight` are disabled because inventory-affecting changes can become part of player save state after login/save and can crash Windrose's inventory validator.
+- `crop_speed` is disabled because non-default crop timing can crash Windrose's crop validator.
+- `points_per_level` is disabled because changing progression rewards can create `RewardLevel < CurrentLevel` character-save crashes. The dashboard Character Repair page can repair the known no-spend drift case from a zipped local `SaveProfiles` folder.
+- Disabled keys are ignored by the PAK builder and dashboard PAK-status check. They do not trigger generated multiplier PAK output.
+- `xp` is ratcheted: once a value above `1` has been built, lowering it is refused because the shrunken reward curve can lock existing characters out on next login. Back up `SaveProfiles`, then either delete `windrose_plus_data\.windroseplus_multiplier_history.json` or set `WINDROSEPLUS_ALLOW_DOWNGRADE=1` for one build.
+- To keep Windrose+ runtime features but disable generated multiplier PAKs, set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. This removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`. JSON and harvest multipliers will not apply while the switch is set.
+- To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`.
+
+Example:
+
+```json
+{
+    "multipliers": {
+        "loot": 2.0,
+        "xp": 3.0,
+        "craft_efficiency": 2.0,
+        "cooking_speed": 2.0,
+        "harvest_yield": 2.0
+    }
+}
+```
+
+### rcon
+
+Remote console listener. Read live — changes take effect on `wp.reload` without a PAK rebuild.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Enable the RCON listener. |
+| `port` | `27320` | RCON TCP port. |
+| `password` | `""` | RCON password. Blank (or `changeme`) disables RCON and the dashboard login. |
+
+### query
+
+Server-query responder, so server browsers and monitoring tools can read your player count.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Enable query responses. |
+| `interval_ms` | `5000` | Poll interval while players are online. |
+| `idle_interval_ms` | `30000` | Poll interval while the server is empty. |
+
+### admin
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `steam_ids` | `[]` | JSON array of Steam IDs treated as admins. |
+
+### poiscan
+
+Background scan that builds your own point-of-interest overlay for the Sea Chart.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `true` | Enable the POI scan. |
+| `refresh_seconds` | `14400` | Seconds between rescans (default 4 hours). |
+
 ### server
 
 Dashboard listener settings.
@@ -237,29 +315,7 @@ Server network and admin settings.
 
 ### [Multipliers]
 
-Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half.
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `loot` | `1` | Loot drop quantity from chests / containers / enemies. Equipment drops are excluded so gear can't be duplicated. Use `harvest_yield` for resource nodes. |
-| `xp` | `1` | Experience gain. Faster leveling means more talent/stat point payouts; that's the natural game progression, not a separate multiplier. |
-| `stack_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item stacks. |
-| `craft_efficiency` | `1` | Crafting efficiency. Higher = cheaper recipes (`2.0` = half cost, `0.5` = double cost). The legacy key `craft_cost` is still accepted with identical semantics for backward compatibility. |
-| `crop_speed` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change crop timing. |
-| `cooking_speed` | `1` | Cooking / fermentation / smelting speed (2.0 = twice as fast) |
-| `harvest_yield` | `1` | Resource node yield (berries, ore, wood, herbs, etc.). Scales `Amount.Min`/`Max` per node; minimum stays at `1` after rounding. For per-resource overrides (e.g. wood-only), see the [windrose_plus.harvest.ini](#windrose_plusharvestini-per-resource-yield) section below. |
-| `weight` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change item weight. |
-| `inventory_size` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not change slot counts. |
-| `points_per_level` | `1` | Disabled/no-op. Kept only so old configs still parse; changing it does not grant points. |
-
-Save-safety notes:
-
-- `inventory_size`, `stack_size`, and `weight` are disabled because inventory-affecting changes can become part of player save state after login/save and can crash Windrose's inventory validator.
-- `crop_speed` is disabled because non-default crop timing can crash Windrose's crop validator.
-- `points_per_level` is disabled because changing progression rewards can create `RewardLevel < CurrentLevel` character-save crashes. The dashboard Character Repair page can repair the known no-spend drift case from a zipped local `SaveProfiles` folder.
-- Disabled keys are ignored by the PAK builder and dashboard PAK-status check. They do not trigger generated multiplier PAK output.
-- To keep Windrose+ runtime features but disable generated multiplier PAKs, set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. This removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`. JSON and harvest multipliers will not apply while the switch is set.
-- To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `R5\Content\Paks\WindrosePlus_CurveTables_P.pak`, then delete `windrose_plus_data\.windroseplus_build.hash`.
+Ignored. The PAK builder warns and skips this section so the in-game `wp.config` output cannot disagree with what was actually applied. Put multipliers in `windrose_plus.json` — see [multipliers](#multipliers).
 
 ### [PlayerStats]
 

@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`SECURITY.md`.** Documents where to send a vulnerability report privately, and what is in and out of scope for Windrose+ specifically (dashboard/RCON auth, path traversal, command injection, generated-PAK escalation).
+- **The 11 undocumented commands are now in `docs/commands.md`.** `wp.tp`, `wp.jump`, `wp.gravity`, the `wp.kick` / `wp.ban` / `wp.unban` / `wp.listbans` moderation set, and the hidden `wp.fields` / `wp.methods` / `wp.peek` / `wp.modreload` debug commands. All 43 registered commands are now covered.
+- **`windrose_plus.json` sections `multipliers`, `rcon`, `query`, `admin`, and `poiscan` in the config reference.** Previously only `server` and `livemap` were documented for that file.
+
+### Fixed
+
+- **Multipliers are documented where they actually work.** The config reference described multipliers under `windrose_plus.ini` `[Multipliers]`, which the PAK builder explicitly ignores with a warning. That table now lives under `windrose_plus.json`, and the INI section says what it is: ignored.
+- **Release notes no longer open with "Bug fix and improvement release."** That line was hardcoded onto every release, including feature releases. Release bodies now lead with the CHANGELOG section for the tag.
+- **Removed the dead Integrations link.** The linked Windrose Server Manager repository is gone (404).
+- **Documented that the moderation commands need `WindrosePlusNative`,** which the installer does not enable as of v1.3.15. Without it, `wp.kick` / `wp.ban` / `wp.unban` queue a request nothing consumes.
+
+### Documentation
+
+- `cpp-mods/README.md` lists `WindrosePlusNative` and states which C++ mod the installer actually enables.
+- `CONTRIBUTING.md` says what to include in a bug report and points managed-hosting questions at the host instead of the issue tracker.
+- Stale examples corrected: the query-response sample reported `1.3.4`, and `wp.version` / `wp.status` samples reported `Windrose+ v1.0.0` instead of the `WindrosePlus v<version>` string the command actually prints.
+- Normalized the changelog's `Docs` / `Notes for the next release` headings to `Documentation` / `Notes`.
+
 ## [1.3.15] - 2026-07-09
 
 ### Fixed
@@ -105,7 +125,7 @@ Dashboard hardening pass. Closes a public-DoS surface on the layout-runtime rout
 
 - **HTTP status codes on soft errors.** `/api/status`, `/api/livemap`, `/api/public/livemap`, `/api/mapinfo`, and `/api/public/mapinfo` now return 503 instead of `200 + {error: ...}` for missing-data states. `/api/rcon` timeout / worker-error path returns 504 instead of 200. Client `response.ok` checks now correctly distinguish success from missing-data states.
 
-### Docs
+### Documentation
 
 - Folded the five scattered Multiplier PAK callouts (Disabled keys, Save-safety warning, Emergency disable, two Troubleshooting items) into a single **Multiplier PAK safety** subsection under the multipliers feature. Install step and Troubleshooting point back to it instead of restating.
 - `docs/commands.md` dropped the bogus `/api/mods` row (no such route exists), reflected the new auth state on `/api/layout` and `/api/layout/runtime`, and documented the new `/api/public/layout` and `/api/public/layout/runtime` routes. `/api/commands` description updated to note it's sourced from the Lua registry.
@@ -137,7 +157,7 @@ A polish release on top of v1.3.0: a real fix for `wp.playerinfo` health/vitals,
 - **README troubleshooting** has a dedicated entry for the "Curated overlay not configured" state with a pointer to the provider docs.
 - **`wp.players` output adds the display name parenthetically next to the canonical actor ID** so admins can recognize who's who at a glance: `1. BP_R5Character_C_2147419648 (HumanGenome) @ -52090, -482978, 205`.
 
-### Docs
+### Documentation
 
 - Refreshed the README Sea Chart screenshots: full-size, full HTTP panel chrome around the map, default Layers panel state, and an Items panel example. Dropped the advanced live-save and item-detail comps from the README hero strip.
 
@@ -590,7 +610,7 @@ Issue [#4](https://github.com/HumanGenome/WindrosePlus/issues/4) (per-level stat
 - **`wp.givestats <player> <stat_count> [talent_count]` admin command.** Records stat/talent point compensation notes to a per-server queue file (`windrose_plus_data/stat_grants_queue.log`) so server owners can audit who needs compensation for [#4](https://github.com/HumanGenome/WindrosePlus/issues/4) — characters that level up multiple times in a single XP gain only fire one stat-point reward, even though they cleared several levels at once. This command is audit-only and does not change the character in-game. Range `1`–`100` per axis. Player names with spaces are supported.
 - **Append-only `windrose_plus_data/events.log`.** Line-delimited JSON records every player join and leave so external server-management tools can `tail -F` the file without polling the HTTP API or scraping the dashboard. Each entry has `ts`, `type`, `player`, and best-effort `x`/`y`/`z` (coordinates are populated only when the join/leave poller resolved a pawn position — they may be missing for very fast disconnects). Events derive from the same poll-based detector that powers the in-game player list, so a transient query miss can produce a spurious leave/rejoin pair; consumers should treat sub-second flips as noise. Existing in-process `WindrosePlus.API.onPlayerJoin` / `onPlayerLeave` callbacks are unchanged — this is an additive file-based channel for tools that don't run inside Lua.
 
-### Notes for the next release
+### Notes
 
 Issue [#4](https://github.com/HumanGenome/WindrosePlus/issues/4) (per-level stat rewards skipped when XP gain crosses multiple levels) is a base-game level-up event firing once per XP packet. The fix needs an in-game catchup hook on `R5HeroLevelUpComponent` to walk the levels gained and award the missed `StatPointsReward` / `TalentPointsReward` values one at a time. Until that lands, `wp.givestats` is only an audit trail for manual follow-up.
 

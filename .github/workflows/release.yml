@@ -157,8 +157,6 @@ jobs:
             exit 1
           fi
           {
-            echo "Bug fix and improvement release."
-            echo
             cat "$NOTES_FILE"
             echo
             echo "## Install / Upgrade"

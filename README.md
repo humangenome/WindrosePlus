@@ -25,7 +25,6 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 - [Features](#features)
 - [Installation](#installation)
 - [Using Windrose+](#using-windrose)
-- [Integrations](#integrations)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -43,7 +42,7 @@ The Items panel browses the bundled 840-item catalog with group/type/rarity/tier
 ![Sea Chart with Items panel](docs/screenshots/v1.3.0/seachart-items.png)
 
 ### Admin Console (RCON)
-Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 30+ built-in commands out of the box.
+Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 40+ built-in commands out of the box.
 
 ![Console](docs/screenshots/console.png)
 
@@ -55,7 +54,7 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
   "server": {
     "name": "My Windrose Server",
     "version": "0.10.0.5.120",
-    "windrose_plus": "1.3.4",
+    "windrose_plus": "1.3.15",
     "password_protected": false,
     "max_players": 10,
     "player_count": 3
@@ -336,12 +335,6 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **Multiplier PAK / save issues / full recovery** - See [Multiplier PAK safety](#multiplier-pak-safety) for the disable env var, recovery steps, and save-backup guidance.
 
 </details>
-
----
-
-## Integrations
-
-- [Windrose Server Manager](https://github.com/ManuelStaggl/WindroseServerManager) can install and manage Windrose+ from its Windows desktop UI. It fetches the latest Windrose+ release instead of bundling a stale copy.
 
 ---
 

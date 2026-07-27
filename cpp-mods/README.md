@@ -8,7 +8,13 @@ You do **not** need to build these yourself. Download the pre-built DLLs from th
 
 ## Included Mods
 
-- `HeightmapExporter` exports terrain height data for the live map.
+- `HeightmapExporter` exports terrain height data for the live map. This is the
+  only C++ mod the installer enables by default.
+- `WindrosePlusNative` backs the `wp.kick` / `wp.ban` / `wp.unban` /
+  `wp.listbans` commands. It polls `windrose_plus_data\wpn_command.txt` on the
+  game thread and persists bans to `windrose_plus_data\wpn_bans.txt`. As of
+  v1.3.15 the installer does not enable it while it is revalidated against the
+  current Windrose dedicated-server build.
 - `WindroseNativeProbe` is an experimental read-only runtime UObject reflection
   dump for player, inventory, storage, progression, chat, and network research.
   It is not enabled by the installer; use it only on non-production test servers.

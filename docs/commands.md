@@ -41,7 +41,7 @@ Stack Size: 5x
 Craft Efficiency: 2x
 Crop Speed: 2x
 Weight: 5x
-Windrose+ v1.0.0
+WindrosePlus v1.3.15
 ```
 
 ### wp.version
@@ -54,7 +54,7 @@ Usage: wp.version
 
 ```
 > wp.version
-Windrose+ v1.0.0
+WindrosePlus v1.3.15
 ```
 
 ### wp.config
@@ -241,6 +241,69 @@ Usage: wp.givestats <player> <stat_count> [talent_count]
 Recorded audit note: HumanGenome +3 stat +2 talent. This does not change the character in-game.
 ```
 
+### Moderation (wp.kick / wp.ban / wp.unban / wp.listbans)
+
+These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up on the game thread within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked on a timer, so a banned name is removed again if it rejoins.
+
+`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.15** while it is revalidated against the current Windrose dedicated-server build. Until it is re-enabled, `wp.kick` / `wp.ban` / `wp.unban` queue a request that nothing consumes, and `wp.listbans` reads an empty list. Confirm a kick took effect with `wp.players`.
+
+#### wp.kick
+
+Kick a connected player by name. Matching is exact and case-insensitive.
+
+```
+Usage: wp.kick <player> [reason]
+```
+
+```
+> wp.kick Alice
+Kick requested for Alice
+
+> wp.kick Bob Griefing the build
+Kick requested for Bob
+```
+
+#### wp.ban
+
+Add a player to the ban list and kick them if they are online.
+
+```
+Usage: wp.ban <player> [reason]
+```
+
+```
+> wp.ban Bob Repeated griefing
+Ban requested for Bob
+```
+
+#### wp.unban
+
+Remove a player from the ban list.
+
+```
+Usage: wp.unban <player>
+```
+
+```
+> wp.unban Bob
+Unban requested for Bob
+```
+
+#### wp.listbans
+
+List every name in `windrose_plus_data\wpn_bans.txt`.
+
+```
+Usage: wp.listbans
+```
+
+```
+> wp.listbans
+Banned (2):
+  1. Bob
+  2. Carol
+```
+
 ---
 
 ## World
@@ -421,6 +484,60 @@ Speed set to 4x for bp_r5character_c_2147418445
 Speed set to 1.25x for player:12
 ```
 
+### wp.jump
+
+Set the jump-height multiplier (`JumpZVelocity`) for one or all players. Same player-argument forms as `wp.speed`.
+
+```
+Usage: wp.jump [player] <multiplier>
+```
+
+`1.0` is normal, `2.0` is double height.
+
+```
+> wp.jump 2.0
+Jump set to 2.0x for 3 player(s)
+
+> wp.jump HumanGenome 3
+Jump set to 3x for humangenome
+```
+
+### wp.gravity
+
+Set the gravity multiplier (`CharacterMovement.GravityScale`) for one or all players. Same player-argument forms as `wp.speed`.
+
+```
+Usage: wp.gravity [player] <multiplier>
+```
+
+`1.0` is normal, `0.3` is moon gravity.
+
+```
+> wp.gravity 0.3
+Gravity set to 0.3x for 3 player(s)
+
+> wp.gravity HumanGenome 2
+Gravity set to 2x for humangenome
+```
+
+### wp.tp
+
+Teleport a player to absolute world coordinates in Unreal units. The trailing two or three arguments are the coordinates; everything before them is treated as the (possibly multi-word) player name, the same disambiguation `wp.speed` uses.
+
+```
+Usage: wp.tp [player] <x> <y> [z]
+```
+
+If `z` is omitted the player's current Z is kept, which works for short hops but can drop you into terrain on a cross-map jump. The Sea Chart's click-to-teleport supplies a heightmap-derived Z for that case.
+
+```
+> wp.tp 100000 200000
+HumanGenome: tp -> (100000, 200000, 150) ret=true
+
+> wp.tp HumanGenome 100000 200000 5000
+HumanGenome: tp -> (100000, 200000, 5000) ret=true
+```
+
 ---
 
 ## Debug
@@ -526,6 +643,63 @@ FullName: PlayerController /Game/Maps/WorldMap.WorldMap:PersistentLevel.PlayerCo
 FullName: R5Character /Game/Maps/WorldMap.WorldMap:PersistentLevel.R5Character_0
 ```
 
+### wp.fields
+
+List the real `FProperty` fields on a UE4 type via class reflection, walking the superclass chain. Optionally filter by name. Unlike `wp.props`, this reads the class layout rather than probing a live instance, so it works on types with no instance loaded.
+
+```
+Usage: wp.fields <TypeName> [filter]
+```
+
+The filter accepts pipe-delimited terms (`Steam|Unique`) and matches case-insensitive substrings.
+
+```
+> wp.fields R5PlayerState Player
+R5PlayerState fields matching "Player":
+  PlayerNamePrivate  (StrProperty)
+  PlayerId           (IntProperty)
+```
+
+### wp.methods
+
+List the `UFunction`s on a UE4 type via class reflection, walking the superclass chain. Optionally filter by name. Same pipe-delimited filter syntax as `wp.fields`.
+
+```
+Usage: wp.methods <TypeName> [filter]
+```
+
+```
+> wp.methods R5BuildingCenterStorageComponent transfer
+R5BuildingCenterStorageComponent functions matching "transfer":
+  (no matches)
+```
+
+### wp.peek
+
+Read a single property on the first valid instance of a type, dereferencing through the common wrapper shapes UE4SS returns.
+
+```
+Usage: wp.peek <TypeName> <PropertyName>
+```
+
+```
+> wp.peek R5PlayerState PlayerNamePrivate
+R5PlayerState.PlayerNamePrivate = HumanGenome
+```
+
+### wp.modreload
+
+Tear down and rebuild the Windrose+ Lua state through UE4SS `RestartMod`, so edits under `WindrosePlus/Scripts/` are picked up without restarting the game server. Requires a UE4SS build that exposes `RestartMod`. This only reloads Lua — it does not rebuild override PAKs, so `.ini` and multiplier edits still need a server restart through `StartWindrosePlusServer.bat`.
+
+```
+Usage: wp.modreload
+```
+
+```
+> wp.modreload
+WP+ mod restart triggered (Lua state will be torn down + rebuilt)
+```
+
 ---
 
 ## Map
@@ -620,7 +794,7 @@ Execute a command via the RCON interface.
 ```json
 {
     "status": "ok",
-    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrose+ v1.0.0"
+    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrosePlus v1.3.15"
 }
 ```
 

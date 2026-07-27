@@ -4,7 +4,20 @@ Hey — glad you're here. Whether it's a bug report, a new command, or a wild Lu
 
 ## Found a bug?
 
-Open an [issue](https://github.com/HumanGenome/WindrosePlus/issues). Include what happened, what you expected, and your Windrose+ version. Screenshots or logs help a lot.
+Open an [issue](https://github.com/HumanGenome/WindrosePlus/issues). Include:
+
+- Your Windrose+ version (`wp.version`) and Windrose dedicated-server version (`DeploymentId` in `R5/ServerDescription.json`)
+- What happened and what you expected
+- Steps to reproduce
+- Relevant logs — `R5/Binaries/Win64/ue4ss/UE4SS.log`, the PAK builder console output, or `windrose_plus_data/logs/<date>.log`
+
+Screenshots help a lot. `wp.doctor` output is the fastest single thing to paste for a config or runtime problem.
+
+If your issue is about your specific managed hosting (control panel, billing, support), please contact your host directly. Windrose+ GitHub issues are for the open-source mod itself.
+
+## Found a security issue?
+
+Don't open a public issue — see [SECURITY.md](.github/SECURITY.md).
 
 ## Want to add something?
 
