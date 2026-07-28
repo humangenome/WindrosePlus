@@ -198,6 +198,23 @@ def main():
             print("--release needs a tag")
             return 2
         tag = args[1]
+        # Ask what the release actually has BEFORE downloading. A release with zero assets
+        # is a normal state (an asset can be removed), and `gh release download` exits
+        # non-zero on it - treating that as a scan failure is cry-wolf, and a scanner that
+        # cries wolf is one nobody reads. A real download failure below still fails closed.
+        q = subprocess.run(["gh", "release", "view", tag, "--json", "assets"],
+                           capture_output=True, text=True)
+        if q.returncode != 0:
+            print("could not read release %s: %s" % (tag, q.stderr.strip()[:300]))
+            return 2
+        try:
+            n_assets = len(json.loads(q.stdout).get("assets") or [])
+        except Exception as exc:
+            print("could not parse release %s: %s" % (tag, exc))
+            return 2
+        if n_assets == 0:
+            print("release %s has no assets" % tag)
+            return 0
         tmp = tempfile.mkdtemp(prefix="pubscan-")
         p = subprocess.run(["gh", "release", "download", tag, "--dir", tmp, "--clobber"],
                            capture_output=True, text=True)
@@ -205,9 +222,10 @@ def main():
             print("could not download release %s: %s" % (tag, p.stderr.strip()[:300]))
             return 2
         paths = [os.path.join(tmp, f) for f in sorted(os.listdir(tmp))]
-        if not paths:
-            print("release %s has no assets to check" % tag)
-            return 0
+        if len(paths) != n_assets:
+            print("release %s: expected %d assets, downloaded %d - failing closed"
+                  % (tag, n_assets, len(paths)))
+            return 2
     else:
         paths = args
 
