@@ -1,0 +1,62 @@
+name: Artifact scan
+
+# Refuses to let a published release asset carry never-publish material.
+#
+# Three triggers, because no single one is sufficient:
+#   release        immediate feedback when a release is published or edited
+#   schedule       catches an asset added to an existing release - GitHub emits NO event
+#                  for an asset upload, so a release trigger alone cannot see one
+#   dispatch       on demand
+#
+# Detect only. It never deletes, edits or replaces anything.
+
+on:
+  release:
+    types: [published, released, prereleased, edited, created]
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to scan (blank = every release)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Scan published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAGS="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAGS="${{ inputs.tag }}"
+          else
+            TAGS=$(gh release list --limit 200 --json tagName --jq '.[].tagName')
+          fi
+          if [ -z "$TAGS" ]; then
+            echo "no releases to scan"
+            exit 0
+          fi
+          rc=0
+          for tag in $TAGS; do
+            echo "::group::$tag"
+            python scripts/verify-published-artifacts.py --release "$tag" || rc=1
+            echo "::endgroup::"
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::A published asset carries never-publish material. See the failing group above."
+          fi
+          exit $rc
