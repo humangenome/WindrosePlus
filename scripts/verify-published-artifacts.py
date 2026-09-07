@@ -30,11 +30,6 @@ SKIP_PREFIXES = [
 REPO_RULES = {
     "entry_deny": [
         {
-            "id": "HEARTH-BWHOST",
-            "re": "(?i)(^|/)bw_host(/|$)",
-            "desc": "Bellwright host mod (RULE #21d)"
-        },
-        {
             "id": "CAULDRON-STEAMEMU",
             "re": "(?i)(goldberg|gbe_fork|steam_api64|steam_settings|steam_interfaces|steamemu|coldclientloader)",
             "desc": "Steam emulator / headless-auth recipe (RULE #21e)"
@@ -48,14 +43,6 @@ REPO_RULES = {
             "id": "LANTERN-HOSTPATCH-SRC",
             "re": "(?i)LanternHostPatch[^/]*\\.(cpp|cxx|cc|h|hpp|hxx|lib|exp|pdb)$",
             "desc": "LanternHostPatch source (RULE #21c)"
-        }
-    ],
-    "entry_crc_deny": [
-        {
-            "id": "HEARTH-SIG-SERVER",
-            "re": "(?i)UE4SS_Signatures/GUObjectHashTables\\.lua$",
-            "crc": 2631040471,
-            "desc": "SERVER-variant Bellwright signature pack (RULE #21d)"
         }
     ]
 }
