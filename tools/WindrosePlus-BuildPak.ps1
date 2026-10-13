@@ -187,6 +187,11 @@ $disableMultiplierPak = "$env:WINDROSEPLUS_DISABLE_MULTIPLIER_PAK".Trim().ToLowe
 if (-not (Test-Path -LiteralPath $stateDir) -and -not $DryRun) {
     New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 }
+# Activity log folder for the Lua mod (it cannot create folders itself).
+$activityLogDir = Join-Path $stateDir "logs"
+if (-not (Test-Path -LiteralPath $activityLogDir) -and -not $DryRun) {
+    try { New-Item -ItemType Directory -Force -Path $activityLogDir | Out-Null } catch {}
+}
 
 # Older builds wrote state dotfiles into R5\Content\Paks. Current Windrose
 # scans JSON files under the content tree as assets, so keep WP+ state outside

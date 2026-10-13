@@ -150,6 +150,7 @@ function Admin._registerCommands()
                 {"server", "Server"},
                 {"players", "Players"},
                 {"world", "World"},
+                {"map", "Map"},
                 {"diagnostics", "Diagnostics"},
                 {"admin", "Admin"},
                 {"debug", "Debug"},

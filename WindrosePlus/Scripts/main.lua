@@ -5,8 +5,7 @@
 --
 -- VERSION below is rewritten from the git tag by .github/workflows/release.yml
 -- at release time. The literal here is the development default and may lag the
--- latest CHANGELOG entry between tagged releases — that's flagged as a
--- non-blocking warning by .github/workflows/version-check.yml.
+-- latest CHANGELOG entry between tagged releases.
 WindrosePlus = {
     VERSION = "1.1.24",
     state = {
@@ -101,9 +100,8 @@ end
 -- Sentinel files used to confirm a candidate path is the Windrose game root.
 -- pakchunk0-WindowsServer.pak has been the dedicated-server pak filename
 -- across every Windrose engine version we have shipped against. The shipping
--- exe is the next-most-stable check. ServerDescription.json existed on
--- 0.10.0.3.104 and earlier and was removed by Facepunch in 0.10.0.5.120 — kept
--- last as a legacy fallback so older self-hosted installs still match.
+-- exe is the next-most-stable check. R5\ServerDescription.json only exists
+-- after the server's first start, so it is checked last.
 local function _isGameRoot(root)
     local sentinels = {
         root .. "R5\\Content\\Paks\\pakchunk0-WindowsServer.pak",
@@ -207,117 +205,220 @@ local POIScan = loadModule("POIScan", function()
     local m = require("modules.poiscan"); m.init(gameDir, Config); return m
 end)
 
--- Register wp.mapgen command
-if Admin and MapGen then
-    Admin._commands["wp.mapgen"] = {
-        description = "Generate heightmap for the live map viewer",
-        usage = "wp.mapgen",
-        handler = function(args)
-            local status, message = MapGen.generate()
-            return message
-        end
-    }
+-- ------------
+-- Sea Chart map pipeline
+--
+--   wp.mapexport  the HeightmapExporter C++ mod reads the live world's landscape
+--                 into windrose_plus_data\terrain_v17.json + heightmaps\, then
+--                 the tiles are rebuilt from it automatically.
+--   wp.mapgen     rebuilds the Sea Chart tiles from the terrain already on disk
+--                 (the dashboard runs tools\generateTiles.ps1 for us).
+--   wp.mapprobe   writes a landscape diagnostic to terrain_probe.json (debug).
+--
+-- The terrain export is tied to the world it came from (WorldIslandId in
+-- R5\ServerDescription.json, recorded in windrose_plus_data\map_world.txt), so a
+-- new or switched world re-exports on its first player instead of showing the
+-- old world's islands.
+-- ------------
+
+local function mapDataDir()
+    return gameDir .. "windrose_plus_data"
 end
 
--- Register wp.mapexport command (triggers C++ HeightmapExporter mod)
-if Admin then
-    Admin._commands["wp.mapexport"] = {
-        description = "Trigger terrain heightmap export for map tiles",
-        usage = "wp.mapexport",
-        handler = function(args)
-            local dataDir = (WindrosePlus._modules.MapGen and WindrosePlus._modules.MapGen._gameDir or ".\\") .. "windrose_plus_data"
-            local triggerPath = dataDir .. "\\export_heightmap_trigger"
-            local f = io.open(triggerPath, "w")
-            if f then
-                f:write("export")
-                f:close()
-                return "Heightmap export triggered. The C++ mod will process this within 5 seconds."
-            else
-                return "Error: could not write trigger file"
-            end
-        end
-    }
+local function fileExists(path)
+    local f = io.open(path, "r")
+    if f then f:close(); return true end
+    return false
 end
 
--- Re-export commands.json so wp.mapgen / wp.mapexport (and any mod commands
--- registered via API.registerCommand above) are in the dashboard's view.
-if Admin and Admin.writeCommandsJson then Admin.writeCommandsJson() end
-
--- Auto-trigger heightmap export on first player connection if no map exists
-local _mapExportTriggered = false
-local function checkAndTriggerMapExport()
-    if _mapExportTriggered then return end
-    if WindrosePlus.state.playerCount == 0 then return end
-
-    local dataDir = gameDir .. "windrose_plus_data"
-    -- Check if terrain data already exists (try opening a known heightmap file)
-    local checkPath = dataDir .. "\\heightmaps\\hf_l10_s0_0.bin"
-    local f = io.open(checkPath, "r")
-    if f then
-        f:close()
-        _mapExportTriggered = true -- map exists, don't trigger
-        return
-    end
-
-    -- No map data — trigger export
-    local triggerPath = dataDir .. "\\export_heightmap_trigger"
-    local f = io.open(triggerPath, "w")
-    if f then
-        f:write("auto")
-        f:close()
-        Log.info("Core", "Auto-triggered heightmap export (first player, no cached map)")
-    end
-    _mapExportTriggered = true
+local function readFirstLine(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local line = f:read("*l")
+    f:close()
+    if line then line = line:gsub("%s+$", "") end
+    if line == "" then return nil end
+    return line
 end
-WindrosePlus._checkMapExport = checkAndTriggerMapExport
 
--- Watch for heightmap export completion and trigger tile generation
-local _tileGenTriggered = false
-local function checkAndTriggerTileGen()
-    if _tileGenTriggered then return end
+local function writeSmallFile(path, text)
+    local f = io.open(path, "w")
+    if not f then return false end
+    f:write(text)
+    f:close()
+    return true
+end
 
-    local dataDir = gameDir .. "windrose_plus_data"
-    local donePath = dataDir .. "\\export_heightmap_done"
-    local coordsPath = dataDir .. "\\map_coords.json"
+-- An export taken while the server sits in its lobby map (no player online yet)
+-- has no landscape components, so treat a terrain file without a single
+-- heightfield as missing.
+local function terrainLooksValid(path)
+    local f = io.open(path, "r")
+    if not f then return false end
+    local raw = f:read("*a")
+    f:close()
+    return raw ~= nil and #raw > 200 and raw:find('"h":1', 1, true) ~= nil
+end
 
-    -- Check if export finished but tiles not yet generated
-    local doneFile = io.open(donePath, "r")
-    if not doneFile then return end
-    doneFile:close()
+local function currentWorldId()
+    local f = io.open(gameDir .. "R5\\ServerDescription.json", "r")
+    if not f then return nil end
+    local raw = f:read("*a")
+    f:close()
+    local id = raw and raw:match('"WorldIslandId"%s*:%s*"([^"]*)"')
+    if id == nil or id == "" then return nil end
+    return id
+end
 
-    -- Check if tiles already exist
-    local coordsFile = io.open(coordsPath, "r")
-    if coordsFile then
-        coordsFile:close()
-        _tileGenTriggered = true
-        return
+local _pendingTileGenAfterExport = false
+
+local function requestTerrainExport(reason)
+    local dir = mapDataDir()
+    -- Clear the old completion marker so the watcher waits for this export.
+    os.remove(dir .. "\\export_heightmap_done")
+    if not writeSmallFile(dir .. "\\export_heightmap_trigger", reason or "export") then
+        return false
     end
+    _pendingTileGenAfterExport = true
+    local worldId = currentWorldId()
+    if worldId then writeSmallFile(dir .. "\\map_world.txt", worldId .. "\n") end
+    return true
+end
 
-    -- Run tile generator (check tools/ first, then windrose_plus_http/ for alt deploy layouts)
+local function findTileGenerator()
     local candidates = {
         gameDir .. "windrose_plus\\tools\\generateTiles.ps1",
+        gameDir .. "R5\\Binaries\\Win64\\ue4ss\\Mods\\WindrosePlus\\tools\\generateTiles.ps1",
         gameDir .. "tools\\generateTiles.ps1",
         gameDir .. "windrose_plus_http\\generateTiles.ps1",
     }
-    local ps1 = nil
     for _, path in ipairs(candidates) do
-        local f = io.open(path, "r")
-        if f then f:close(); ps1 = path; break end
+        if fileExists(path) then return path end
+    end
+    return nil
+end
+
+-- The dashboard HTTP server watches for this file and runs generateTiles.ps1
+-- (os.execute from UE4SS Lua can deadlock the game thread).
+local function requestTileGeneration()
+    local ps1 = findTileGenerator()
+    if not ps1 then return false, "generateTiles.ps1 not found" end
+    if not writeSmallFile(mapDataDir() .. "\\generate_tiles_trigger", ps1 .. "\n" .. gameDir .. "\n") then
+        return false, "could not write the tile generation trigger"
+    end
+    return true
+end
+
+if Admin then
+    Admin._commands["wp.mapgen"] = {
+        description = "Rebuild the Sea Chart tiles from the exported terrain",
+        usage = "wp.mapgen",
+        category = "map",
+        handler = function(args)
+            if not terrainLooksValid(mapDataDir() .. "\\terrain_v17.json") then
+                return "No terrain export for this world yet. It runs by itself when the first player joins, or run wp.mapexport while someone is online."
+            end
+            local ok, err = requestTileGeneration()
+            if not ok then return "Error: " .. tostring(err) end
+            return "Tile rebuild requested. The dashboard regenerates the Sea Chart in the background (about a minute); refresh the page when windrose_plus_data\\map_generation_status.json says complete."
+        end
+    }
+
+    Admin._commands["wp.mapexport"] = {
+        description = "Export the live world's terrain and rebuild the Sea Chart",
+        usage = "wp.mapexport",
+        category = "map",
+        handler = function(args)
+            if (WindrosePlus.state.playerCount or 0) == 0 then
+                return "No players online. Windrose loads the world when the first player joins, so an export now would come back empty. Run wp.mapexport while someone is on the server."
+            end
+            if not requestTerrainExport("export") then
+                return "Error: could not write the export trigger"
+            end
+            return "Terrain export requested. The HeightmapExporter mod picks it up within a few seconds, then the Sea Chart tiles are rebuilt automatically."
+        end
+    }
+
+    if MapGen then
+        Admin._commands["wp.mapprobe"] = {
+            description = "Write a landscape diagnostic to terrain_probe.json",
+            usage = "wp.mapprobe",
+            hidden = true, category = "debug",
+            handler = function(args)
+                local status, message = MapGen.generate()
+                return message
+            end
+        }
+    end
+end
+
+-- Re-export commands.json so the map commands (and any mod commands
+-- registered via API.registerCommand above) are in the dashboard's view.
+if Admin and Admin.writeCommandsJson then Admin.writeCommandsJson() end
+
+-- First player online: export terrain if there is none yet, or if the terrain
+-- on disk belongs to a different world than the one now loaded.
+local _mapExportChecked = false
+local function checkAndTriggerMapExport()
+    if _mapExportChecked then return end
+    if WindrosePlus.state.playerCount == 0 then return end
+    _mapExportChecked = true
+
+    local dir = mapDataDir()
+    local haveTerrain = terrainLooksValid(dir .. "\\terrain_v17.json") and fileExists(dir .. "\\export_heightmap_done")
+    local worldId = currentWorldId()
+    local recordedWorld = readFirstLine(dir .. "\\map_world.txt")
+
+    if haveTerrain then
+        if worldId and recordedWorld and recordedWorld ~= worldId then
+            Log.info("Core", "World changed since the last terrain export (" .. recordedWorld .. " -> " .. worldId .. "); re-exporting the Sea Chart")
+            requestTerrainExport("world-changed")
+        elseif worldId and not recordedWorld then
+            -- Terrain from before world tracking: adopt it for the current world.
+            writeSmallFile(dir .. "\\map_world.txt", worldId .. "\n")
+        end
+        return
     end
 
-    if ps1 then
-        Log.info("Core", "Heightmap export complete — writing tile generation trigger...")
-        -- Write a trigger file instead of os.execute — the dashboard HTTP server picks it up
-        local triggerPath = dataDir .. "\\generate_tiles_trigger"
-        local tf = io.open(triggerPath, "w")
-        if tf then
-            tf:write(ps1 .. "\n" .. gameDir .. "\n")
-            tf:close()
-        end
-    else
-        Log.warn("Core", "Heightmap export done but generateTiles.ps1 not found")
+    if requestTerrainExport("auto") then
+        Log.info("Core", "Auto-triggered heightmap export (first player, no terrain for this world)")
     end
-    _tileGenTriggered = true
+end
+WindrosePlus._checkMapExport = checkAndTriggerMapExport
+
+-- Rebuild tiles when an export finishes, or once at boot when terrain exists
+-- but no tiles were ever generated.
+local _initialTileCheckDone = false
+local function checkAndTriggerTileGen()
+    local dir = mapDataDir()
+    if not fileExists(dir .. "\\export_heightmap_done") then return end
+
+    if _pendingTileGenAfterExport then
+        _pendingTileGenAfterExport = false
+        _initialTileCheckDone = true
+        if not terrainLooksValid(dir .. "\\terrain_v17.json") then
+            Log.warn("Core", "Heightmap export finished with no terrain (world not loaded yet?); Sea Chart tiles left as they were")
+            return
+        end
+        local ok, err = requestTileGeneration()
+        if ok then
+            Log.info("Core", "Heightmap export complete; tile generation requested")
+        else
+            Log.warn("Core", "Heightmap export done but tiles not requested: " .. tostring(err))
+        end
+        return
+    end
+
+    if _initialTileCheckDone then return end
+    _initialTileCheckDone = true
+    if fileExists(dir .. "\\map_coords.json") then return end
+    if not terrainLooksValid(dir .. "\\terrain_v17.json") then return end
+    local ok, err = requestTileGeneration()
+    if ok then
+        Log.info("Core", "Terrain export found without tiles; tile generation requested")
+    else
+        Log.warn("Core", "Heightmap export done but tiles not requested: " .. tostring(err))
+    end
 end
 WindrosePlus._checkTileGen = checkAndTriggerTileGen
 
