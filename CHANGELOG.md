@@ -1,6 +1,34 @@
 # Changelog
 
-> **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and offers Windrose servers with Windrose+ pre-installed.
+> **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
+
+## [1.3.18] - 2026-10-12
+
+### Security
+
+- **The dashboard no longer lets requests from the server machine in without a password.** Up to v1.3.17 every request from the same machine skipped the login. Behind a reverse proxy on that machine (nginx, Caddy, IIS, AMP) that meant anyone who could reach the proxy had the full dashboard and RCON with no password, which is the likely reason setting a password never brought up a login there (#122). It also let any web page open in a browser on the server send RCON commands to it. Every request now needs the password: the dashboard login cookie, or an `X-RCON-Password` header for scripts. If a reverse proxy on the same machine does its own login and you want the old behaviour, set `"server": { "trust_loopback": true }` in `windrose_plus.json` (or `WINDROSEPLUS_TRUST_LOOPBACK=1`).
+- **Ten wrong passwords from one address within five minutes block that address for the rest of the five minutes** (login page and API both answer 429).
+
+### Fixed
+
+- **`POST /api/rcon` accepts the password the docs describe.** The `password` field in the JSON body and the `X-RCON-Password` header were documented but ignored, so a script that followed the docs got 401 unless it logged in through the web form first.
+- **`wp.mapgen` rebuilds the Sea Chart tiles.** It used to write a landscape diagnostic and never touched the tiles, so the "run `wp.mapgen` after updating" step from v1.3.16 did nothing (#121). The diagnostic is now the hidden debug command `wp.mapprobe`.
+- **`wp.mapexport` rebuilds the tiles when the export finishes.** Before, a manual export wrote new terrain and left the old tiles on the chart until a restart. It now refuses to run with nobody online, because Windrose only loads the world when the first player joins and an export taken earlier comes back empty.
+- **A new or switched world gets its own Sea Chart.** The terrain export only ran when no heightmap was on disk, so a server that changed worlds kept showing the old world's islands. Windrose+ now records the world it exported (`WorldIslandId`, in `windrose_plus_data\map_world.txt`) and exports again on the first player join after a world change.
+- **Tiles are built even when nobody has the dashboard open.** The tile builder ran from a timer event that PowerShell only processes between statements, and the dashboard spends its idle time waiting for a request, so tiles appeared only once someone loaded a page. The request loop now checks for tile work every second.
+- **The tile builder is found when the release zip is unpacked straight into `ue4ss\Mods\WindrosePlus`.** Both the mod and the dashboard looked only in `windrose_plus\tools` and `tools`.
+- **Missing tiles at the edge of the public map are transparent instead of white** (#123).
+- **The activity log goes to `windrose_plus_data\logs` on hosts that never ran `install.ps1`.** The dashboard and the PAK builder now create the folder; until then the log landed in `windrose_plus_data` with a warning.
+- **`wp.help` lists the map commands under their own Map heading.**
+
+### Changed
+
+- **Docs match the code.** `rcon.port` and `admin.steam_ids` are marked as not used, the made-up "1 request per second" rate limit is gone from the API docs, and the README's server-query example shows the current game version.
+- **CI checks every Lua file compiles**, next to the existing PowerShell parse check and the `windrose-heal` tests.
+
+### Upgrading
+
+Update, then restart the server and the dashboard. Run `wp.mapgen` once to redraw the Sea Chart from the terrain you already have, or `wp.mapexport` with a player online if the chart shows another world. Scripts that called the API from the server machine without a password now need the `X-RCON-Password` header.
 
 ## [1.3.17] - 2026-07-27
 

@@ -714,22 +714,11 @@ WP+ mod restart triggered (Lua state will be torn down + rebuilt)
 
 ## Map
 
-### wp.mapgen
-
-Generate a heightmap from landscape actors for the live map viewer. Must be run on a fresh server boot before any mod hot-reload (UE4SS cache issues prevent landscape detection after `RestartMod`).
-
-```
-Usage: wp.mapgen
-```
-
-```
-> wp.mapgen
-Heightmap exported: 4 landscapes, 16384 vertices
-```
+The Sea Chart is built in two steps: the `HeightmapExporter` C++ mod exports the live world's terrain to `windrose_plus_data\terrain_v17.json` and `windrose_plus_data\heightmaps\`, then the dashboard runs `windrose_plus\tools\generateTiles.ps1` to draw the tiles. Both run on their own the first time a player joins a world that has no terrain yet, and again when the server loads a different world (Windrose+ records the world's `WorldIslandId` in `windrose_plus_data\map_world.txt`). Tile generation needs the dashboard running. Progress and errors go to `windrose_plus_data\map_generation_status.json`.
 
 ### wp.mapexport
 
-Trigger the C++ HeightmapExporter mod to export raw terrain heightfield data. This writes binary `.bin` files to `windrose_plus_data/heightmaps/` which are then processed into map tiles by `windrose_plus/tools/generateTiles.ps1`.
+Export the live world's terrain and rebuild the Sea Chart tiles when the export finishes. Use it after switching worlds by hand, or when the chart shows islands that are not in your world.
 
 ```
 Usage: wp.mapexport
@@ -737,8 +726,23 @@ Usage: wp.mapexport
 
 ```
 > wp.mapexport
-Heightmap export triggered — check windrose_plus_data/heightmaps/ for output
+Terrain export requested. The HeightmapExporter mod picks it up within a few seconds, then the Sea Chart tiles are rebuilt automatically.
 ```
+
+### wp.mapgen
+
+Rebuild the Sea Chart tiles from the terrain already on disk, without a new export. Use it after updating Windrose+ when the release notes say the tiles changed.
+
+```
+Usage: wp.mapgen
+```
+
+```
+> wp.mapgen
+Tile rebuild requested. The dashboard regenerates the Sea Chart in the background (about a minute); refresh the page when windrose_plus_data\map_generation_status.json says complete.
+```
+
+Before v1.3.18, `wp.mapgen` only wrote a landscape diagnostic (`terrain_probe.json`) and did not touch the tiles. That diagnostic is now the hidden debug command `wp.mapprobe`.
 
 ### wp.nativeprobe
 
@@ -763,7 +767,7 @@ Native probe requested. Check windrose_plus_data\native_probe.json after a few s
 
 ## HTTP API Endpoints
 
-The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints require cookie-based authentication after logging in with the dashboard password. `/api/health` is public for monitoring. Catalog assets and layout overlays are public because they contain generic game data or world-layout data, not player/admin data. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`, and public runtime-overlay access follows the same public-map token rules.
+The web dashboard exposes a REST API for external tools and integrations. Dashboard, admin, config, repair, and RCON endpoints need the RCON password: either the session cookie from logging in to the dashboard, or the password in an `X-RCON-Password` header (scripts and other tools). `POST /api/rcon` also accepts it as a `password` field in the JSON body. Ten wrong passwords from one address within five minutes block that address for the rest of the five minutes (HTTP 429). Requests from the server machine itself need the password too unless `server.trust_loopback` is set (see the config reference). `/api/health` is public for monitoring. Catalog assets and layout overlays are public because they contain generic game data or world-layout data, not player/admin data. The map-only public endpoints are available only when `livemap.public.enabled` is true in `windrose_plus.json`, and public runtime-overlay access follows the same public-map token rules.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -808,4 +812,8 @@ Execute a command via the RCON interface.
 }
 ```
 
-Rate limited to 1 request per second per client IP.
+From a script:
+
+```
+curl -X POST http://localhost:8780/api/rcon -H "X-RCON-Password: your_rcon_password" -H "Content-Type: application/json" -d "{\"command\": \"wp.status\"}"
+```

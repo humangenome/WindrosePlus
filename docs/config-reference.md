@@ -68,8 +68,8 @@ Remote console listener. Read live — changes take effect on `wp.reload` withou
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `false` | Enable the RCON listener. |
-| `port` | `27320` | RCON TCP port. |
-| `password` | `""` | RCON password. Blank (or `changeme`) disables RCON and the dashboard login. |
+| `port` | `27320` | Not used. RCON goes through the dashboard's HTTP API (`POST /api/rcon`); the key is kept so older config files still load. |
+| `password` | `""` | RCON password, also the dashboard login and the `X-RCON-Password` header value for scripts. Blank (or `changeme`) disables RCON and the dashboard login. |
 
 ### query
 
@@ -85,7 +85,7 @@ Server-query responder, so server browsers and monitoring tools can read your pl
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `steam_ids` | `[]` | JSON array of Steam IDs treated as admins. |
+| `steam_ids` | `[]` | Not used yet. Every admin command runs through RCON with the password. |
 
 ### poiscan
 
@@ -104,6 +104,7 @@ Dashboard listener settings.
 |-----|---------|-------------|
 | `http_port` | `8780` | Dashboard/API HTTP port. You can also pass `-Port` to `start_dashboard.bat`. |
 | `bind_ip` | `""` | Optional IP address to bind the dashboard to on multi-IP hosts. Empty means all interfaces when elevated, with localhost fallback. You can also pass `-BindIp` to `start_dashboard.bat`. |
+| `trust_loopback` | `false` | Let requests from the server machine itself skip the dashboard login. Only for a reverse proxy on the same machine that does its own login; anything else on the machine (another program, a web page open in a browser there) would get full RCON access. `WINDROSEPLUS_TRUST_LOOPBACK=1` does the same. Before v1.3.18 this was always on. |
 | `layout_runtime_url` | `""` | Optional compatible layout-runtime provider URL for curated POI, quest, biome, marker, and item-source overlays. The `WINDROSEPLUS_LAYOUT_RUNTIME_URL` environment variable can also set this. |
 
 Example:
@@ -315,7 +316,7 @@ Server network and admin settings.
 | `rcon_password` | *(blank)* | RCON password (leave blank to disable) |
 | `query_enabled` | `true` | Enable server query responses |
 | `query_interval_ms` | `5000` | Query polling interval in milliseconds |
-| `admin_steam_ids` | *(blank)* | Admin Steam IDs (comma-separated) |
+| `admin_steam_ids` | *(blank)* | Not used yet (comma-separated Steam IDs) |
 
 ### [Multipliers]
 

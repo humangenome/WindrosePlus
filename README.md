@@ -16,7 +16,7 @@ Everything your Windrose dedicated server is missing: multipliers, a live map, a
 
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
-> **Official Hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) offers Windrose servers with Windrose+ pre-installed.
+> **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) runs Windrose servers with Windrose+ already installed.
 
 ---
 
@@ -53,8 +53,8 @@ Windrose dedicated servers don't respond to standard server queries, so your ser
 {
   "server": {
     "name": "My Windrose Server",
-    "version": "0.10.0.5.120",
-    "windrose_plus": "1.3.16",
+    "version": "0.10.0.9.32",
+    "windrose_plus": "1.3.18",
     "password_protected": false,
     "max_players": 10,
     "player_count": 3
@@ -114,15 +114,15 @@ Alchemy_Potion_Healing_Great_HealthRestoreRatio = 0.8
 
 A handful of multiplier keys are disabled, a few more are gated behind explicit opt-in, and there's a safe path for recovery if a PAK ever causes trouble.
 
-- **Disabled keys.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but no longer write PAK changes — they were disabled after crash reports from the character, inventory, and crop validators. `wp.givestats` records an audit note only and does not change a character in-game.
+- **Disabled keys.** `points_per_level`, `stack_size`, `weight`, `inventory_size`, and `crop_speed` are parsed for backward compatibility but no longer write PAK changes; they were disabled after crash reports from the character, inventory, and crop validators. `wp.givestats` records an audit note only and does not change a character in-game.
 - **Save-state risk.** `inventory_size`, `stack_size`, `weight`, and other inventory-affecting PAK edits can become part of player save state once a character logs in. Take an out-of-band save backup before enabling them. Windrose+ refuses to build these high-risk multiplier PAKs when another installed PAK also edits inventory assets and removes the existing generated multiplier PAK on that failure, unless `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1` is set.
 - **Emergency multiplier-PAK disable.** Set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. The wrapper removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json` while keeping the dashboard, RCON, Sea Chart, mods loader, and CurveTable PAKs available. Non-default values in `windrose_plus.json` / `windrose_plus.harvest.ini` will not apply until the env var is removed and the server is started through the wrapper again.
-- **Full recovery / disable.** Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move the generated overrides (`WindrosePlus_Multipliers_P.pak`, plus `WindrosePlus_CurveTables_P.pak` / `.utoc` / `.ucas` — all three parts of the CurveTable container), then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` alone is not enough because UE4SS and existing PAK overrides can still load. Restore a save backup from before the inventory-affecting PAK change, confirm the character can join, then re-enable PAK overrides one at a time.
+- **Full recovery / disable.** Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move the generated overrides (`WindrosePlus_Multipliers_P.pak`, plus `WindrosePlus_CurveTables_P.pak` / `.utoc` / `.ucas`, all three parts of the CurveTable container), then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` alone is not enough because UE4SS and existing PAK overrides can still load. Restore a save backup from before the inventory-affecting PAK change, confirm the character can join, then re-enable PAK overrides one at a time.
 
 ### Mod Support
 Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
 
-**For modders** — full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Server-side storage hook notes: [docs/storage-hook-research.md](docs/storage-hook-research.md).
+**For modders:** full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Server-side storage hook notes: [docs/storage-hook-research.md](docs/storage-hook-research.md).
 
 Ships with an example mod:
 
@@ -147,7 +147,7 @@ end, "Greet all online players")
 ```
 
 ### Server Activity Log
-Windrose+ records server-side activity to `windrose_plus_data\logs\YYYY-MM-DD.log` for review and external tooling. Files are line-delimited JSON, append-only, and rolled daily — they survive server restarts and crashes.
+Windrose+ records server-side activity to `windrose_plus_data\logs\YYYY-MM-DD.log` for review and external tooling. Files are line-delimited JSON, append-only, and rolled daily; they survive server restarts and crashes.
 
 Recorded events:
 
@@ -155,11 +155,11 @@ Recorded events:
 |---------------------|--------------------------------------------------------|
 | `mod.boot`          | Windrose+ initializes (version, game dir, hook avail.) |
 | `config.load`       | `windrose_plus.json` is loaded or reloaded             |
-| `config.load.fail`  | Config parse fails — defaults are used                 |
+| `config.load.fail`  | Config parse fails, defaults are used                  |
 | `player.join`       | A player connects                                      |
 | `player.leave`      | A player disconnects                                   |
 | `admin.command`     | Any `wp.*` command runs (caller, args, result, ms)     |
-| `heartbeat`         | Every 5 minutes — uptime, mode, player count, config   |
+| `heartbeat`         | Every 5 minutes: uptime, mode, player count, config    |
 
 Each line carries a fixed envelope: `ts` (UTC ISO-8601), `ts_unix`, `sid` (per-boot session id), `ev`, and `payload`. External tools (and mods, via `WindrosePlus.API.logEvent(ev, payload)`) can tail the current day's file or read past days for replay.
 
@@ -191,7 +191,7 @@ This downloads UE4SS, installs the mod, and sets up the dashboard. Reinstalling 
 
 ### Step 2: Start Your Server
 
-Edits to `multipliers` in `windrose_plus.json` or to any `.ini` file need to be baked into a game override PAK before the server launches — otherwise the game loads the unmodified defaults. That rebuild step is what `tools/WindrosePlus-BuildPak.ps1` does.
+Edits to `multipliers` in `windrose_plus.json` or to any `.ini` file need to be baked into a game override PAK before the server launches; otherwise the game loads the unmodified defaults. That rebuild step is what `tools/WindrosePlus-BuildPak.ps1` does.
 
 **The easy way:** run `StartWindrosePlusServer.bat` (installed at your server root). It runs the rebuild step if anything changed (no-op in milliseconds otherwise), then launches `WindroseServer.exe`.
 
@@ -203,7 +203,7 @@ If you need to recover from a bad PAK or test without multipliers, see [Multipli
 powershell -NoProfile -ExecutionPolicy Bypass -File "<gameDir>\windrose_plus\tools\WindrosePlus-BuildPak.ps1" -ServerDir "<gameDir>" -RemoveStalePak
 ```
 
-Non-zero exit means the build failed — don't launch the game.
+Non-zero exit means the build failed, so don't launch the game.
 
 Windrose+ loads automatically either way.
 
@@ -233,8 +233,8 @@ You can also set `"server": { "bind_ip": "192.0.2.10" }` in `windrose_plus.json`
 
 Windrose+ has two config files:
 
-- **`windrose_plus.json`** (basic): multipliers, RCON password, admin Steam IDs, feature flags. Created automatically on first launch. Edit this for everyday changes.
-- **`windrose_plus.ini`** (advanced): player base stats, weapon damage, food effects, creature stats, talents, combat tuning. Optional — copy `windrose_plus\config\windrose_plus.default.ini` to `windrose_plus.ini` if you want to customize.
+- **`windrose_plus.json`** (basic): multipliers, the RCON and dashboard password, the dashboard port, and Sea Chart options. Created automatically on first launch. Edit this for everyday changes.
+- **`windrose_plus.ini`** (advanced): player base stats, weapon damage, food effects, creature stats, talents, combat tuning. Optional: copy `windrose_plus\config\windrose_plus.default.ini` to `windrose_plus.ini` if you want to customize.
 
 Example `windrose_plus.json`:
 
@@ -264,13 +264,15 @@ Example `windrose_plus.json`:
 }
 ```
 
-Multiplier and `.ini` edits need the override PAK rebuilt before the next launch — see [Step 2](#step-2-start-your-server) for the rebuild command (`StartWindrosePlusServer.bat` handles it for you). RCON password, admin IDs, and feature flags are read live and take effect without a rebuild.
+Multiplier and `.ini` edits need the override PAK rebuilt before the next launch. See [Step 2](#step-2-start-your-server) for the rebuild command (`StartWindrosePlusServer.bat` handles it for you). The RCON password and Sea Chart options are read live and take effect without a rebuild.
 
 See [docs/config-reference.md](docs/config-reference.md) for every advanced INI setting.
 
 ### Dashboard
 
 Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, resource-zone hints, and item drop sources in real time.
+
+The dashboard asks for the RCON password from every browser, including one on the server itself. Scripts and other tools send the same password in an `X-RCON-Password` header ([HTTP API](docs/commands.md#http-api-endpoints)). If you put the dashboard behind a reverse proxy on the same machine that does its own login, set `"server": { "trust_loopback": true }` to let it through.
 
 If you want friends to see the Sea Chart without the dashboard password, enable the optional map-only view:
 
@@ -328,10 +330,11 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **Server crashes on startup** - Check `UE4SS-settings.ini`. The current Windrose-safe defaults keep `HookProcessInternal = 1`, `HookEngineTick = 0`, `HookUObjectProcessEvent = 0`, and `DefaultExecuteInGameThreadMethod = EngineTick`. Older guidance to enable `HookEngineTick` or switch the dispatcher to `ProcessEvent` is no longer correct.
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
-- **No map data** - A player needs to connect at least once to trigger terrain export. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
-- **Sea Chart is rotated a quarter turn from the in-game map** - Tile sets generated before v1.3.16 lay world X across and world Y down, which puts north on the right. The renderer only draws north-up when `windrose_plus_data\map_coords.json` contains `"orientation": "north-up"`, and older tile sets do not have that field, so updating alone changes nothing. Run `wp.mapgen` after updating and hard-refresh the page. Note that `overlay_transform.rotate_degrees` moves curated overlays only - it never affects terrain tiles or player positions, so it will not correct this and will double-rotate the overlays once the tiles are regenerated.
-- **Sea Chart layers say "Curated overlay not configured"** - The curated POI / quest / biome / marker / item-source layers come from an optional layout-runtime provider. The base map (terrain, players, your own POIScan output, item catalog) works without one. To enable the curated layers, point `server.layout_runtime_url` in `windrose_plus.json` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) at any compatible provider. The HTTP contract — GET, seeding POST, and response payload shape — is documented in [`docs/config-reference.md`](docs/config-reference.md#layout-runtime-provider-optional) so you can run your own.
-- **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, make sure you are on v1.0.14 or newer; older builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
+- **No map data** - Windrose loads the world when the first player joins, so the terrain export runs then. The dashboard must be running to draw the tiles. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
+- **Sea Chart shows islands from another world** - Before v1.3.18 the terrain export was never redone after a world change. Run `wp.mapexport` while a player is online; it exports the current world and rebuilds the tiles. From v1.3.18 a world change is picked up on the first player join.
+- **Sea Chart is rotated a quarter turn from the in-game map** - Tile sets generated before v1.3.16 lay world X across and world Y down, which puts north on the right. The renderer only draws north-up when `windrose_plus_data\map_coords.json` contains `"orientation": "north-up"`, and older tile sets do not have that field, so updating alone changes nothing. Rebuild the tiles with `wp.mapgen` (v1.3.18 or newer; older versions of that command did not touch the tiles, so use `wp.mapexport` with a player online there) and hard-refresh the page. Note that `overlay_transform.rotate_degrees` moves curated overlays only - it never affects terrain tiles or player positions, so it will not correct this and will double-rotate the overlays once the tiles are regenerated.
+- **Sea Chart layers say "Curated overlay not configured"** - The curated POI / quest / biome / marker / item-source layers come from an optional layout-runtime provider. The base map (terrain, players, your own POIScan output, item catalog) works without one. To enable the curated layers, point `server.layout_runtime_url` in `windrose_plus.json` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) at any compatible provider. The HTTP contract (GET, seeding POST, and response payload shape) is documented in [`docs/config-reference.md`](docs/config-reference.md#layout-runtime-provider-optional) so you can run your own.
+- **CurveTable PAK fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full retoc error is shown. If the message mentions `ScriptObjects`, update Windrose+: very old builds passed only one `.utoc` file to retoc instead of the full `R5\Content\Paks` folder.
 - **INI settings apply only on v1.3.16 or newer** - Up to v1.3.15 the CurveTable override was written as a legacy `.pak`. Windrose keeps those assets in an IoStore container, and UE5 resolves them from the container, so the override was built and verified correctly but never reached the running game. Nothing in `windrose_plus.ini` (or the weapons / food / gear / entities files) took effect. v1.3.16 writes the override as an IoStore container instead. Update, then start the server through `StartWindrosePlusServer.bat` so the container is rebuilt.
 - **Food / weapon / gear INI changes build but do not show in-game** - The game reads CurveTable overrides only when the process starts, and the container cannot be replaced while the server is running. Fully stop every `WindroseServer-Win64-Shipping.exe` process, run the server through `StartWindrosePlusServer.bat`, and confirm the builder prints `CurveTables PAK` plus `Patched ... values (verified)`. The last verified patch set is written to `windrose_plus_data\.windroseplus_curvetables_manifest.json` and summarized by `/api/pak-status`. To verify the food asset is inside the generated container, run `windrose_plus\tools\bin\retoc.exe list R5\Content\Paks\WindrosePlus_CurveTables_P.utoc | findstr /i CT_Food_GE_Values`.
 - **Multiplier PAK / save issues / full recovery** - See [Multiplier PAK safety](#multiplier-pak-safety) for the disable env var, recovery steps, and save-backup guidance.
