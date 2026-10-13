@@ -2,6 +2,12 @@
 
 > **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
 
+## [1.3.20] - 2026-10-13
+
+### Changed
+
+- **The screenshots in the release zip use neutral names.** The console and Sea Chart screenshots under `docs/screenshots` showed a server name and a player name from a test session. They now read "Windrose Server" and "Marlow", and the unused v1.0 Sea Chart screenshot is gone. The mod, dashboard and tools are unchanged from v1.3.19, so a server already on v1.3.19 does not need to update.
+
 ## [1.3.19] - 2026-10-12
 
 ### Fixed
