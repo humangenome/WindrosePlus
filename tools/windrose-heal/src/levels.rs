@@ -1,4 +1,5 @@
-// Vanilla DA_HeroLevels.json extracted from pakchunk0-WindowsServer.pak @ Windrose 0.10.0.2.54
+// Vanilla DA_HeroLevels.json extracted from pakchunk0-WindowsServer.pak @ Windrose 0.10.0.2.54,
+// re-checked unchanged (all 15 rows) against 0.10.0.9.32 on 2026-10-12.
 // Source: R5/Plugins/R5BusinessRules/Content/EntityProgression/DA_HeroLevels.json
 // This is the authoritative reward table used by the engine's ValidateData.
 // When Windrose ships a game update, re-extract and regenerate this file.
