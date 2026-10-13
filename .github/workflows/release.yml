@@ -178,6 +178,7 @@ jobs:
             --exclude='.gitattributes' \
             --exclude='CHANGELOG.md' \
             --exclude='CONTRIBUTING.md' \
+            --exclude='/scripts/' \
             --exclude='staging' \
             --exclude='node_modules' \
             --exclude='__pycache__' \

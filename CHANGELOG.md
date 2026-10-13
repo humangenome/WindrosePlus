@@ -2,6 +2,12 @@
 
 > **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
 
+## [1.3.19] - 2026-10-12
+
+### Fixed
+
+- **The release zip no longer carries the repository's `scripts/` folder.** v1.3.18 shipped `scripts/verify-published-artifacts.py`, a CI helper for this repository. Hosts that unpack the zip straight into `ue4ss\Mods\WindrosePlus` then had a `scripts` folder next to the mod's `Scripts` folder, which is the same folder on Windows, so the mod's own scripts could not be moved into place and Windrose+ did not load. Everything else is identical to v1.3.18.
+
 ## [1.3.18] - 2026-10-12
 
 ### Security
