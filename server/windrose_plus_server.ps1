@@ -51,6 +51,13 @@ for ($i = 0; $i -lt 5; $i++) {
 # Find data directory
 $dataDir = Join-Path $gameDir "windrose_plus_data"
 if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
+# The activity log lives in windrose_plus_data\logs. Lua cannot create folders
+# safely, so make it here for hosts that never ran install.ps1; the mod uses it
+# from its next start.
+$activityLogDir = Join-Path $dataDir "logs"
+if (-not (Test-Path -LiteralPath $activityLogDir)) {
+    try { New-Item -ItemType Directory -Path $activityLogDir -Force | Out-Null } catch {}
+}
 
 # Find web directory
 $webDir = Join-Path $PSScriptRoot "web"
@@ -429,6 +436,77 @@ function Get-SessionFromCookies($request) {
     return $null
 }
 
+# Compares two secrets without stopping at the first different character.
+function Test-SecretEqual([string]$Provided, [string]$Expected) {
+    if ($null -eq $Provided -or $null -eq $Expected) { return $false }
+    $a = [System.Text.Encoding]::UTF8.GetBytes($Provided)
+    $b = [System.Text.Encoding]::UTF8.GetBytes($Expected)
+    $diff = $a.Length -bxor $b.Length
+    for ($i = 0; $i -lt $b.Length; $i++) {
+        $ai = if ($i -lt $a.Length) { $a[$i] } else { 0 }
+        $diff = $diff -bor ($ai -bxor $b[$i])
+    }
+    return ($diff -eq 0)
+}
+
+# Requests from this machine are NOT trusted by default. Up to v1.3.17 every
+# loopback request skipped the login, which let anyone in through a reverse
+# proxy on the same host (nginx, Caddy, IIS, AMP) and let any web page open in a
+# browser on the server send RCON commands. Set server.trust_loopback = true (or
+# WINDROSEPLUS_TRUST_LOOPBACK=1) only when a same-host proxy does its own login.
+# Scripts on the same host can send the password in an X-RCON-Password header.
+function Get-TrustLoopback {
+    $envValue = "$env:WINDROSEPLUS_TRUST_LOOPBACK".Trim()
+    if ($envValue) { return ($envValue -eq "1" -or $envValue -ieq "true") }
+    $cfg = Get-CurrentConfig
+    if ($null -eq $cfg -or $null -eq $cfg.server) { return $false }
+    return (Get-ConfigBool $cfg.server "trust_loopback" $false)
+}
+
+function Test-LoopbackRequest($request) {
+    $remoteAddr = $null
+    try { $remoteAddr = $request.RemoteEndPoint.Address } catch {}
+    if (-not $remoteAddr) { return $false }
+    $addrStr = $remoteAddr.ToString()
+    if ($remoteAddr.IsLoopback) { return $true }
+    if ($addrStr -eq "::1" -or $addrStr -eq "127.0.0.1") { return $true }
+    if ($addrStr.StartsWith("::ffff:127.")) { return $true }
+    if ($remoteAddr.IsIPv4MappedToIPv6) {
+        try { if ($remoteAddr.MapToIPv4().IsLoopback) { return $true } } catch {}
+    }
+    return $false
+}
+
+function Get-ClientKey($request) {
+    try { return $request.RemoteEndPoint.Address.ToString() } catch { return "unknown" }
+}
+
+# Failed-password throttle: 10 wrong passwords from one address inside 5 minutes
+# blocks that address for the rest of the window. The listener is single-threaded,
+# so this answers 429 instead of sleeping.
+$script:AuthFailures = @{}
+$script:AuthFailureLimit = 10
+$script:AuthFailureWindowSeconds = 300
+
+function Get-RecentAuthFailures([string]$ClientKey) {
+    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if (-not $script:AuthFailures.ContainsKey($ClientKey)) { return @() }
+    $recent = @($script:AuthFailures[$ClientKey] | Where-Object { ($now - $_) -lt $script:AuthFailureWindowSeconds })
+    if ($recent.Count -eq 0) { $script:AuthFailures.Remove($ClientKey) } else { $script:AuthFailures[$ClientKey] = $recent }
+    return $recent
+}
+
+function Test-AuthThrottled([string]$ClientKey) {
+    return ((Get-RecentAuthFailures $ClientKey).Count -ge $script:AuthFailureLimit)
+}
+
+function Add-AuthFailure([string]$ClientKey) {
+    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $recent = @(Get-RecentAuthFailures $ClientKey)
+    $script:AuthFailures[$ClientKey] = @($recent + $now)
+    if ($script:AuthFailures.Count -gt 5000) { $script:AuthFailures.Clear() }
+}
+
 # Login page HTML
 $loginPageHtml = @"
 <!DOCTYPE html>
@@ -496,15 +574,27 @@ if ($listenHost -eq "+") {
     }
 }
 
-# Background tile generation watcher
-$tileGenTimer = New-Object System.Timers.Timer
-$tileGenTimer.Interval = 5000
-$tileGenTimer.AutoReset = $true
+# Tile generation watcher. The Lua mod writes generate_tiles_trigger (it cannot
+# run PowerShell itself); the request loop below calls this whenever it has
+# been idle for a second and after every request. This used to be a
+# System.Timers.Timer event, but PowerShell only runs event actions between
+# statements, and the loop sits inside HttpListener.GetContext() while nobody
+# is using the dashboard, so the tiles were only built once someone opened it.
 $tileGenTrigger = Join-Path $dataDir "generate_tiles_trigger"
 $tileGenStatus = Join-Path $dataDir "map_generation_status.json"
-$tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1"
-if (-not (Test-Path -LiteralPath $tileGenScript)) { $tileGenScript = Join-Path $gameDir "tools\generateTiles.ps1" }
-Register-ObjectEvent $tileGenTimer Elapsed -Action {
+# install.ps1 puts the tools in <game>\windrose_plus\tools; hosts that unpack
+# the release zip straight into ue4ss\Mods\WindrosePlus have them next to this
+# script's folder instead.
+$tileGenScript = $null
+foreach ($candidate in @(
+    (Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1"),
+    (Join-Path $PSScriptRoot "..\tools\generateTiles.ps1"),
+    (Join-Path $gameDir "tools\generateTiles.ps1")
+)) {
+    if (Test-Path -LiteralPath $candidate) { $tileGenScript = [System.IO.Path]::GetFullPath($candidate); break }
+}
+if (-not $tileGenScript) { $tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1" }
+function Invoke-TileGenerationIfRequested {
     if (Test-Path -LiteralPath $tileGenTrigger) {
         Remove-Item $tileGenTrigger -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $tileGenScript) {
@@ -544,8 +634,7 @@ Register-ObjectEvent $tileGenTimer Elapsed -Action {
             } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
         }
     }
-} | Out-Null
-$tileGenTimer.Start()
+}
 
 function Send-Json($context, $data, $statusCode = 200) {
     $json = if ($null -eq $data) { '{}' } else { $data | ConvertTo-Json -Depth 100 -Compress }
@@ -1056,7 +1145,12 @@ function Invoke-RepairTool($healExe, $auditLog, $uploadPath, $outputPath, $timeo
 
 try {
     while ($listener.IsListening) {
-        $context = $listener.GetContext()
+        if (Test-Path -LiteralPath $tileGenTrigger) { Invoke-TileGenerationIfRequested }
+        $contextTask = $listener.GetContextAsync()
+        while (-not $contextTask.AsyncWaitHandle.WaitOne(1000)) {
+            if (Test-Path -LiteralPath $tileGenTrigger) { Invoke-TileGenerationIfRequested }
+        }
+        $context = $contextTask.GetAwaiter().GetResult()
         $path = $context.Request.Url.AbsolutePath.TrimEnd("/")
         $method = $context.Request.HttpMethod
 
@@ -1073,6 +1167,12 @@ try {
             # Login page — no auth required
             if ($path -eq "/login") {
                 $currentPassword = Get-CurrentRconPassword
+                $clientKey = Get-ClientKey $context.Request
+                if ($method -eq "POST" -and (Test-AuthThrottled $clientKey)) {
+                    $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Too many wrong passwords. Wait a few minutes and try again.</div>')
+                    Send-Html $context $errorHtml 429
+                    continue
+                }
                 if ($method -eq "POST") {
                     $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
                     $body = $reader.ReadToEnd()
@@ -1126,11 +1226,12 @@ try {
                     } elseif ($currentPassword -eq "changeme") {
                         $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Change the default password in windrose_plus.json</div>')
                         Send-Html $context $errorHtml
-                    } elseif ($formPassword -eq $currentPassword) {
+                    } elseif (Test-SecretEqual $formPassword $currentPassword) {
                         $token = New-SessionToken
                         $context.Response.Headers.Add("Set-Cookie", "wp_session=$token; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax")
                         Send-Redirect $context "/"
                     } else {
+                        Add-AuthFailure $clientKey
                         $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Invalid password</div>')
                         Send-Html $context $errorHtml
                     }
@@ -1308,24 +1409,15 @@ try {
                 continue
             }
 
-            # All other routes require authentication, except for trusted
-            # same-host proxy integrations. Loopback source IP is not spoofable
-            # for TCP without LAN-level MITM, and the proxy is expected to
-            # authenticate users before forwarding API calls.
-            $remoteAddr = $null
-            try { $remoteAddr = $context.Request.RemoteEndPoint.Address } catch {}
-            $isLocalRequest = $false
-            if ($remoteAddr) {
-                $addrStr = $remoteAddr.ToString()
-                if ($remoteAddr.IsLoopback) { $isLocalRequest = $true }
-                elseif ($addrStr -eq "::1" -or $addrStr -eq "127.0.0.1") { $isLocalRequest = $true }
-                elseif ($addrStr.StartsWith("::ffff:127.")) { $isLocalRequest = $true }
-                elseif ($remoteAddr.IsIPv4MappedToIPv6) {
-                    try { if ($remoteAddr.MapToIPv4().IsLoopback) { $isLocalRequest = $true } } catch {}
-                }
-            }
+            # All other routes require authentication: a dashboard session
+            # cookie, or the RCON password in an X-RCON-Password header (or, for
+            # POST /api/rcon, a "password" field in the JSON body). Requests from
+            # this machine get no free pass unless server.trust_loopback is set;
+            # see Get-TrustLoopback.
+            $script:RconBodyText = $null
+            $isTrustedLocal = (Test-LoopbackRequest $context.Request) -and (Get-TrustLoopback)
 
-            if (-not $isLocalRequest) {
+            if (-not $isTrustedLocal) {
                 $currentPassword = Get-CurrentRconPassword
                 if ($null -eq $currentPassword) {
                     if ($path.StartsWith("/api/")) {
@@ -1336,7 +1428,7 @@ try {
                     continue
                 }
                 if (-not $currentPassword -or $currentPassword -eq "changeme") {
-                    # No password configured or still default — block everything
+                    # No password configured or still default: block everything
                     if ($path.StartsWith("/api/")) {
                         Send-Json $context @{ error = "No password configured. Set a password in windrose_plus.json to access the dashboard." } 403
                     } else {
@@ -1344,7 +1436,32 @@ try {
                     }
                     continue
                 }
-                if (-not (Test-SessionToken (Get-SessionFromCookies $context.Request))) {
+                $authenticated = Test-SessionToken (Get-SessionFromCookies $context.Request)
+                if (-not $authenticated) {
+                    $clientKey = Get-ClientKey $context.Request
+                    $headerPassword = $context.Request.Headers["X-RCON-Password"]
+                    $bodyPassword = $null
+                    if (-not $headerPassword -and $path -eq "/api/rcon" -and $method -eq "POST") {
+                        $script:RconBodyText = (New-Object System.IO.StreamReader($context.Request.InputStream)).ReadToEnd()
+                        try {
+                            $parsedBody = $script:RconBodyText | ConvertFrom-Json
+                            if ($parsedBody -and $parsedBody.password) { $bodyPassword = [string]$parsedBody.password }
+                        } catch {}
+                    }
+                    $offered = if ($headerPassword) { [string]$headerPassword } else { $bodyPassword }
+                    if ($offered) {
+                        if (Test-AuthThrottled $clientKey) {
+                            Send-Json $context @{ error = "Too many wrong passwords. Wait a few minutes and try again." } 429
+                            continue
+                        }
+                        if (Test-SecretEqual $offered $currentPassword) {
+                            $authenticated = $true
+                        } else {
+                            Add-AuthFailure $clientKey
+                        }
+                    }
+                }
+                if (-not $authenticated) {
                     # API calls get 401, browser requests get redirect
                     if ($path.StartsWith("/api/")) {
                         Send-Json $context @{ error = "Authentication required" } 401
@@ -1722,8 +1839,16 @@ try {
                         Send-Json $context @{ error = "POST required" } 405
                         continue
                     }
-                    $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
-                    $body = $reader.ReadToEnd() | ConvertFrom-Json
+                    $rawBody = $script:RconBodyText
+                    if ($null -eq $rawBody) {
+                        $rawBody = (New-Object System.IO.StreamReader($context.Request.InputStream)).ReadToEnd()
+                    }
+                    $body = $null
+                    try { $body = $rawBody | ConvertFrom-Json } catch {}
+                    if (-not $body -or -not $body.command) {
+                        Send-Json $context @{ error = "JSON body with a command field required" } 400
+                        continue
+                    }
 
                     $rconSecret = Get-CurrentRconPassword
                     if ($null -eq $rconSecret) {
@@ -1735,8 +1860,8 @@ try {
                         continue
                     }
 
-                    # Session-authenticated users don't need password in API body
-                    # (they already proved identity at login)
+                    # The auth gate above already checked the session cookie,
+                    # X-RCON-Password header or body password.
 
                     # Write command file
                     $cmdId = "ps_" + [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + "_" + (Get-Random -Maximum 999999)
