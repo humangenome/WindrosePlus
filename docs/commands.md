@@ -744,6 +744,14 @@ Tile rebuild requested. The dashboard regenerates the Sea Chart in the backgroun
 
 Before v1.3.18, `wp.mapgen` only wrote a landscape diagnostic (`terrain_probe.json`) and did not touch the tiles. That diagnostic is now the hidden debug command `wp.mapprobe`.
 
+### wp.mapprobe
+
+Hidden debug command. Writes the landscape actors, components and map-related objects the server can see to `windrose_plus_data\terrain_probe.json`. It does not change the Sea Chart.
+
+```
+Usage: wp.mapprobe
+```
+
 ### wp.nativeprobe
 
 Hidden debug command that triggers the experimental `WindroseNativeProbe` C++
