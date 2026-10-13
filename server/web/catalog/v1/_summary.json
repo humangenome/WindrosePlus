@@ -12,7 +12,7 @@
   ],
   "items_with_drop_records": 468,
   "items_with_icon_refs": 840,
-  "icon_manifest_entries": 1042,
+  "icons": "one icon per kind of item under icons/items, made for Windrose+ (no game art)",
   "categories": {
     "Ship": 45,
     "Misc": 409,
@@ -48,9 +48,5 @@
     "Ship Hull Mod": 10,
     "Necklace": 24,
     "Ship Combat Order": 5
-  },
-  "icon_files_available": 557,
-  "icon_source_fallbacks": {
-    "/Game/UI/CommonElements/Assets/Decoration/T_Decoration_Compass": "T_ItemIcon_MapPiece_T01.webp copied locally because upstream CDN path returns 404"
   }
 }

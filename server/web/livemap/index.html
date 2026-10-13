@@ -697,28 +697,26 @@ var STATIC_CATALOG='/catalog/v1';
             misc: '*'
         }[catKey] || '*';
     }
+    // One marker icon per layer, drawn for Windrose+. No game art ships with the mod.
     var WT_ICON_BASE = '/catalog/v1/icons/map/';
     var WT_FALLBACK_ICON = {
-        main_quest: 'T_QuestIcon_Main_Active.png',
-        side_quest: 'T_QuestIcon_Side_Active.png',
-        dungeon: 'T_MapIcon_Dungeon_03.webp',
-        mine: 'T_MapIcon_Mine.webp',
-        ruins: 'T_MapIcon_Ruins_02.webp',
-        smuggler: 'T_IconPOI_Camp_Smuggler.webp',
-        farm: 'T_IconPOI_Farm.webp',
-        shipwreck: 'T_IconPOI_Shipwreck.webp',
-        coastal: 'T_IconPOI_CoastalCamp.webp',
-        tortuga: 'T_IconPOI_Fort.webp',
-        poi: 'T_IconPOI_Mystery.webp',
-        misc: 'T_IconPOI_Mystery.webp'
+        main_quest: 'main-quest.webp',
+        side_quest: 'side-quest.webp',
+        dungeon: 'dungeon.webp',
+        mine: 'mine.webp',
+        ruins: 'ruins.webp',
+        smuggler: 'smuggler.webp',
+        farm: 'farm.webp',
+        shipwreck: 'shipwreck.webp',
+        coastal: 'coastal.webp',
+        tortuga: 'tortuga.webp',
+        poi: 'poi.webp',
+        misc: 'misc.webp'
     };
     function wtIconFile(markerType, catKey) {
         var t = String(markerType || '').split('/').pop();
-        if (t === 'T_QuestIcon_Main_Active' || t === 'T_QuestIcon_Side_Active') return t + '.png';
-        if (t.indexOf('POI_SeaAdventure_') === 0) return 'T_MapIcon_Ship.webp';
-        if (t === 'StartLocation') return 'T_RespawnTent_01.webp';
-        if (t === 'Tortuga') return 'T_IconPOI_Fort.webp';
-        if (t.indexOf('T_') === 0) return t + '.webp';
+        if (t.indexOf('POI_SeaAdventure_') === 0) return 'sea.webp';
+        if (t === 'StartLocation') return 'start.webp';
         return WT_FALLBACK_ICON[catKey] || WT_FALLBACK_ICON.misc;
     }
     function wtIconFromFile(catKey, iconFile) {
@@ -915,10 +913,10 @@ var STATIC_CATALOG='/catalog/v1';
     function resourceIconFile(id) {
         var rt = resourceTypes[id] || {};
         var cat = String(rt.category || id || '').toLowerCase();
-        if (cat.indexOf('mineral') >= 0 || cat.indexOf('ore') >= 0 || String(id || '').indexOf('deposit') >= 0) return 'T_MapIcon_Mine.webp';
-        if (cat.indexOf('plant') >= 0 || cat.indexOf('crop') >= 0 || cat.indexOf('herb') >= 0) return 'T_IconPOI_Farm.webp';
-        if (cat.indexOf('wood') >= 0 || cat.indexOf('tree') >= 0) return 'T_MapIcon_Hut_02.webp';
-        return 'T_IconPOI_Mystery.webp';
+        if (cat.indexOf('mineral') >= 0 || cat.indexOf('ore') >= 0 || String(id || '').indexOf('deposit') >= 0) return 'mine.webp';
+        if (cat.indexOf('plant') >= 0 || cat.indexOf('crop') >= 0 || cat.indexOf('herb') >= 0) return 'farm.webp';
+        if (cat.indexOf('wood') >= 0 || cat.indexOf('tree') >= 0) return 'wood.webp';
+        return 'poi.webp';
     }
     function ensureResourceLayer(id) {
         if (!resourceTypeLayers[id]) resourceTypeLayers[id] = L.layerGroup();
@@ -2337,11 +2335,36 @@ var STATIC_CATALOG='/catalog/v1';
     function itemType(it) {
         return (it && (it.sourceCategoryLabel || it.sourceCategory || it.category)) || 'Other';
     }
+    // One icon per kind of item, drawn for Windrose+. No game art ships with the mod.
+    var ITEM_ICON_BY_TYPE = {
+        food: 'food', alchemy: 'alchemy', medicine: 'medicine',
+        armor: 'armor', ring: 'ring', necklace: 'necklace', backpack: 'backpack',
+        resource: 'resource', metal: 'metal',
+        shipweapon: 'ship-weapon', shiphullmod: 'hull', shipcombatorder: 'combat-order', shipcrewequipment: 'ship-gear',
+        meleeweapon: 'melee', rangeweapon: 'ranged', tool: 'tool', ammo: 'ammo'
+    };
+    var ITEM_ICON_BY_TAG = [
+        ['Inventory.ItemType.Quest.Recipe', 'recipe'],
+        ['Inventory.ItemType.Quest.Notes', 'note'],
+        ['Inventory.ItemType.Consumable.Lootable', 'loot'],
+        ['Inventory.ItemType.Consumable.Fish', 'fish'],
+        ['Inventory.ItemType.Consumable.Ship', 'ship-gear'],
+        ['Inventory.ItemType.Invisible.Reputation', 'reputation'],
+        ['Inventory.ItemType.Resource', 'resource'],
+        ['Inventory.ItemType.Quest', 'quest']
+    ];
+    function itemIconName(it) {
+        var type = String((it && it.sourceCategory) || '').toLowerCase();
+        if (ITEM_ICON_BY_TYPE[type]) return ITEM_ICON_BY_TYPE[type];
+        var tag = String((it && it.itemTypeTag) || '');
+        for (var i = 0; i < ITEM_ICON_BY_TAG.length; i++) {
+            if (tag.indexOf(ITEM_ICON_BY_TAG[i][0]) === 0) return ITEM_ICON_BY_TAG[i][1];
+        }
+        return 'misc';
+    }
     function iconUrl(it) {
-        var iconRef = (it && (it.iconRef || it.icon)) || '';
-        if (!iconRef) return '';
-        var base = iconRef.split('/').pop().replace(/\.webp$/i, '');
-        return CDN + '/icons/items/' + base + '.webp';
+        if (!it) return '';
+        return CDN + '/icons/items/' + itemIconName(it) + '.webp';
     }
     function filterMatchesItem(kind, value, label, it) {
         if (!it || !isKnown(value)) return false;

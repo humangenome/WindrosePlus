@@ -2,6 +2,13 @@
 
 > **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
 
+## [1.3.21] - 2026-10-13
+
+### Changed
+
+- **New item and map icons on the Sea Chart.** The Items panel, search and map markers use 39 new icons made for Windrose+: one per kind of item (food, armour, ring, recipe, ship weapon and so on) and one per map layer. They replace the copies of the game's own icon artwork bundled since v1.1.23. Item names, stats, recipes, vendor trades and drop sources are unchanged. The release zip is about 29 MB smaller.
+- **The README's Items panel screenshot is gone for now.** It showed the old icons; a new one follows.
+
 ## [1.3.20] - 2026-10-13
 
 ### Changed
