@@ -39,6 +39,8 @@ A real-time map of your server showing island terrain, player and creature posit
 
 The Items panel browses the bundled 840-item catalog with group/type/rarity/tier filters and click-through to recipes, vendor trades, and map source hits. Each item shows an icon for its kind (food, armour, ship weapon and so on).
 
+![Sea Chart with Items panel](docs/screenshots/seachart-items.png)
+
 ### Admin Console (RCON)
 Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 40+ built-in commands out of the box.
 
