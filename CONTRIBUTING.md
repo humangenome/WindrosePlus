@@ -13,7 +13,7 @@ Open an [issue](https://github.com/HumanGenome/WindrosePlus/issues). Include:
 
 Screenshots help a lot. `wp.doctor` output is the fastest single thing to paste for a config or runtime problem.
 
-If your issue is about your specific managed hosting (control panel, billing, support), please contact your host directly. Windrose+ GitHub issues are for the open-source mod itself.
+If your issue is about a hosted server you rent (control panel, billing, support), please contact your host directly. Windrose+ GitHub issues are for the open-source mod itself.
 
 ## Found a security issue?
 
