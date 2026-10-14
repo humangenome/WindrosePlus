@@ -9,6 +9,10 @@
 - **The Sea Chart's item catalog is built on your server from your own copy of the game.** When the dashboard starts it reads the game's item, recipe, crafting-station, trader and loot data and its English text out of the server's data files and writes the Items panel's catalog to `windrose_plus_data\catalog\v1` (about a minute at low priority, and only when the game files changed). The catalog now matches the game version you run: on Windrose 0.10.0.9.32 that is 1,254 items instead of the 840 in the old bundled snapshot, with stats and effect numbers from the game's own tables, recipes with their crafting stations, trader buy and sell offers, building costs, research unlocks, and where each item drops. No item data ships in the release zip anymore. Turn the build off with `"catalog": { "build": false }` in `windrose_plus.json`; the log is `windrose_plus_data\catalog\build.log`.
 - **Catalog item ids are the game's own asset names** (for example `DA_EID_Cannon_12_ColdBarrels_Advanced`) instead of the old lowercase ids.
 
+### Fixed
+
+- **The Sea Chart is the same way round as the in-game map.** In-game compass north is world -Y: walking north lowers Y and leaves X alone (#121). Since v1.3.16 the chart put world +X at the top, a quarter turn off. It now draws world X to the right and world Y down, so north is at the top, and players, mobs, markers, overlays and click-to-teleport move with the terrain as before. Tiles built by v1.3.16 to v1.3.21 are turned back as the chart draws them, so the chart is right straight after the update; `wp.mapgen` rebuilds them in the new layout (`"orientation": "game"` in `map_coords.json`) whenever convenient. Tiles from before v1.3.16 were already this way round. If you set `overlay_transform.rotate_degrees` to work around this, set it back to 0.
+
 ### Removed
 
 - **The resource-zone hints layer on the Sea Chart.** Its data did not come from the game files and went with the bundled catalog.

@@ -2080,20 +2080,19 @@
                 var SIDE = Math.max(W.maxX - W.minX, W.maxY - W.minY);
                 var maxZoom = mapInfo.max_zoom || 4;
                 var fx = 256 / SIDE, fy = 256 / SIDE;
-                // Tiles generated before the north-up change lay world X across and
-                // world Y down, which puts north on the right. Newer tiles are a quarter
-                // turn from that: right = world Y (east), down = -world X (south). The
-                // manifest says which layout is on disk, and the CRS, markers and the
-                // click-to-teleport inverse all follow this one flag together.
-                var northUp = (mapInfo.orientation === 'north-up');
+                // The chart is drawn like the in-game map: world X to the right, world
+                // Y down, so compass north (-Y) is at the top. The CRS, markers and the
+                // click-to-teleport inverse all use this one layout.
                 var GameCRS = L.Util.extend({}, L.CRS.Simple, {
-                    transformation: northUp
-                        ? new L.Transformation(fx, -W.minY * fx, -fy, W.maxX * fy)
-                        : new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
+                    transformation: new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
                 });
-                function wLL(x, y) { return northUp ? L.latLng(x, y) : L.latLng(y, x); }
-                function llX(latlng) { return northUp ? latlng.lat : latlng.lng; }
-                function llY(latlng) { return northUp ? latlng.lng : latlng.lat; }
+                function wLL(x, y) { return L.latLng(y, x); }
+                function llX(latlng) { return latlng.lng; }
+                function llY(latlng) { return latlng.lat; }
+                // Tile sets built by v1.3.16-v1.3.21 say "north-up" and are a quarter
+                // turn off the in-game map; the tile layer turns those back until they
+                // are rebuilt. Updated by the generation poll below.
+                var tilesTurned = (mapInfo.orientation === 'north-up');
                 function wBounds(minX, minY, maxX, maxY) {
                     return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
                 }
@@ -2117,17 +2116,37 @@
                 });
 
                 var tileBase = window.location.origin;
-                var tiles = L.tileLayer(tileBase + '/livemap/tiles/{z}/{x}-{y}.png', {
+                var tileUrl = tileBase + '/livemap/tiles/{z}/{x}-{y}.png';
+                // Draws each chart tile on a canvas. A "north-up" tile set keeps the
+                // square that belongs at column x, row y as its tile (y, n-1-x), turned
+                // a quarter turn anticlockwise, so it is fetched from there and turned
+                // back. A missing tile stays transparent (the sea background shows).
+                var ChartTiles = L.GridLayer.extend({
+                    createTile: function(coords, done) {
+                        var tile = document.createElement('canvas');
+                        tile.width = tile.height = 256;
+                        var turned = tilesTurned;
+                        var n = Math.pow(2, coords.z);
+                        var src = turned ? { z: coords.z, x: coords.y, y: n - 1 - coords.x } : coords;
+                        var img = new Image();
+                        img.onload = function() {
+                            var ctx = tile.getContext('2d');
+                            if (turned) { ctx.translate(256, 0); ctx.rotate(Math.PI / 2); }
+                            ctx.drawImage(img, 0, 0, 256, 256);
+                            done(null, tile);
+                        };
+                        img.onerror = function() { done(null, tile); };
+                        img.src = L.Util.template(tileUrl, src);
+                        return tile;
+                    }
+                });
+                var tiles = new ChartTiles({
                     minZoom: 0,
                     maxZoom: maxZoom + 2,
                     maxNativeZoom: maxZoom,
                     tileSize: 256,
                     noWrap: true,
-                    bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY),
-                    // Truly transparent 1×1 RGBA PNG. The previous literal here decoded to
-                    // rgba(255,0,0,127) — Leaflet stretched it to fill every missing tile slot,
-                    // turning the whole map crimson whenever a zoom level had no rendered tiles.
-                    errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg=='
+                    bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY)
                 });
                 tiles.addTo(seachartMap);
 
@@ -2140,6 +2159,7 @@
                         fetch('/api/mapinfo', {credentials: 'same-origin'})
                             .then(function(r) { return r.ok ? r.json() : null; })
                             .then(function(m) {
+                                if (m && !m.error) tilesTurned = (m.orientation === 'north-up');
                                 if (m && m.generation && m.generation.state === 'complete') {
                                     tiles.redraw();
                                     clearInterval(iv);

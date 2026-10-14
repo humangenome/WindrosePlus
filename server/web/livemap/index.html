@@ -331,22 +331,19 @@ var STATIC_CATALOG='/catalog/v1';
     var maxZoom = manifest.max_zoom || 4;
     var fx = 256 / S, fy = 256 / S;
 
-    // Tiles built before the north-up change lay world X across and world Y
-    // down, which puts north on the right. Newer tiles are a quarter turn from
-    // that: right = world Y (east), down = -world X (south). The manifest says
-    // which layout the tiles on disk use, and everything below — terrain, CRS,
-    // markers, overlays, the click inverse — follows this one flag, so a server
-    // that has not regenerated tiles yet still lines up.
-    var northUp = (manifest.orientation === 'north-up');
+    // The chart is drawn like the in-game map: world X to the right, world Y
+    // down, so compass north (-Y) is at the top. Terrain, CRS, markers,
+    // overlays and the click inverse all use this one layout.
     var CRS = L.Util.extend({}, L.CRS.Simple, {
-        transformation: northUp
-            ? new L.Transformation(fx, -W.minY * fx, -fy, W.maxX * fy)
-            : new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
+        transformation: new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
     });
     // World coords -> Leaflet LatLng, and back. Every layer goes through these.
-    function wLL(x, y) { return northUp ? L.latLng(x, y) : L.latLng(y, x); }
-    function llX(latlng) { return northUp ? latlng.lat : latlng.lng; }
-    function llY(latlng) { return northUp ? latlng.lng : latlng.lat; }
+    function wLL(x, y) { return L.latLng(y, x); }
+    function llX(latlng) { return latlng.lng; }
+    function llY(latlng) { return latlng.lat; }
+    // Tile sets built by v1.3.16-v1.3.21 say "north-up" and are a quarter turn
+    // off the in-game map; the tile layer turns those back until they are rebuilt.
+    var tilesTurned = (manifest.orientation === 'north-up');
     function wBounds(minX, minY, maxX, maxY) {
         return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
     }
@@ -369,14 +366,36 @@ var STATIC_CATALOG='/catalog/v1';
         zoomSnap: 0.25, zoomDelta: 0.5, attributionControl: false
     });
 
-    var tileLayer = L.tileLayer(TU, {
+    // Draws each chart tile on a canvas. A "north-up" tile set keeps the square
+    // that belongs at column x, row y as its tile (y, n-1-x), turned a quarter
+    // turn anticlockwise, so it is fetched from there and turned back. A missing
+    // tile stays transparent.
+    var ChartTiles = L.GridLayer.extend({
+        createTile: function(coords, done) {
+            var tile = document.createElement('canvas');
+            tile.width = tile.height = 256;
+            var turned = tilesTurned;
+            var n = Math.pow(2, coords.z);
+            var src = turned ? { z: coords.z, x: coords.y, y: n - 1 - coords.x } : coords;
+            var img = new Image();
+            img.onload = function() {
+                var ctx = tile.getContext('2d');
+                if (turned) { ctx.translate(256, 0); ctx.rotate(Math.PI / 2); }
+                ctx.drawImage(img, 0, 0, 256, 256);
+                done(null, tile);
+            };
+            img.onerror = function() { done(null, tile); };
+            img.src = L.Util.template(TU, src);
+            return tile;
+        }
+    });
+    var tileLayer = new ChartTiles({
         minZoom: 0, maxZoom: maxZoom, maxNativeZoom: maxZoom,
         tileSize: 256, noWrap: true,
         bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY),
         keepBuffer: 100,              // never unload tiles from DOM (small tileset fits in memory)
         updateWhenZooming: false,     // don't flicker during zoom animation
-        updateWhenIdle: true,
-        errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYGBgAAAABQABeqhXUAAAAABJRU5ErkJggg=='
+        updateWhenIdle: true
     }).addTo(map);
 
     // Start with island bounds, will zoom to players after first fetch

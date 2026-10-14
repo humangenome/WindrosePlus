@@ -97,9 +97,10 @@ $wminx = $cx - $side / 2; $wmaxx = $cx + $side / 2
 $wminy = $cy - $side / 2; $wmaxy = $cy + $side / 2
 $worldW = $wmaxx - $wminx; $worldH = $wmaxy - $wminy
 
-# Map space (north-up): image right = world Y, image down = -world X.
-$mapMinX = $wminy
-$mapMinY = -$wmaxx
+# Map space matches the in-game map: image right = world X (east), image
+# down = world Y (south), so compass north (-Y) is at the top.
+$mapMinX = $wminx
+$mapMinY = $wminy
 
 Write-Host "World bounds: ($wminx, $wminy) to ($wmaxx, $wmaxy)"
 
@@ -225,10 +226,9 @@ public static class TileRenderer {
         return pixels;
     }
 
-    // Tiles are rendered in MAP space, which is world space turned a quarter
-    // turn so the image reads north-up like the in-game chart:
-    //     map x (image right) =  world Y  (east)
-    //     map y (image down)  = -world X  (south)
+    // Tiles are rendered in MAP space, laid out like the in-game map:
+    //     map x (image right) = world X  (east)
+    //     map y (image down)  = world Y  (south; compass north is -Y)
     // The livemap CRS uses the same mapping, so terrain and every marker layer
     // move together.
     public static byte[] RenderTile(int tileSize, double tileMx, double tileMy,
@@ -240,8 +240,8 @@ public static class TileRenderer {
 
         foreach (var c in comps) {
             // Component bounds expressed in map space
-            double cmx1 = c.wy,   cmx2 = c.wy2;
-            double cmy1 = -c.wx2, cmy2 = -c.wx;
+            double cmx1 = c.wx, cmx2 = c.wx2;
+            double cmy1 = c.wy, cmy2 = c.wy2;
 
             // Check overlap
             if (cmx2 <= tileMx || cmx1 >= tileMx + tileWorldSize) continue;
@@ -257,16 +257,16 @@ public static class TileRenderer {
             int py2 = Math.Min(tileSize, (int)Math.Ceiling((cmy2 - tileMy) / tileWorldSize * tileSize));
 
             for (int py = py1; py < py2; py++) {
-                double worldX = -(tileMy + (py + 0.5) * pixelSize);
-                double fx = (worldX - c.wx) / compW;
-                int hx = (int)(fx * c.res);
-                if (hx < 0) hx = 0; if (hx >= c.res) hx = c.res - 1;
+                double worldY = tileMy + (py + 0.5) * pixelSize;
+                double fy = (worldY - c.wy) / compH;
+                int hy = (int)(fy * c.res);
+                if (hy < 0) hy = 0; if (hy >= c.res) hy = c.res - 1;
 
                 for (int px = px1; px < px2; px++) {
-                    double worldY = tileMx + (px + 0.5) * pixelSize;
-                    double fy = (worldY - c.wy) / compH;
-                    int hy = (int)(fy * c.res);
-                    if (hy < 0) hy = 0; if (hy >= c.res) hy = c.res - 1;
+                    double worldX = tileMx + (px + 0.5) * pixelSize;
+                    double fx = (worldX - c.wx) / compW;
+                    int hx = (int)(fx * c.res);
+                    if (hx < 0) hx = 0; if (hx >= c.res) hx = c.res - 1;
 
                     int dataIdx = 4 + (hy * c.res + hx) * 2;
                     if (dataIdx + 1 >= c.data.Length) continue;
@@ -418,8 +418,8 @@ for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
             # Skip tiles with no overlapping land components (map space, see RenderTile)
             $hasOverlap = $false
             foreach ($ci in $compIndex) {
-                if ($ci.wy2 -gt $tileMx -and $ci.wy -lt ($tileMx + $tileWorldSize) -and
-                    (-$ci.wx) -gt $tileMy -and (-$ci.wx2) -lt ($tileMy + $tileWorldSize)) {
+                if ($ci.wx2 -gt $tileMx -and $ci.wx -lt ($tileMx + $tileWorldSize) -and
+                    $ci.wy2 -gt $tileMy -and $ci.wy -lt ($tileMy + $tileWorldSize)) {
                     $hasOverlap = $true; break
                 }
             }
@@ -462,11 +462,11 @@ $mapCoords = @{
     world_min_x = $wminx; world_min_y = $wminy
     world_max_x = $wmaxx; world_max_y = $wmaxy
     tile_size = $tileSize; max_zoom = $MaxZoom
-    # Tells the map viewer how these tiles are laid out. Viewers fall back to
-    # the old world-X-right / world-Y-down layout when this is absent, so a
-    # server with tiles from an older build keeps terrain and markers aligned
-    # until the tiles are regenerated.
-    orientation = "north-up"
+    # Tells the map viewer how these tiles are laid out. "game" (and tile sets
+    # with no orientation, from before v1.3.16) = world X right, world Y down,
+    # like the in-game map. "north-up" tiles from v1.3.16-v1.3.21 were a quarter
+    # turn off; the viewers turn those back tile by tile until they are rebuilt.
+    orientation = "game"
     total_components = $landComps.Count
     island_bounds = @{
         min_x = $ibMinX; min_y = $ibMinY
