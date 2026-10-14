@@ -1,0 +1,326 @@
+{
+  "routes_version": 1,
+  "about": "Every HTTP route server/windrose_plus_server.ps1 answers. routes_version goes up whenever a route is added, removed, or changes its method, auth, request or response format.",
+  "auth": {
+    "none": "No login.",
+    "public-map": "Only when livemap.public.enabled is true; if livemap.public.token is set, add ?token=<token>.",
+    "login": "The dashboard session cookie, or the RCON password in an X-RCON-Password header."
+  },
+  "cors_preflight": "OPTIONS on any path answers 200 with Access-Control-Allow-Origin *.",
+  "routes": [
+    {
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/login",
+      "auth": "none",
+      "match": [
+        "Ieq /login"
+      ],
+      "description": "Dashboard login page; POST a form field `password` to get the `wp_session` cookie."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/health",
+      "auth": "none",
+      "match": [
+        "Ieq /api/health"
+      ],
+      "description": "Health check: `status`, `version`, `routes_version`, `pak_builder_version`, `timestamp`."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/vendor/{file}",
+      "auth": "none",
+      "match": [
+        "StartsWith /vendor/"
+      ],
+      "description": "Bundled web libraries for the dashboard and Sea Chart."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/catalog/v1/{name}.json",
+      "auth": "none",
+      "match": [
+        "Imatch ^/catalog/v1/([A-Za-z0-9_]+\\.json)$"
+      ],
+      "description": "Item catalog built on this server from the game files (`windrose_plus_data\\catalog\\v1`); 503 while building, 404 if never built."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/catalog/{file}",
+      "auth": "none",
+      "match": [
+        "StartsWith /catalog/"
+      ],
+      "description": "Windrose+ item and map icons."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/public-map",
+      "auth": "public-map",
+      "match": [
+        "Ieq /public-map"
+      ],
+      "description": "Map-only Sea Chart page."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/public/livemap",
+      "auth": "public-map",
+      "match": [
+        "Ieq /api/public/livemap"
+      ],
+      "description": "Player, creature and resource-node positions."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/public/pois",
+      "auth": "public-map",
+      "match": [
+        "Ieq /api/public/pois"
+      ],
+      "description": "POI scanner markers."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/public/runtime-overlay",
+      "auth": "public-map",
+      "match": [
+        "Ieq /api/public/runtime-overlay"
+      ],
+      "description": "Optional save-state overlay from `windrose_plus_data\\runtime_overlay.json`."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/public/mapinfo",
+      "auth": "public-map",
+      "match": [
+        "Ieq /api/public/mapinfo"
+      ],
+      "description": "Map tile manifest (`map_coords.json`) or the tile generation state."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/public-map/tiles/{z}/{x}-{y}.png",
+      "auth": "public-map",
+      "match": [
+        "Imatch ^/public-map/tiles/(\\d+)/(\\d+)-(\\d+)\\.png$"
+      ],
+      "description": "Sea Chart tiles."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/status",
+      "auth": "login",
+      "match": [
+        "switch /api/status"
+      ],
+      "description": "Server status: players, multipliers, server info."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/livemap",
+      "auth": "login",
+      "match": [
+        "switch /api/livemap"
+      ],
+      "description": "Player, creature and resource-node positions."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/pois",
+      "auth": "login",
+      "match": [
+        "switch /api/pois"
+      ],
+      "description": "POI scanner markers."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/runtime-overlay",
+      "auth": "login",
+      "match": [
+        "switch /api/runtime-overlay"
+      ],
+      "description": "Optional save-state overlay from `windrose_plus_data\\runtime_overlay.json`."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/config",
+      "auth": "login",
+      "match": [
+        "switch /api/config"
+      ],
+      "description": "Current `windrose_plus.json` with the RCON password masked."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/pak-status",
+      "auth": "login",
+      "match": [
+        "switch /api/pak-status"
+      ],
+      "description": "Generated PAK status, stale-config detection and the last CurveTable patch summary."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/commands",
+      "auth": "login",
+      "match": [
+        "switch /api/commands"
+      ],
+      "description": "Command catalog for console autocomplete (`windrose_plus_data\\commands.json`)."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/mapinfo",
+      "auth": "login",
+      "match": [
+        "switch /api/mapinfo"
+      ],
+      "description": "Map tile manifest (`map_coords.json`) or the tile generation state."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/terrain_height?x={x}&y={y}",
+      "auth": "login",
+      "match": [
+        "switch /api/terrain_height"
+      ],
+      "description": "Ground height at a world position, from the exported heightmap."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/rcon/log",
+      "auth": "login",
+      "match": [
+        "switch /api/rcon/log"
+      ],
+      "description": "Recent RCON command audit log."
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/rcon",
+      "auth": "login",
+      "match": [
+        "switch /api/rcon",
+        "Ieq /api/rcon"
+      ],
+      "description": "Run a console command: JSON body `{\"command\": \"...\"}`; the password may also be a `password` field in the body."
+    },
+    {
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/character-repair",
+      "auth": "login",
+      "match": [
+        "switch /api/character-repair"
+      ],
+      "description": "Upload a SaveProfiles zip and download a repaired zip."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/",
+      "auth": "login",
+      "match": [
+        "Ieq ",
+        "Ieq /"
+      ],
+      "description": "Dashboard page."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/livemap",
+      "auth": "login",
+      "match": [
+        "Ieq /livemap"
+      ],
+      "description": "Sea Chart page."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/repair",
+      "auth": "login",
+      "match": [
+        "Ieq /repair"
+      ],
+      "description": "Character repair page."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/livemap/tiles/{z}/{x}-{y}.png",
+      "auth": "login",
+      "match": [
+        "Imatch ^/livemap/tiles/(\\d+)/(\\d+)-(\\d+)\\.png$"
+      ],
+      "description": "Sea Chart tiles."
+    },
+    {
+      "methods": [
+        "GET"
+      ],
+      "path": "/{file}",
+      "auth": "login",
+      "match": [],
+      "description": "Other dashboard files under `server\\web`."
+    }
+  ],
+  "prefix_checks": [
+    "StartsWith /api/",
+    "StartsWith /api/public/",
+    "StartsWith /public-map/tiles/"
+  ]
+}

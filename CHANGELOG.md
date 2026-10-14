@@ -4,6 +4,12 @@
 
 ## [1.3.22] - 2026-10-14
 
+### Added
+
+- **`server/routes.json`: every route the dashboard answers, with a version number.** Each route has its method, its login rule and a one-line description. `routes_version` (1 in this release) goes up whenever a route is added or removed or a request or response format changes, so a tool or port built against the dashboard's routes can tell after an update whether it needs to change. CI checks the list against the server code and fails when the routes changed and the number did not (#124).
+- **`tools/PAK_BUILDER_VERSION`: goes up whenever the generated PAK output changes.** That covers new or renamed config keys, different files or fields patched, changed scaling or rounding, and a new repak or retoc. CI fails when the files that decide the output change without the version being raised or the change being marked as output-neutral (#124).
+- **`/api/health` reports both numbers** as `routes_version` and `pak_builder_version`.
+
 ### Changed
 
 - **The Sea Chart's item catalog is built on your server from your own copy of the game.** When the dashboard starts it reads the game's item, recipe, crafting-station, trader and loot data and its English text out of the server's data files and writes the Items panel's catalog to `windrose_plus_data\catalog\v1` (about a minute at low priority, and only when the game files changed). The catalog now matches the game version you run: on Windrose 0.10.0.9.32 that is 1,161 items instead of the 840 in the old bundled snapshot, with stats and effect numbers from the game's own tables, recipes with their crafting stations, trader buy and sell offers, building costs, research unlocks, and where each item drops. No item data ships in the release zip anymore. Turn the build off with `"catalog": { "build": false }` in `windrose_plus.json`; the log is `windrose_plus_data\catalog\build.log`.

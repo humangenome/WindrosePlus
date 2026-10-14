@@ -89,3 +89,30 @@ jobs:
 
       - name: Test windrose-heal
         run: cargo test --locked --manifest-path tools/windrose-heal/Cargo.toml
+
+  release-metadata:
+    name: Route list and PAK builder version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check route list and PAK builder version
+        shell: pwsh
+        run: |
+          # The previous release's routes.json, so a route change without a higher routes_version fails.
+          $prev = ''
+          $tag = git describe --tags --abbrev=0 2>$null
+          if ($tag) {
+            $text = git show "${tag}:server/routes.json" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $prev = Join-Path $env:RUNNER_TEMP 'previous-routes.json'
+              $text | Set-Content -LiteralPath $prev
+            }
+          }
+          ./scripts/Test-ReleaseMetadata.ps1 -PreviousRoutes $prev
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/Test-ReleaseMetadata.Tests.ps1

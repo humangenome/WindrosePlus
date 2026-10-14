@@ -28,6 +28,15 @@ Don't open a public issue — see [SECURITY.md](.github/SECURITY.md).
 
 Keep code style consistent with what's already there. Lua uses `local` everywhere, snake_case for variables, PascalCase for module tables.
 
+## Route list and PAK builder version
+
+Other tools read two files in each release, and CI checks both:
+
+- `server/routes.json` lists every route in `server/windrose_plus_server.ps1`. Add, change or remove a route and update it in the same change, and raise `routes_version` when a route is added or removed or its method, login rule, request or response changes. CI fails if the server and the list disagree, or if the routes changed since the last release and `routes_version` did not go up.
+- `tools/PAK_BUILDER_VERSION` goes up whenever the generated PAK output changes. CI keeps a fingerprint of the files that decide that output (the PAK builder and its `tools/lib` scripts, the default INI files, the repak and retoc versions in `release.yml`). After changing one of them, raise the version if the output changes, then run `pwsh scripts/Test-ReleaseMetadata.ps1 -RecordPakFingerprint` (add `-PakOutputUnchanged` for a change that leaves the output the same, such as a comment).
+
+`pwsh scripts/Test-ReleaseMetadata.Tests.ps1` runs the checks' own tests.
+
 ## C++ mods
 
 If you're working in `cpp-mods/`, you'll need the UE4SS SDK. See `cpp-mods/README.md` for build setup.

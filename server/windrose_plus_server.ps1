@@ -62,6 +62,13 @@ if (-not (Test-Path -LiteralPath $activityLogDir)) {
 # Find web directory
 $webDir = Join-Path $PSScriptRoot "web"
 
+# Release metadata for other tools, reported by /api/health: the route list's version
+# (server\routes.json) and the PAK builder version (tools\PAK_BUILDER_VERSION).
+$routesVersion = $null
+try { $routesVersion = [int]((Get-Content -LiteralPath (Join-Path $PSScriptRoot "routes.json") -Raw -ErrorAction Stop | ConvertFrom-Json).routes_version) } catch {}
+$pakBuilderVersion = $null
+try { $pakBuilderVersion = [int]((Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\tools\PAK_BUILDER_VERSION") -Raw -ErrorAction Stop).Trim()) } catch {}
+
 # Resolve port
 if ($Port -eq 0) {
     $Port = if ($config.server.http_port) { [int]$config.server.http_port } else { 8780 }
@@ -1000,7 +1007,7 @@ try {
 
             # API health endpoint — no auth (used for monitoring)
             if ($path -eq "/api/health") {
-                Send-Json $context @{ status = "ok"; version = $Version; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
+                Send-Json $context @{ status = "ok"; version = $Version; routes_version = $routesVersion; pak_builder_version = $pakBuilderVersion; timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
                 continue
             }
 
