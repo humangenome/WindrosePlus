@@ -2,7 +2,9 @@
 # Run this from inside your Windrose server folder after extracting the release zip.
 
 param(
-    [string]$GameDir = ""
+    [string]$GameDir = "",
+    # Keep whatever UE4SS build is already installed instead of the tested one.
+    [switch]$KeepCurrentUE4SS
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,58 +76,80 @@ if (-not (Test-Path -LiteralPath $win64Dir)) {
 }
 
 # Step 1: Install UE4SS
+# Windrose+ is tested against one UE4SS build. UE4SS's "experimental-latest"
+# tag is rebuilt every few days, so installing whatever it points at gives each
+# server a different, untested loader. Download the pinned build and check its
+# hash before using it.
+$ue4ssPinName = "UE4SS_v3.0.1-944-g0196ef29.zip"
+$ue4ssPinUrl = "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental/$ue4ssPinName"
+$ue4ssPinZipSha256 = "B7BE182458695A95D5D862D0A5F279E23FA5EF5B93566648E181191958EA45BD"
+$ue4ssPinDllSha256 = "DF9E6E9A2280972B1C28CE590700FEACC752B447204F8BAADEB95F5776957055"
+
 Write-Host "  [1/3] Installing UE4SS mod loader..." -NoNewline
 $proxyDll = Join-Path $win64Dir "dwmapi.dll"
 $ue4ssDll = Join-Path $ue4ssDir "UE4SS.dll"
 
-if ((Test-Path -LiteralPath $proxyDll) -and (Test-Path -LiteralPath $ue4ssDll)) {
-    Write-Host " already installed" -ForegroundColor DarkGray
+$ue4ssPresent = (Test-Path -LiteralPath $proxyDll) -and (Test-Path -LiteralPath $ue4ssDll)
+$ue4ssOnPin = $false
+if ($ue4ssPresent) {
+    try { $ue4ssOnPin = ((Get-FileHash -LiteralPath $ue4ssDll -Algorithm SHA256).Hash -eq $ue4ssPinDllSha256) } catch {}
+}
+
+if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
+    if ($ue4ssOnPin) {
+        Write-Host " already installed" -ForegroundColor DarkGray
+    } else {
+        Write-Host " kept (-KeepCurrentUE4SS; not the tested build)" -ForegroundColor Yellow
+    }
 } else {
     Write-Host ""
-    Write-Host "    Downloading UE4SS..." -ForegroundColor DarkGray
+    if ($ue4ssPresent) {
+        Write-Host "    The installed UE4SS is not the build Windrose+ is tested with; replacing the loader files only." -ForegroundColor Yellow
+        Write-Host "    Your mods and settings are kept. Run with -KeepCurrentUE4SS to skip this." -ForegroundColor DarkGray
+    }
+    Write-Host "    Downloading $ue4ssPinName..." -ForegroundColor DarkGray
 
     $ue4ssZipPath = Join-Path $env:TEMP "ue4ss_download.zip"
     $ue4ssExtractDir = Join-Path $env:TEMP "ue4ss_extract"
 
     try {
-        # Find the latest UE4SS experimental release zip (filename changes each build)
-        Write-Host "    Finding latest UE4SS release..." -ForegroundColor DarkGray
-        $releaseJson = Invoke-WebRequest -Uri "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest" -UseBasicParsing | ConvertFrom-Json
-        $ue4ssAsset = $releaseJson.assets | Where-Object { $_.name -match "^UE4SS_v" -and $_.name -notmatch "^z" -and $_.name -notmatch "DEV" } | Select-Object -First 1
-        if (-not $ue4ssAsset) {
-            Write-Host "    ERROR: Could not find UE4SS download." -ForegroundColor Red
+        Invoke-WebRequest -Uri $ue4ssPinUrl -OutFile $ue4ssZipPath -UseBasicParsing
+        $zipHash = (Get-FileHash -LiteralPath $ue4ssZipPath -Algorithm SHA256).Hash
+        if ($zipHash -ne $ue4ssPinZipSha256) {
+            Write-Host "    ERROR: UE4SS download does not match the expected file (SHA256 $zipHash)." -ForegroundColor Red
+            try { Remove-Item -LiteralPath $ue4ssZipPath -Force -ErrorAction SilentlyContinue } catch {}
             exit 1
         }
-        $ue4ssZipUrl = $ue4ssAsset.browser_download_url
-        Write-Host "    Downloading $($ue4ssAsset.name)..." -ForegroundColor DarkGray
-        Invoke-WebRequest -Uri $ue4ssZipUrl -OutFile $ue4ssZipPath -UseBasicParsing
 
-        if (Test-Path -LiteralPath $ue4ssExtractDir) { Remove-Item $ue4ssExtractDir -Recurse -Force }
+        if (Test-Path -LiteralPath $ue4ssExtractDir) { Remove-Item -LiteralPath $ue4ssExtractDir -Recurse -Force }
         Expand-Archive -Path $ue4ssZipPath -DestinationPath $ue4ssExtractDir -Force
 
         $extractedProxy = Join-Path $ue4ssExtractDir "dwmapi.dll"
-        if (-not (Test-Path -LiteralPath $extractedProxy)) {
-            Write-Host "    ERROR: dwmapi.dll not found in UE4SS download." -ForegroundColor Red
+        $extractedUe4ss = Join-Path $ue4ssExtractDir "ue4ss"
+        $extractedDll = Join-Path $extractedUe4ss "UE4SS.dll"
+        if (-not (Test-Path -LiteralPath $extractedProxy) -or -not (Test-Path -LiteralPath $extractedDll)) {
+            Write-Host "    ERROR: dwmapi.dll or UE4SS.dll not found in UE4SS download." -ForegroundColor Red
             exit 1
         }
 
-        Copy-Item $extractedProxy $win64Dir -Force
-
-        $extractedUe4ss = Join-Path $ue4ssExtractDir "ue4ss"
-        if (Test-Path -LiteralPath $extractedUe4ss) {
-            if (-not (Test-Path -LiteralPath $ue4ssDir)) { New-Item -ItemType Directory -Path $ue4ssDir -Force | Out-Null }
+        if (-not (Test-Path -LiteralPath $ue4ssDir)) { New-Item -ItemType Directory -Path $ue4ssDir -Force | Out-Null }
+        Copy-Item -LiteralPath $extractedProxy -Destination $win64Dir -Force
+        if ($ue4ssPresent) {
+            # Upgrade or downgrade in place: swap the loader, leave Mods\ and settings alone.
+            Copy-Item -LiteralPath $extractedDll -Destination $ue4ssDir -Force
+        } else {
             Copy-Item "$extractedUe4ss\*" $ue4ssDir -Recurse -Force
         }
 
         if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
 
-        try { Remove-Item $ue4ssZipPath -Force -ErrorAction SilentlyContinue } catch {}
-        try { Remove-Item $ue4ssExtractDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item -LiteralPath $ue4ssZipPath -Force -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Item -LiteralPath $ue4ssExtractDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
 
         Write-Host "    Done." -ForegroundColor Green
     } catch {
         Write-Host "    ERROR: Failed to download UE4SS." -ForegroundColor Red
-        Write-Host "    Download manually from: https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/experimental-latest" -ForegroundColor Yellow
+        Write-Host "    Download $ue4ssPinName manually from: https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/experimental" -ForegroundColor Yellow
         exit 1
     }
 }

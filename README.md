@@ -187,7 +187,7 @@ You need a Windrose Dedicated Server already set up on Windows. If you do not ha
 .\install.ps1
 ```
 
-This downloads UE4SS, installs the mod, and sets up the dashboard. Reinstalling is safe, your custom configs and mods are preserved.
+This downloads UE4SS (the exact build Windrose+ is tested with, checked against its SHA-256), installs the mod, and sets up the dashboard. Reinstalling is safe, your custom configs and mods are preserved. If the server already has a different UE4SS build, the installer swaps in the tested loader files and keeps your mods and settings; run `.\install.ps1 -KeepCurrentUE4SS` to leave yours in place.
 
 ### Step 2: Start Your Server
 

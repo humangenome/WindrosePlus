@@ -12,6 +12,7 @@
 ### Fixed
 
 - **The Sea Chart is the same way round as the in-game map.** In-game compass north is world -Y: walking north lowers Y and leaves X alone (#121). Since v1.3.16 the chart put world +X at the top, a quarter turn off. It now draws world X to the right and world Y down, so north is at the top, and players, mobs, markers, overlays and click-to-teleport move with the terrain as before. Tiles built by v1.3.16 to v1.3.21 are turned back as the chart draws them, so the chart is right straight after the update; `wp.mapgen` rebuilds them in the new layout (`"orientation": "game"` in `map_coords.json`) whenever convenient. Tiles from before v1.3.16 were already this way round. If you set `overlay_transform.rotate_degrees` to work around this, set it back to 0.
+- **The installer installs the UE4SS build Windrose+ is tested with.** It used to fetch whatever UE4SS's `experimental-latest` tag pointed at that day, and that tag is rebuilt every few days (most recently on 2026-10-14), so two self-hosted servers installed a week apart could run different, untested loaders. It now downloads `UE4SS_v3.0.1-944-g0196ef29.zip` and refuses it unless its SHA-256 matches. A server that already has a different UE4SS build gets the tested `dwmapi.dll` and `UE4SS.dll`, with its mods and settings kept; `install.ps1 -KeepCurrentUE4SS` leaves an existing UE4SS alone.
 
 ### Removed
 
