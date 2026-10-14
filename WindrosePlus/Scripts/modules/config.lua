@@ -218,21 +218,7 @@ function Config._defaults()
             enabled = true,
             player_interval_ms = 5000,
             entity_interval_ms = 30000,
-            public = { enabled = false, token = "" },
-            overlay_transform = {
-                enabled = false,
-                offset_x = 0,
-                offset_y = 0,
-                scale = 1.0,
-                scale_x = 1.0,
-                scale_y = 1.0,
-                origin_x = 0,
-                origin_y = 0,
-                rotate_degrees = 0,
-                flip_x = false,
-                flip_y = false,
-                swap_xy = false
-            }
+            public = { enabled = false, token = "" }
         },
         poiscan = { enabled = true, refresh_seconds = 4 * 60 * 60 },
         admin = { steam_ids = {} },

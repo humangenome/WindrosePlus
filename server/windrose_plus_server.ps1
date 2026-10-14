@@ -79,12 +79,6 @@ if ($BindIp -and $BindIp -ne "0.0.0.0" -and $BindIp -ne "*" -and $BindIp -ne "+"
 $displayListenHost = if ($listenHost -eq "+") { "0.0.0.0" } else { $listenHost }
 $dashboardHost = if ($listenHost -eq "+") { "localhost" } else { $listenHost }
 
-$layoutRuntimeProviderUrl = "$env:WINDROSEPLUS_LAYOUT_RUNTIME_URL".Trim()
-if (-not $layoutRuntimeProviderUrl -and $config.server -and $config.server.layout_runtime_url) {
-    $layoutRuntimeProviderUrl = ([string]$config.server.layout_runtime_url).Trim()
-}
-$layoutRuntimeProviderUrl = $layoutRuntimeProviderUrl.TrimEnd("/")
-
 # Load the INI parser used by /api/pak-status. Failure is non-fatal; the endpoint
 # degrades to a "parser unavailable" response instead of crashing the dashboard.
 $script:IniParserLoaded = $false
@@ -101,24 +95,6 @@ if (Test-Path -LiteralPath $iniParserPath) {
 } else {
     $script:IniParserLoadError = "File not found: $iniParserPath"
     Write-Host "WARN: IniConfigParser.ps1 not found at $iniParserPath. /api/pak-status CT detection degraded."
-}
-
-# Layout-fingerprint scanner. Used by /api/layout to surface the world's
-# layoutFingerprint, seed, worldPreset, and terrainPlacements.
-$script:LayoutScannerLoaded = $false
-$script:LayoutScannerLoadError = $null
-$layoutScannerPath = Join-Path $PSScriptRoot "lib\Get-LayoutFingerprint.ps1"
-if (Test-Path -LiteralPath $layoutScannerPath) {
-    try {
-        . $layoutScannerPath
-        $script:LayoutScannerLoaded = $true
-    } catch {
-        $script:LayoutScannerLoadError = $_.Exception.Message
-        Write-Host "WARN: Get-LayoutFingerprint.ps1 failed to load: $($_.Exception.Message). /api/layout unavailable."
-    }
-} else {
-    $script:LayoutScannerLoadError = "File not found: $layoutScannerPath"
-    Write-Host "WARN: Get-LayoutFingerprint.ps1 not found at $layoutScannerPath. /api/layout unavailable."
 }
 
 # Re-read the RCON password on every auth attempt instead of caching it at startup.
@@ -165,18 +141,6 @@ function Get-ConfigPropertyValue {
     return $prop.Value
 }
 
-function Get-ConfigDouble {
-    param($Object, [string]$Name, [double]$Default = 0.0)
-
-    $raw = Get-ConfigPropertyValue $Object $Name $null
-    if ($null -eq $raw) { return $Default }
-    $value = 0.0
-    if ([double]::TryParse([string]$raw, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
-        return $value
-    }
-    return $Default
-}
-
 function Get-ConfigBool {
     param($Object, [string]$Name, [bool]$Default = $false)
 
@@ -187,39 +151,6 @@ function Get-ConfigBool {
     if ($s -in @("1", "true", "yes", "on")) { return $true }
     if ($s -in @("0", "false", "no", "off")) { return $false }
     return $Default
-}
-
-function Get-SeaChartOverlayTransform {
-    param($Config)
-
-    $transform = $null
-    if ($Config -and $Config.livemap -and $Config.livemap.overlay_transform) {
-        $transform = $Config.livemap.overlay_transform
-    }
-
-    return [PSCustomObject]@{
-        enabled        = (Get-ConfigBool $transform "enabled" $false)
-        offset_x       = (Get-ConfigDouble $transform "offset_x" 0.0)
-        offset_y       = (Get-ConfigDouble $transform "offset_y" 0.0)
-        scale          = (Get-ConfigDouble $transform "scale" 1.0)
-        scale_x        = (Get-ConfigDouble $transform "scale_x" 1.0)
-        scale_y        = (Get-ConfigDouble $transform "scale_y" 1.0)
-        origin_x       = (Get-ConfigDouble $transform "origin_x" 0.0)
-        origin_y       = (Get-ConfigDouble $transform "origin_y" 0.0)
-        rotate_degrees = (Get-ConfigDouble $transform "rotate_degrees" 0.0)
-        flip_x         = (Get-ConfigBool $transform "flip_x" $false)
-        flip_y         = (Get-ConfigBool $transform "flip_y" $false)
-        swap_xy        = (Get-ConfigBool $transform "swap_xy" $false)
-    }
-}
-
-function Add-SeaChartMapInfoConfig {
-    param($MapInfo)
-
-    $cfg = Get-CurrentConfig
-    if ($null -eq $cfg) { return $MapInfo }
-    $MapInfo | Add-Member -NotePropertyName overlay_transform -NotePropertyValue (Get-SeaChartOverlayTransform $cfg) -Force
-    return $MapInfo
 }
 
 # Re-read public map settings on every request so hosts can enable, disable, or
@@ -793,235 +724,6 @@ function Get-TerrainHeightAt($DataDir, [double]$WorldX, [double]$WorldY) {
     return $null
 }
 
-# --- Layout fingerprint discovery + cache ---
-# Find the leaf folder directly containing the most .sst files (the active
-# RocksDB world dir). Walks SaveProfiles recursively because the path layout
-# varies by Windrose version (e.g. <profile>\Worlds\<id>\RocksDB\0.10.0\Players).
-function Find-ActiveWorldFolder {
-    $saveRoot = Join-Path $gameDir "R5\Saved\SaveProfiles"
-    if (-not (Test-Path -LiteralPath $saveRoot)) { return $null }
-
-    $byDir = @{}
-    Get-ChildItem -LiteralPath $saveRoot -Recurse -Filter '*.sst' -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $d = $_.DirectoryName
-        if ($byDir.ContainsKey($d)) { $byDir[$d] = $byDir[$d] + 1 } else { $byDir[$d] = 1 }
-    }
-    if ($byDir.Count -eq 0) { return $null }
-
-    $best = $byDir.GetEnumerator() | Sort-Object -Property Value -Descending | Select-Object -First 1
-    return $best.Key
-}
-
-# Fast manifest hash that captures only file names + mtimes, used to invalidate
-# the cached layout scan when RocksDB compaction changes the .sst file set.
-function Get-LayoutCacheKey($worldFolder) {
-    if (-not $worldFolder -or -not (Test-Path -LiteralPath $worldFolder)) { return $null }
-    $entries = Get-ChildItem -LiteralPath $worldFolder -Recurse -Filter '*.sst' -ErrorAction SilentlyContinue -File |
-        Sort-Object FullName |
-        ForEach-Object { "{0}|{1}|{2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }
-    if (-not $entries) { return $null }
-    $joined = ($entries -join "`n")
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($joined))
-        return -join ($bytes | ForEach-Object { $_.ToString('x2') })
-    } finally { $sha.Dispose() }
-}
-
-# Strip Windows-style absolute paths from any string before it crosses the
-# unauthenticated /api/layout boundary. Used on every error message that may
-# include $layoutScannerPath, $worldFolder, scanner exceptions, etc. The
-# regex matches drive-letter paths with no path-separator backslash escaped:
-# in a PowerShell single-quoted string, '\\' is a literal two-char backslash
-# pair, which becomes a single '\' in the .NET regex (which matches one '\').
-function Sanitize-PathInMessage([string]$s) {
-    if ([string]::IsNullOrEmpty($s)) { return $s }
-    return [regex]::Replace($s, '[A-Za-z]:\\[^\s,;)\]"]*', '<path>')
-}
-
-function Get-PublicScanView($scan) {
-    if (-not $scan) { return $null }
-    return [pscustomobject]@{
-        layoutFingerprint      = $scan.layoutFingerprint
-        shortLayoutFingerprint = $scan.shortLayoutFingerprint
-        seed                   = $scan.seed
-        worldPreset            = $scan.worldPreset
-        terrainPlacements      = $scan.terrainPlacements
-        sstFileCount           = $scan.sstFileCount
-    }
-}
-
-function Get-CachedLayoutScan {
-    $worldFolder = Find-ActiveWorldFolder
-    if (-not $worldFolder) {
-        return @{ ok = $false; error = "No SaveProfiles world folder with .sst files found yet. Join the server once so it writes a save." }
-    }
-
-    $cacheKey = Get-LayoutCacheKey $worldFolder
-    if (-not $cacheKey) {
-        return @{ ok = $false; error = "World folder has no .sst files yet. Join the server once so it writes a save." }
-    }
-
-    $cachePath = Join-Path $dataDir "layout_scan.json"
-    if (Test-Path -LiteralPath $cachePath) {
-        try {
-            $cached = Get-Content -LiteralPath $cachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-            if ($cached.cacheKey -eq $cacheKey -and $cached.scan) {
-                return @{ ok = $true; cached = $true; scan = $cached.scan; cachedAt = $cached.cachedAt }
-            }
-        } catch {
-            # fall through and re-scan
-        }
-    }
-
-    if (-not $script:LayoutScannerLoaded) {
-        return @{ ok = $false; error = "Layout scanner not loaded: " + (Sanitize-PathInMessage $script:LayoutScannerLoadError) }
-    }
-
-    try {
-        $scan = Get-WindroseLayoutScan -Path $worldFolder
-    } catch {
-        # sanitize: scanner errors may include the on-disk path
-        return @{ ok = $false; error = "Scanner failed: " + (Sanitize-PathInMessage $_.Exception.Message) }
-    }
-
-    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $envelope = [pscustomobject]@{
-        cacheKey = $cacheKey
-        cachedAt = $now
-        scan     = $scan
-    }
-    try {
-        Write-AtomicUtf8Json $cachePath $envelope
-    } catch {
-        Write-Host "WARN: failed to write layout_scan.json cache: $($_.Exception.Message)"
-    }
-    return @{ ok = $true; cached = $false; scan = $scan; cachedAt = $now }
-}
-
-# POST the local scan to an optional layout-runtime provider, then GET the
-# runtime overlay (markers, biome polygons, manual POIs, quest popups). Cached
-# locally by layoutFingerprint so repeat map loads are cheap.
-function Get-CachedLayoutRuntime($scan) {
-    if (-not $scan -or -not $scan.layoutFingerprint) {
-        return @{ ok = $false; error = "Scanner result missing layoutFingerprint" }
-    }
-    if (-not $layoutRuntimeProviderUrl) {
-        return @{ ok = $false; error = "Layout runtime provider is not configured" }
-    }
-    $fp = [string]$scan.layoutFingerprint
-    $runtimeCachePath = Join-Path $dataDir "layout_runtime.json"
-
-    if (Test-Path -LiteralPath $runtimeCachePath) {
-        try {
-            $cached = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-            if ($cached.layoutFingerprint -eq $fp -and $cached.runtime) {
-                return @{ ok = $true; cached = $true; runtime = $cached.runtime; fetchedAt = $cached.fetchedAt }
-            }
-        } catch {
-            # fall through and re-fetch
-        }
-    }
-
-    $runtime = $null
-    $fetchedFrom = $null
-    $shouldPost = $false
-    try {
-        $resp = Invoke-WebRequest -Uri ("{0}?layout={1}" -f $layoutRuntimeProviderUrl, $fp) `
-            -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
-        if ($resp.StatusCode -eq 200 -and $resp.Content) {
-            $runtime = $resp.Content | ConvertFrom-Json
-            $fetchedFrom = "GET"
-        }
-    } catch {
-        # 4xx = upstream rejected our query for this fingerprint (404 not found,
-        # 400 bad-request, etc.) — POST our scan to seed it.
-        # 5xx / 429 / network timeout = upstream is degraded — fall through to
-        # stale cache rather than amplifying load.
-        $statusCode = 0
-        try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-        if ($statusCode -ge 400 -and $statusCode -lt 500) { $shouldPost = $true }
-        else {
-            # serve stale cache if we have any
-            if (Test-Path -LiteralPath $runtimeCachePath) {
-                try {
-                    $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-                    if ($stale.runtime -and $stale.layoutFingerprint -eq $fp) {
-                        return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-upstream-fail" }
-                    }
-                } catch {}
-            }
-            return @{ ok = $false; error = "Layout runtime provider GET failed (HTTP $statusCode); no stale cache available" }
-        }
-    }
-
-    if (-not $runtime -and $shouldPost) {
-        try {
-            $body = ([pscustomobject]@{
-                layoutFingerprint = $fp
-                seed              = $scan.seed
-                worldPreset       = $scan.worldPreset
-                terrainPlacements = $scan.terrainPlacements
-            }) | ConvertTo-Json -Depth 10 -Compress
-            $resp = Invoke-WebRequest -Uri $layoutRuntimeProviderUrl -Method Post `
-                -Body $body -ContentType "application/json" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
-            if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 201) {
-                if ($resp.Content) {
-                    $runtime = $resp.Content | ConvertFrom-Json
-                } else {
-                    $resp2 = Invoke-WebRequest -Uri ("{0}?layout={1}" -f $layoutRuntimeProviderUrl, $fp) `
-                        -Method Get -TimeoutSec 25 -UseBasicParsing -ErrorAction Stop
-                    if ($resp2.StatusCode -eq 200 -and $resp2.Content) {
-                        $runtime = $resp2.Content | ConvertFrom-Json
-                    }
-                }
-                $fetchedFrom = "POST"
-            }
-        } catch {
-            # POST also failed (5xx / 429 / timeout). Serve stale cache if we
-            # have any, else return a friendly error. This avoids hammering
-            # the upstream with POSTs every poll while it's degraded.
-            if (Test-Path -LiteralPath $runtimeCachePath) {
-                try {
-                    $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-                    if ($stale.runtime -and $stale.layoutFingerprint -eq $fp) {
-                        return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-post-fail" }
-                    }
-                } catch {}
-            }
-            return @{ ok = $false; error = "Layout runtime provider POST failed (no stale cache): " + (Sanitize-PathInMessage $_.Exception.Message) }
-        }
-    }
-
-    if (-not $runtime) {
-        # GET 404 + POST returned non-2xx without throwing. Treat same as POST
-        # failure: serve stale if available, else surface no-data.
-        if (Test-Path -LiteralPath $runtimeCachePath) {
-            try {
-                $stale = Get-Content -LiteralPath $runtimeCachePath -Raw -ErrorAction Stop | ConvertFrom-Json
-                if ($stale.runtime) {
-                    return @{ ok = $true; cached = $true; stale = $true; runtime = $stale.runtime; fetchedAt = $stale.fetchedAt; fetchedFrom = "stale-on-no-data" }
-                }
-            } catch {}
-        }
-        return @{ ok = $false; error = "Layout runtime provider returned no runtime data for fingerprint $fp" }
-    }
-
-    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $envelope = [pscustomobject]@{
-        layoutFingerprint = $fp
-        fetchedAt         = $now
-        fetchedFrom       = $fetchedFrom
-        runtime           = $runtime
-    }
-    try {
-        Write-AtomicUtf8Json $runtimeCachePath $envelope
-    } catch {
-        Write-Host "WARN: failed to write layout_runtime.json cache: $($_.Exception.Message)"
-    }
-    return @{ ok = $true; cached = $false; runtime = $runtime; fetchedAt = $now; fetchedFrom = $fetchedFrom }
-}
-
 function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
     $statusPath = Join-Path $dataDir "rcon_status.json"
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -1391,55 +1093,10 @@ try {
                     continue
                 }
 
-                if ($path -eq "/api/public/layout") {
-                    $r = Get-CachedLayoutScan
-                    if ($r.ok) {
-                        Send-Json $context @{
-                            ok       = $true
-                            cached   = $r.cached
-                            cachedAt = $r.cachedAt
-                            scan     = (Get-PublicScanView $r.scan)
-                        }
-                    } else {
-                        Send-Json $context @{ ok = $false; error = $r.error } 503
-                    }
-                    continue
-                }
-
-                if ($path -eq "/api/public/layout/runtime") {
-                    $scanResult = Get-CachedLayoutScan
-                    if (-not $scanResult.ok) {
-                        Send-Json $context @{ ok = $false; error = $scanResult.error } 503
-                        continue
-                    }
-                    $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
-                    if ($runtimeResult.ok) {
-                        Send-Json $context @{
-                            ok                = $true
-                            layoutFingerprint = $scanResult.scan.layoutFingerprint
-                            seed              = $scanResult.scan.seed
-                            worldPreset       = $scanResult.scan.worldPreset
-                            cached            = $runtimeResult.cached
-                            stale             = ($runtimeResult.stale -eq $true)
-                            fetchedAt         = $runtimeResult.fetchedAt
-                            fetchedFrom       = $runtimeResult.fetchedFrom
-                            runtime           = $runtimeResult.runtime
-                        }
-                    } else {
-                        Send-Json $context @{
-                            ok                = $false
-                            layoutFingerprint = $scanResult.scan.layoutFingerprint
-                            error             = $runtimeResult.error
-                        } 503
-                    }
-                    continue
-                }
-
                 if ($path -eq "/api/public/mapinfo") {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
-                        $data = Add-SeaChartMapInfoConfig $data
                         Send-Json $context $data
                     } else {
                         $generation = $null
@@ -1556,46 +1213,6 @@ try {
                         Send-Json $context $overlay.Data
                     } else {
                         Send-Json $context @{ error = $overlay.Error } $overlay.StatusCode
-                    }
-                }
-                "/api/layout" {
-                    $r = Get-CachedLayoutScan
-                    if ($r.ok) {
-                        Send-Json $context @{
-                            ok       = $true
-                            cached   = $r.cached
-                            cachedAt = $r.cachedAt
-                            scan     = (Get-PublicScanView $r.scan)
-                        }
-                    } else {
-                        Send-Json $context @{ ok = $false; error = $r.error } 503
-                    }
-                }
-                "/api/layout/runtime" {
-                    $scanResult = Get-CachedLayoutScan
-                    if (-not $scanResult.ok) {
-                        Send-Json $context @{ ok = $false; error = $scanResult.error } 503
-                        continue
-                    }
-                    $runtimeResult = Get-CachedLayoutRuntime $scanResult.scan
-                    if ($runtimeResult.ok) {
-                        Send-Json $context @{
-                            ok                = $true
-                            layoutFingerprint = $scanResult.scan.layoutFingerprint
-                            seed              = $scanResult.scan.seed
-                            worldPreset       = $scanResult.scan.worldPreset
-                            cached            = $runtimeResult.cached
-                            stale             = ($runtimeResult.stale -eq $true)
-                            fetchedAt         = $runtimeResult.fetchedAt
-                            fetchedFrom       = $runtimeResult.fetchedFrom
-                            runtime           = $runtimeResult.runtime
-                        }
-                    } else {
-                        Send-Json $context @{
-                            ok                = $false
-                            layoutFingerprint = $scanResult.scan.layoutFingerprint
-                            error             = $runtimeResult.error
-                        } 503
                     }
                 }
                 "/api/config" {
@@ -1831,7 +1448,6 @@ try {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
-                        $data = Add-SeaChartMapInfoConfig $data
                         Send-Json $context $data
                     } else {
                         $generation = $null

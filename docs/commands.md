@@ -785,13 +785,9 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/runtime-overlay` | No (if enabled) | Public optional live save-state overlay for the Sea Chart. Same public-map config/token rules as `/public-map`. |
-| GET | `/api/public/layout` | No (if enabled) | Public world-layout fingerprint and terrain placement summary. Same public-map config/token rules as `/public-map`. |
-| GET | `/api/public/layout/runtime` | No (if enabled) | Public cached layout runtime overlay (POIs, quests, biomes, markers). Same public-map config/token rules as `/public-map`. |
 | GET | `/api/status` | Yes | Server status: player list, multipliers, server info |
 | GET | `/api/livemap` | Yes | Live map data: player positions, mobs, resource nodes |
 | GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for chests, buildings, saved player positions, fog reveal, and quest blackboard layers. |
-| GET | `/api/layout` | Yes | World-layout fingerprint and terrain placement summary used for map overlays. |
-| GET | `/api/layout/runtime` | Yes | Cached layout runtime overlay: POIs, quests, biomes, top-level markers, and marker lookup data. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
 | GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |
 | GET | `/api/pak-status` | Yes | Generated PAK status, stale-config detection, and recent CurveTable patch summary. |

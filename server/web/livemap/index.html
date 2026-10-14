@@ -21,14 +21,11 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 .wt-marker img{width:24px;height:24px;object-fit:contain;display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.85))}
 .wt-marker-fallback{width:16px;height:16px;border-radius:3px;background:#c9a959;display:none;transform:rotate(45deg)}
 .wt-marker-missing .wt-marker-fallback{display:block}
-.wt-marker-main_quest{box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 12px rgba(246,207,79,.45)}
-.wt-marker-side_quest{box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 12px rgba(121,183,216,.35)}
 .wp-live-marker{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(10,14,20,.82);border:1px solid rgba(200,170,90,.45);box-shadow:0 2px 8px rgba(0,0,0,.65),0 0 10px rgba(126,197,255,.18)}
 .wp-live-marker svg{width:15px;height:15px;stroke:#c8edff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .wp-live-marker-player svg{stroke:#c8edff}
 .wp-live-marker-mob svg{stroke:#ff8a80}
 .wp-live-marker-node svg{stroke:#a4d96c}
-.wt-level-label{background:transparent!important;border:0!important;box-shadow:none!important;color:rgba(237,224,204,.62)!important;font:700 10px/1 monospace;text-shadow:0 1px 2px rgba(0,0,0,.9);pointer-events:none}
 .leaflet-popup-content-wrapper{background:rgba(20,24,32,.95)!important;color:#ede0cc!important;border:1px solid rgba(200,170,90,.3)!important;border-radius:2px!important}
 .leaflet-popup-tip{background:rgba(20,24,32,.95)!important;border:1px solid rgba(200,170,90,.3)!important}
 .leaflet-popup-content{font-family:monospace;font-size:11px;margin:8px 12px}
@@ -46,9 +43,6 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 .wt-popup-kicker{color:#8f775d;font-size:10px;margin-bottom:2px}
 .wt-popup-title{color:#c9a959;font-size:12px;font-weight:700;line-height:1.25}
 .wt-popup-body{color:#ede0cc;line-height:1.35}
-.wt-popup-section{margin-top:7px;padding-top:7px;border-top:1px solid rgba(200,170,90,.12)}
-.wt-popup-section-title{color:#c9a959;font-size:10px;margin-bottom:3px}
-.wt-popup-list{margin:2px 0 0 14px;padding:0;color:#bdaa92}
 .wt-popup-meta{margin-top:6px;color:#8f775d;font-size:10px;word-break:break-all}
 #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#c9a959;font-family:monospace;font-size:14px;z-index:1000}
 #wpsearch-btn{position:absolute;top:8px;right:154px;z-index:1100;background:rgba(20,24,32,.92);color:#c9a959;border:1px solid rgba(200,170,90,.35);padding:6px 10px;font:11px/1 monospace;cursor:pointer;border-radius:2px;min-width:68px;text-align:center}
@@ -208,9 +202,9 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
     <button id="wpsearch-close" type="button" aria-label="Close">×</button>
   </div>
   <div id="wpsearch-box-wrap">
-    <input id="wpsearch-input" type="search" placeholder="Search items, quests, POIs, resources…" autocomplete="off">
+    <input id="wpsearch-input" type="search" placeholder="Search items and map markers…" autocomplete="off">
   </div>
-  <div id="wpsearch-results"><div class="wpsearch-empty">Search items, quests, POIs, resources, and live save layers.</div></div>
+  <div id="wpsearch-results"><div class="wpsearch-empty">Search items and map markers.</div></div>
 </div>
 <button id="wplayers-btn" type="button" aria-expanded="false">Layers</button>
 <div id="wplayers-panel" aria-label="Map layers">
@@ -465,49 +459,6 @@ var STATIC_CATALOG='/catalog/v1';
     var poiCounts = {};
     var livePlayers = [];
     var initialZoomDone = false;
-    var overlayTransform = manifest.overlay_transform || {};
-    function asNumber(v, fallback) {
-        v = Number(v);
-        return isFinite(v) ? v : fallback;
-    }
-    function asBool(v) {
-        return v === true || v === 1 || v === '1' || v === 'true' || v === 'yes' || v === 'on';
-    }
-    function overlayPoint(x, y) {
-        if (!overlayTransform || !asBool(overlayTransform.enabled)) return { x: x, y: y };
-        var originX = asNumber(overlayTransform.origin_x, 0);
-        var originY = asNumber(overlayTransform.origin_y, 0);
-        var dx = x - originX;
-        var dy = y - originY;
-        if (asBool(overlayTransform.swap_xy)) {
-            var tmp = dx;
-            dx = dy;
-            dy = tmp;
-        }
-        if (asBool(overlayTransform.flip_x)) dx = -dx;
-        if (asBool(overlayTransform.flip_y)) dy = -dy;
-        var deg = asNumber(overlayTransform.rotate_degrees, 0);
-        if (deg) {
-            var rad = deg * Math.PI / 180;
-            var cos = Math.cos(rad);
-            var sin = Math.sin(rad);
-            var rx = dx * cos - dy * sin;
-            var ry = dx * sin + dy * cos;
-            dx = rx;
-            dy = ry;
-        }
-        var commonScale = asNumber(overlayTransform.scale, 1);
-        var scaleX = commonScale * asNumber(overlayTransform.scale_x, 1);
-        var scaleY = commonScale * asNumber(overlayTransform.scale_y, 1);
-        return {
-            x: originX + dx * scaleX + asNumber(overlayTransform.offset_x, 0),
-            y: originY + dy * scaleY + asNumber(overlayTransform.offset_y, 0)
-        };
-    }
-    function overlayLL(x, y) {
-        var p = overlayPoint(x, y);
-        return wLL(p.x, p.y);
-    }
     function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
     function escAttr(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -515,33 +466,6 @@ var STATIC_CATALOG='/catalog/v1';
         });
     }
 
-    // Curated layout overlay (markers, biome polygons, layout nodes) pulled
-    // per-server via /api/layout/runtime and cached on the WP+ HTTP server
-    // keyed off the .sst layout fingerprint.
-    var WT_CATEGORIES = [
-        { key: 'main_quest',   label: 'Main quests',     color: '#f5d76e' },
-        { key: 'side_quest',   label: 'Side quests',     color: '#9bc4ef' },
-        { key: 'dungeon',      label: 'Dungeons',        color: '#a060e0' },
-        { key: 'mine',         label: 'Mines',           color: '#c08040' },
-        { key: 'ruins',        label: 'Ruins',           color: '#888888' },
-        { key: 'smuggler',     label: 'Smuggler camps',  color: '#cc4444' },
-        { key: 'farm',         label: 'Farms',           color: '#7cb342' },
-        { key: 'shipwreck',    label: 'Shipwrecks',      color: '#2196f3' },
-        { key: 'coastal',      label: 'Coastal camps',   color: '#ffb74d' },
-        { key: 'tortuga',      label: 'Tortuga',         color: '#e87a4a' },
-        { key: 'poi',          label: 'Other POIs',      color: '#c9a959' },
-        { key: 'misc',         label: 'Other markers',   color: '#aaaaaa' }
-    ];
-    var wtCategoryLayers = {};
-    WT_CATEGORIES.forEach(function(c) { wtCategoryLayers[c.key] = L.layerGroup().addTo(map); });
-    var manualPoiLayer = L.layerGroup().addTo(map);
-    var wtCounts = {};
-    var manualPoiCount = 0;
-    var wtStatus = 'loading';
-    var biomeLayer = L.layerGroup().addTo(map);
-    var edgeLayer = L.layerGroup().addTo(map);
-    var levelLabelLayer = L.layerGroup();
-    var nodeLayer = L.layerGroup();    // off by default — layout graph debug
     // Runtime-overlay layers — live save state such as chests opened,
     // buildings placed, fog reveal, and save rows. The generic open-source
     // dashboard exposes these only when an API provides the decoded overlay
@@ -556,72 +480,11 @@ var STATIC_CATALOG='/catalog/v1';
     var questStateLayer = L.layerGroup().addTo(map);
     var overlayStatus = 'loading';   // 'loading' | 'unavailable' | 'empty' | 'data'
     var overlayCounts = { islandStates: 0, chests: 0, buildings: 0, staticActors: 0, scenarioSaves: 0, fog: 0, savePlayers: 0, questFlags: 0 };
-    var overlayLayoutWaitAttempts = 0;
-    var lastWtFingerprint = '';
-    // Track whether the last successful render actually carried data. An empty
-    // world (server up but no player has hydrated R5MarkersWorldSubsystem.Models[]
-    // yet) returns a stable fingerprint with zero markers/polygons. We must NOT
-    // short-circuit on a matching fingerprint when the previous render was empty,
-    // otherwise the empty→hydrated transition is invisible until full reload.
-    var lastWtHadData = false;
-    var currentLayoutNodes = [];
-    function pointInPoly(x, y, poly) {
-        var inside = false;
-        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-            var xi = poly[i].x, yi = poly[i].y;
-            var xj = poly[j].x, yj = poly[j].y;
-            var intersects = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi) / ((yj - yi) || 1e-9)) + xi);
-            if (intersects) inside = !inside;
-        }
-        return inside;
-    }
-    function distToSegment(px, py, ax, ay, bx, by) {
-        var vx = bx - ax, vy = by - ay;
-        var wx = px - ax, wy = py - ay;
-        var c1 = vx * wx + vy * wy;
-        if (c1 <= 0) return Math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
-        var c2 = vx * vx + vy * vy;
-        if (c2 <= c1) return Math.sqrt((px - bx) * (px - bx) + (py - by) * (py - by));
-        var t = c1 / c2;
-        var qx = ax + t * vx, qy = ay + t * vy;
-        return Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
-    }
-    function distToPoly(x, y, poly) {
-        var d = Infinity;
-        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-            d = Math.min(d, distToSegment(x, y, poly[j].x, poly[j].y, poly[i].x, poly[i].y));
-        }
-        return d;
-    }
-    function layoutContextForPoint(x, y) {
-        var best = null;
-        (currentLayoutNodes || []).forEach(function(n) {
-            (n.polygons || []).forEach(function(poly) {
-                if (!Array.isArray(poly) || poly.length < 3) return;
-                var inside = pointInPoly(x, y, poly);
-                var dist = inside ? 0 : distToPoly(x, y, poly);
-                if (!best || inside || dist < best.dist) {
-                    best = {
-                        nodeId: n.nodeId || n.id || '',
-                        template: n.terrainTemplateId || n.primaryBiomeLabel || n.tag || 'island',
-                        inside: inside,
-                        dist: dist
-                    };
-                }
-            });
-        });
-        return best;
-    }
     var itemSourceLayer = L.layerGroup().addTo(map);
     var itemSourceCount = 0;
     var searchResultMarker = null;
     var mapSourceMarkers = [];
-    var resourceStatus = 'off'; // resource-zone hints are not in the game data files
-    var resourceTypes = {};
-    var resourceTypeLayers = {};
-    var resourceCounts = {};
-    var resourceZones = [];
-    var resourceLayoutNodes = [];
+    var searchSnapshot = [];
     var SOURCE_SYNONYMS = {
         cj: ['coast', 'jungle'],
         hl: ['highlands'],
@@ -655,89 +518,9 @@ var STATIC_CATALOG='/catalog/v1';
     var SOURCE_GENERIC_TOKENS = { coast: true, jungle: true, highlands: true, swamp: true, camp: true, pirate: true, ruin: true, ruins: true, big: true, small: true, battle: true };
     '0 1 2 3 4 5 6 7 8 9 01 02 03 04 05 06 07 08 09 10'.split(' ').forEach(function(t) { SOURCE_GENERIC_TOKENS[t] = true; });
 
-    // Map a layout marker type to one of our display buckets.
-    function wtCategorize(t) {
-        if (!t) return 'misc';
-        if (t === 'Tortuga') return 'tortuga';
-        if (t.indexOf('T_QuestIcon_Main') === 0)        return 'main_quest';
-        if (t.indexOf('T_QuestIcon_Side') === 0)        return 'side_quest';
-        if (t.indexOf('T_MapIcon_Dungeon') === 0)       return 'dungeon';
-        if (t === 'T_MapIcon_Mine')                     return 'mine';
-        if (t.indexOf('T_MapIcon_Ruins') === 0)         return 'ruins';
-        if (t === 'T_IconPOI_Camp_Smuggler')            return 'smuggler';
-        if (t === 'T_IconPOI_Farm')                     return 'farm';
-        if (t === 'T_IconPOI_Shipwreck')                return 'shipwreck';
-        if (t === 'T_IconPOI_CoastalCamp')              return 'coastal';
-        if (t.indexOf('T_IconPOI_') === 0)              return 'poi';
-        if (t.indexOf('T_QuestIcon_') === 0)            return 'side_quest';
-        return 'misc';
-    }
-    function wtManualCategory(m) {
-        var icon = String((m.iconAssetPath || '').split('/').pop() || '');
-        var title = String(m.title || m.name || '').toLowerCase();
-        if (icon.indexOf('Mine') >= 0 || title.indexOf('deposit') >= 0) return 'mine';
-        if (icon.indexOf('Dungeon') >= 0 || icon.indexOf('Cave') >= 0 || title.indexOf('cave') >= 0 || title.indexOf('crypt') >= 0) return 'dungeon';
-        if (icon.indexOf('Farm') >= 0 || title.indexOf('farm') >= 0) return 'farm';
-        if (icon.indexOf('Shipwreck') >= 0 || title.indexOf('ship') >= 0) return 'shipwreck';
-        if (icon.indexOf('CoastalCamp') >= 0 || icon.indexOf('Outpost') >= 0 || title.indexOf('outpost') >= 0) return 'coastal';
-        if (icon.indexOf('Camp_Smuggler') >= 0 || title.indexOf('camp') >= 0 || title.indexOf('smuggler') >= 0) return 'smuggler';
-        if (icon.indexOf('Fort') >= 0 || title.indexOf('tortuga') >= 0) return 'tortuga';
-        if (icon.indexOf('Quest') >= 0 || title.indexOf('map') >= 0) return 'side_quest';
-        if (
-            icon.indexOf('Ruin') >= 0 ||
-            icon.indexOf('Altar') >= 0 ||
-            icon.indexOf('Corrupt') >= 0 ||
-            icon.indexOf('Firebowl') >= 0 ||
-            icon.indexOf('Table') >= 0 ||
-            icon.indexOf('Pool') >= 0 ||
-            title.indexOf('ruin') >= 0 ||
-            title.indexOf('altar') >= 0 ||
-            title.indexOf('ancient') >= 0
-        ) return 'ruins';
-        return wtCategorize(icon);
-    }
-    function wtStyle(catKey) {
-        var c = WT_CATEGORIES.find(function(x) { return x.key === catKey; });
-        return c ? c.color : '#ffffff';
-    }
-    function wtGlyph(catKey) {
-        return {
-            main_quest: '!',
-            side_quest: '?',
-            dungeon: 'D',
-            mine: 'M',
-            ruins: 'R',
-            smuggler: 'S',
-            farm: 'F',
-            shipwreck: 'W',
-            coastal: 'C',
-            tortuga: 'T',
-            poi: 'P',
-            misc: '*'
-        }[catKey] || '*';
-    }
-    // One marker icon per layer, drawn for Windrose+. No game art ships with the mod.
+    // A search result whose own marker is hidden is shown with this icon, made for Windrose+.
     var WT_ICON_BASE = '/catalog/v1/icons/map/';
-    var WT_FALLBACK_ICON = {
-        main_quest: 'main-quest.webp',
-        side_quest: 'side-quest.webp',
-        dungeon: 'dungeon.webp',
-        mine: 'mine.webp',
-        ruins: 'ruins.webp',
-        smuggler: 'smuggler.webp',
-        farm: 'farm.webp',
-        shipwreck: 'shipwreck.webp',
-        coastal: 'coastal.webp',
-        tortuga: 'tortuga.webp',
-        poi: 'poi.webp',
-        misc: 'misc.webp'
-    };
-    function wtIconFile(markerType, catKey) {
-        var t = String(markerType || '').split('/').pop();
-        if (t.indexOf('POI_SeaAdventure_') === 0) return 'sea.webp';
-        if (t === 'StartLocation') return 'start.webp';
-        return WT_FALLBACK_ICON[catKey] || WT_FALLBACK_ICON.misc;
-    }
+    var SEARCH_ICON = 'poi.webp';
     function wtIconFromFile(catKey, iconFile) {
         var size = 30;
         var html = '<div class="wt-marker wt-marker-' + escHtml(catKey) + '">';
@@ -753,14 +536,9 @@ var STATIC_CATALOG='/catalog/v1';
             popupAnchor: [0, -size / 2]
         });
     }
-    function wtIcon(catKey, markerType) {
-        return wtIconFromFile(catKey, wtIconFile(markerType, catKey));
-    }
-    function wtCategoryLabel(catKey) {
-        for (var i = 0; i < WT_CATEGORIES.length; i++) {
-            if (WT_CATEGORIES[i].key === catKey) return WT_CATEGORIES[i].label;
-        }
-        return 'Marker';
+    var SOURCE_LABELS = { 'live-mob': 'Live mob', 'live-resource': 'Resource node', poiscan: 'POIScan marker' };
+    function sourceLabel(kind) {
+        return SOURCE_LABELS[kind] || 'Map marker';
     }
     function wtPopupIconHtml(iconFile) {
         if (!iconFile) return '';
@@ -818,23 +596,6 @@ var STATIC_CATALOG='/catalog/v1';
             popupAnchor: [0, -size / 2]
         });
     }
-    function wtNodeColor(tag) {
-        tag = String(tag || '');
-        if (tag.indexOf('Blackbeard') >= 0) return '#e05a5a';
-        if (tag.indexOf('Brethren') >= 0) return '#d9b765';
-        if (tag.indexOf('Buc') >= 0) return '#6fa8dc';
-        if (tag.indexOf('Smuggler') >= 0) return '#76c277';
-        if (tag.indexOf('Undead') >= 0) return '#b986d8';
-        return '#8aa88a';
-    }
-    function wtLevelLabel(tag) {
-        tag = String(tag || '');
-        if (tag.indexOf('.T4') >= 0) return 'Lv 16-20';
-        if (tag.indexOf('.T3') >= 0) return 'Lv 11-15';
-        if (tag.indexOf('.T2') >= 0) return 'Lv 6-10';
-        if (tag.indexOf('.T1') >= 0) return 'Lv 1-5';
-        return '';
-    }
     function sourceSplitTokens(v) {
         return String(v || '')
             .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -866,29 +627,20 @@ var STATIC_CATALOG='/catalog/v1';
         return out;
     }
     function sourceMarkerTokens(m) {
-        var values = [m.name, m.title, m.poiId, m.foliageTypeAssetPath, m.discoveredTag, m.unknownTag];
-        if (m.questPopup) {
-            values.push(m.questPopup.mainTitle, m.questPopup.stageTitle, m.questPopup.sourceQuestId, m.questPopup.description);
-        }
-        if (m.poiPopup) {
-            values.push(m.poiPopup.summary);
-            (m.poiPopup.objectives || []).forEach(function(o) { values.push((o && o.text) || o); });
-        }
-        (m.discoveredMarkers || []).forEach(function(dm) {
-            values.push(dm.linkTag, dm.scenarioQuestAssetPath, dm.shownNameText, dm.shownNameKey);
-        });
-        return sourceTokens(values);
+        return sourceTokens([m.name, m.title, m.poiId]);
     }
     function sourceDropTokens(d) {
         var values = [d.npcName, d.npcSourceId, d.sourceTableId, d.sourceTableAssetPath];
         (d.rollPath || []).forEach(function(v) { values.push(v); });
         return sourceTokens(values);
     }
-    function registerMapSource(raw, x, y, kind, marker, catKey, iconFile, viewPoint) {
+    // Each refresh replaces its own kind's entries, so the list does not grow.
+    function dropMapSources(kind) {
+        mapSourceMarkers = mapSourceMarkers.filter(function(src) { return src.kind !== kind; });
+    }
+    function registerMapSource(raw, x, y, kind, marker) {
         if (!raw || typeof x !== 'number' || typeof y !== 'number') return;
         if (!isFinite(x) || !isFinite(y)) return;
-        var vx = viewPoint && typeof viewPoint.x === 'number' && isFinite(viewPoint.x) ? viewPoint.x : x;
-        var vy = viewPoint && typeof viewPoint.y === 'number' && isFinite(viewPoint.y) ? viewPoint.y : y;
         var popupHtml = '';
         if (marker && marker.getPopup) {
             var popup = marker.getPopup();
@@ -903,141 +655,17 @@ var STATIC_CATALOG='/catalog/v1';
             mapSourceMarkers.length
         ].join(':');
         mapSourceMarkers.push({
-            index: mapSourceMarkers.length,
             kind: kind || 'marker',
             name: name,
             poiId: raw.poiId || '',
             searchId: syntheticId,
             type: raw.type || '',
-            catKey: catKey || '',
-            iconFile: iconFile || '',
             x: x,
             y: y,
-            viewX: vx,
-            viewY: vy,
-            tokens: sourceTokens([wtCategoryLabel(catKey), popupHtml]).concat(sourceMarkerTokens(raw)),
+            tokens: sourceTokens([sourceLabel(kind), popupHtml]).concat(sourceMarkerTokens(raw)),
             marker: marker || null,
             popupHtml: popupHtml
         });
-    }
-    function resourceName(id) {
-        var rt = resourceTypes[id] || {};
-        if (rt.name) return rt.name;
-        return String(id || 'Resource').replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-    }
-    function resourceColor(id, prop, fallback) {
-        var rt = resourceTypes[id] || {};
-        return (rt.color && rt.color[prop]) || fallback;
-    }
-    function resourceIconFile(id) {
-        var rt = resourceTypes[id] || {};
-        var cat = String(rt.category || id || '').toLowerCase();
-        if (cat.indexOf('mineral') >= 0 || cat.indexOf('ore') >= 0 || String(id || '').indexOf('deposit') >= 0) return 'mine.webp';
-        if (cat.indexOf('plant') >= 0 || cat.indexOf('crop') >= 0 || cat.indexOf('herb') >= 0) return 'farm.webp';
-        if (cat.indexOf('wood') >= 0 || cat.indexOf('tree') >= 0) return 'wood.webp';
-        return 'poi.webp';
-    }
-    function ensureResourceLayer(id) {
-        if (!resourceTypeLayers[id]) resourceTypeLayers[id] = L.layerGroup();
-        return resourceTypeLayers[id];
-    }
-    function clearResources() {
-        Object.keys(resourceTypeLayers).forEach(function(k) { resourceTypeLayers[k].clearLayers(); });
-        resourceCounts = {};
-    }
-    function resourceNodeCenter(n) {
-        var x = (typeof n.worldX === 'number') ? n.worldX : n.x;
-        var y = (typeof n.worldY === 'number') ? n.worldY : n.y;
-        if (typeof x !== 'number' || typeof y !== 'number' || !isFinite(x) || !isFinite(y)) return null;
-        return { x: x, y: y };
-    }
-    function resourceMarkerCategory(id) {
-        var file = resourceIconFile(id);
-        if (file.indexOf('Mine') >= 0) return 'mine';
-        if (file.indexOf('Farm') >= 0) return 'farm';
-        return 'poi';
-    }
-    function resourcePoiLocations(zone) {
-        var ids = zone && Array.isArray(zone.manualPlacedObjectPoiIds) ? zone.manualPlacedObjectPoiIds : [];
-        if (!ids.length || !mapSourceMarkers.length) return [];
-        var want = {};
-        ids.forEach(function(id) { if (id) want[String(id)] = true; });
-        var out = [];
-        var seen = {};
-        mapSourceMarkers.forEach(function(src) {
-            if (!src.poiId || !want[String(src.poiId)]) return;
-            var k = src.poiId || (Math.round(src.x) + ',' + Math.round(src.y));
-            if (seen[k]) return;
-            seen[k] = true;
-            out.push(src);
-        });
-        return out;
-    }
-    function resourcePopup(zone, n, anchor) {
-        var id = zone.resourceTypeId || '';
-        var body = '<div>Resource hint</div>';
-        var meta = '';
-        if (anchor && anchor.name) meta += '<div>anchored to: ' + escHtml(anchor.name) + '</div>';
-        if (anchor && anchor.poiId) meta += '<div>poi: ' + escHtml(anchor.poiId) + '</div>';
-        if (zone.terrainTemplateId) meta += '<div>terrain: ' + escHtml(zone.terrainTemplateId) + '</div>';
-        if (n && n.nodeId !== undefined) meta += '<div>node: ' + escHtml(String(n.nodeId)) + '</div>';
-        if (zone.approximationConfidence) meta += '<div>confidence: ' + escHtml(zone.approximationConfidence) + '</div>';
-        if (Array.isArray(zone.evidenceKinds) && zone.evidenceKinds.length) meta += '<div>evidence: ' + escHtml(zone.evidenceKinds.join(', ')) + '</div>';
-        if (zone.authoredClusterCount !== undefined) meta += '<div>authored clusters: ' + escHtml(String(zone.authoredClusterCount)) + '</div>';
-        if (zone.authoredNodeCount !== undefined) meta += '<div>authored nodes: ' + escHtml(String(zone.authoredNodeCount)) + '</div>';
-        if (zone.manualPlacedObjectPoiCount !== undefined) meta += '<div>manual POIs: ' + escHtml(String(zone.manualPlacedObjectPoiCount)) + '</div>';
-        body += '<div style="margin-top:6px;color:#8f775d">template/POI hint, not exact live harvest state</div>';
-        return wtPopupShell(resourceName(id), 'Resource hint', resourceIconFile(id), body, meta);
-    }
-    function renderResourceZones(nodes) {
-        if (Array.isArray(nodes)) resourceLayoutNodes = nodes;
-        clearResources();
-        if (!resourceZones.length || !resourceLayoutNodes.length) {
-            if (resourceStatus !== 'error') resourceStatus = resourceZones.length ? 'empty' : resourceStatus;
-            rebuildLayerControl();
-            return;
-        }
-        var nodeById = {};
-        resourceLayoutNodes.forEach(function(n) {
-            if (n && n.nodeId !== undefined && n.kind !== 'junction') nodeById[String(n.nodeId)] = n;
-        });
-        var zonesByNode = {};
-        resourceZones.forEach(function(zone) {
-            (zone.nodeIds || []).forEach(function(id) {
-                var key = String(id);
-                if (!nodeById[key]) return;
-                if (!zonesByNode[key]) zonesByNode[key] = [];
-                zonesByNode[key].push(zone);
-            });
-        });
-        Object.keys(zonesByNode).forEach(function(nodeId) {
-            var n = nodeById[nodeId];
-            var center = resourceNodeCenter(n);
-            if (!center) return;
-            var list = zonesByNode[nodeId];
-            list.forEach(function(zone) {
-                var id = zone.resourceTypeId || 'resource';
-                var anchors = resourcePoiLocations(zone);
-                anchors.forEach(function(anchor) {
-                    var cat = resourceMarkerCategory(id);
-                    var marker = L.marker(wLL(
-                        typeof anchor.viewX === 'number' ? anchor.viewX : anchor.x,
-                        typeof anchor.viewY === 'number' ? anchor.viewY : anchor.y
-                    ), {
-                        icon: wtIconFromFile(cat, resourceIconFile(id)),
-                        keyboard: false
-                    });
-                    var label = resourceName(id);
-                    marker.bindTooltip(escHtml(label + ' · ' + (anchor.name || anchor.poiId || 'POI hint')), { direction: 'top', offset: [0, -4], opacity: 0.95 });
-                    marker.bindPopup(resourcePopup(zone, n, anchor), { maxWidth: 380 });
-                    marker.addTo(ensureResourceLayer(id));
-                    resourceCounts[id] = (resourceCounts[id] || 0) + 1;
-                });
-            });
-        });
-        var totalMarkers = Object.keys(resourceCounts).reduce(function(sum, id) { return sum + resourceCounts[id]; }, 0);
-        resourceStatus = totalMarkers > 0 ? 'ok' : 'empty';
-        rebuildLayerControl();
     }
     function findItemSourceLocations(drop) {
         if (!drop || String(drop.sourceType || '').toLowerCase() === 'creature') return [];
@@ -1059,8 +687,6 @@ var STATIC_CATALOG='/catalog/v1';
                 kind: m.kind,
                 x: m.x,
                 y: m.y,
-                viewX: m.viewX,
-                viewY: m.viewY,
                 score: score,
                 matchedTokens: common
             };
@@ -1094,10 +720,7 @@ var STATIC_CATALOG='/catalog/v1';
         var bounds = [];
         (sources || []).forEach(function(src) {
             if (!src || typeof src.x !== 'number' || typeof src.y !== 'number') return;
-            var ll = wLL(
-                typeof src.viewX === 'number' ? src.viewX : src.x,
-                typeof src.viewY === 'number' ? src.viewY : src.y
-            );
+            var ll = wLL(src.x, src.y);
             var title = src.name || src.poiId || 'Loot source';
             var m = L.circleMarker(ll, {
                 radius: 8,
@@ -1124,13 +747,14 @@ var STATIC_CATALOG='/catalog/v1';
         q = String(q || '').toLowerCase().trim();
         if (!q) return [];
         var qTokens = sourceSplitTokens(q);
-        return mapSourceMarkers.map(function(src, idx) {
+        // Live markers are replaced every few seconds; a click opens what was found.
+        searchSnapshot = mapSourceMarkers.slice();
+        return searchSnapshot.map(function(src, idx) {
             var hay = [
                 src.name,
                 src.poiId,
                 src.type,
-                src.kind,
-                wtCategoryLabel(src.catKey)
+                sourceLabel(src.kind)
             ].join(' ').toLowerCase();
             var score = hay.indexOf(q) >= 0 ? 10 : 0;
             qTokens.forEach(function(t) {
@@ -1139,8 +763,7 @@ var STATIC_CATALOG='/catalog/v1';
             return {
                 index: idx,
                 name: src.name || src.poiId || 'Map marker',
-                meta: wtCategoryLabel(src.catKey) + ' · ' + Math.round(src.x) + ', ' + Math.round(src.y),
-                iconFile: src.iconFile,
+                meta: sourceLabel(src.kind) + ' · ' + Math.round(src.x) + ', ' + Math.round(src.y),
                 score: score
             };
         }).filter(function(src) {
@@ -1151,25 +774,22 @@ var STATIC_CATALOG='/catalog/v1';
     }
     function openMapSource(index) {
         index = parseInt(index, 10);
-        if (!isFinite(index) || !mapSourceMarkers[index]) return false;
-        var src = mapSourceMarkers[index];
-        var ll = wLL(
-            typeof src.viewX === 'number' ? src.viewX : src.x,
-            typeof src.viewY === 'number' ? src.viewY : src.y
-        );
+        if (!isFinite(index) || !searchSnapshot[index]) return false;
+        var src = searchSnapshot[index];
+        var ll = wLL(src.x, src.y);
         map.setView(ll, Math.max(map.getZoom(), 4), { animate: true });
         if (src.marker && map.hasLayer(src.marker) && src.marker.openPopup) {
             setTimeout(function() { src.marker.openPopup(); }, 180);
         } else {
             if (searchResultMarker) map.removeLayer(searchResultMarker);
             searchResultMarker = L.marker(ll, {
-                icon: wtIconFromFile(src.catKey || 'poi', src.iconFile || WT_FALLBACK_ICON.poi),
+                icon: wtIconFromFile('poi', SEARCH_ICON),
                 keyboard: false
             }).bindTooltip(escHtml(src.name || 'Search result'), {
                 direction: 'top',
                 offset: [0, -4],
                 opacity: 0.95
-            }).bindPopup(src.popupHtml || wtPopupShell(src.name || 'Search result', wtCategoryLabel(src.catKey), src.iconFile || WT_FALLBACK_ICON.poi, '', ''), {
+            }).bindPopup(src.popupHtml || wtPopupShell(src.name || 'Search result', sourceLabel(src.kind), SEARCH_ICON, '', ''), {
                 maxWidth: 380,
                 autoPanPaddingTopLeft: [40, 60]
             }).addTo(map);
@@ -1184,289 +804,8 @@ var STATIC_CATALOG='/catalog/v1';
         searchMapSources: searchMapSources,
         openMapSource: openMapSource,
         getItemSourceCount: function() { return itemSourceCount; },
-        getMapSourceCount: function() { return mapSourceMarkers.length; },
-        getResourceZoneCount: function() {
-            return Object.keys(resourceCounts).reduce(function(sum, id) { return sum + resourceCounts[id]; }, 0);
-        },
-        getResourceTypeCount: function() {
-            return Object.keys(resourceCounts).filter(function(id) { return resourceCounts[id] > 0; }).length;
-        }
+        getMapSourceCount: function() { return mapSourceMarkers.length; }
     };
-    function wtPretty(s) {
-        if (!s) return '';
-        return String(s).replace(/^T_(?:QuestIcon|IconPOI|MapIcon)_/, '').replace(/_/g, ' ');
-    }
-    function wtClearAll() {
-        WT_CATEGORIES.forEach(function(c) {
-            wtCategoryLayers[c.key].clearLayers();
-            wtCounts[c.key] = 0;
-        });
-        manualPoiLayer.clearLayers();
-        manualPoiCount = 0;
-        biomeLayer.clearLayers();
-        edgeLayer.clearLayers();
-        levelLabelLayer.clearLayers();
-        nodeLayer.clearLayers();
-        itemSourceLayer.clearLayers();
-        itemSourceCount = 0;
-        if (searchResultMarker) {
-            map.removeLayer(searchResultMarker);
-            searchResultMarker = null;
-        }
-        mapSourceMarkers = [];
-        clearResources();
-    }
-    function wtQuestItemLine(it) {
-        if (!it || typeof it !== 'object') return escHtml(String(it || ''));
-        var item = (it.item && typeof it.item === 'object') ? it.item : it;
-        var name = item.name || item.id || item.itemId || it.name || it.id || it.itemId || 'Item';
-        var qty = it.count || it.qty || it.quantity || it.amount || it.requiredCount || it.rewardCount || '';
-        var prefix = qty ? (qty + 'x ') : '';
-        return escHtml(prefix + name);
-    }
-    function wtQuestItems(title, list) {
-        if (!Array.isArray(list) || !list.length) return '';
-        var html = '<div class="wt-popup-section"><div class="wt-popup-section-title">' + escHtml(title) + '</div><ul class="wt-popup-list">';
-        list.slice(0, 12).forEach(function(it) {
-            html += '<li>' + wtQuestItemLine(it) + '</li>';
-        });
-        html += '</ul></div>';
-        return html;
-    }
-    // Build the rich popup body from a marker's questPopup / poiPopup payload.
-    function wtPopupHtml(m, catKey, markerType) {
-        var body = '';
-        var meta = '';
-        var title = m.name || wtPretty(m.type) || 'Marker';
-        var iconFile = wtIconFile(markerType || m.iconAssetPath || m.type, catKey);
-        var kicker = wtCategoryLabel(catKey || wtCategorize(m.type));
-        if (m.description) body += '<div>' + escHtml(m.description) + '</div>';
-        var quest = m.questPopup || {};
-        if (quest && typeof quest === 'object' && (quest.description || quest.mainTitle || quest.stageTitle || quest.experience || quest.requiredItems || quest.rewardItems)) {
-            if (quest.mainTitle && quest.mainTitle !== title) {
-                body += '<div class="wt-popup-section"><div class="wt-popup-section-title">Quest</div><div>' + escHtml(quest.mainTitle) + '</div></div>';
-            }
-            if (quest.stageTitle && quest.stageTitle !== title && quest.stageTitle !== quest.mainTitle) {
-                body += '<div style="margin-top:3px;color:#d9caa9">' + escHtml(quest.stageTitle) + '</div>';
-            }
-            if (quest.description) {
-                body += '<div style="margin-top:6px;white-space:pre-wrap;max-width:330px">' + escHtml(String(quest.description).replace(/\\r\\n/g, '\n')) + '</div>';
-            }
-            if (quest.experience !== undefined && quest.experience !== null && quest.experience !== '') {
-                body += '<div style="margin-top:5px;color:#8f775d">XP: ' + escHtml(quest.experience) + '</div>';
-            }
-            body += wtQuestItems('Required', quest.requiredItems);
-            body += wtQuestItems('Rewards', quest.rewardItems);
-            if (quest.sourceQuestId) {
-                meta += '<div>quest: ' + escHtml(quest.sourceQuestId) + '</div>';
-            }
-        }
-        var pop = m.poiPopup || {};
-        if (pop && typeof pop === 'object') {
-            if (pop.summary && pop.summary !== m.description) {
-                body += '<div style="margin-top:4px">' + escHtml(pop.summary) + '</div>';
-            }
-            if (Array.isArray(pop.objectives) && pop.objectives.length) {
-                body += '<div class="wt-popup-section"><div class="wt-popup-section-title">Objectives</div><ul class="wt-popup-list">';
-                pop.objectives.slice(0, 12).forEach(function(o) {
-                    var t = (typeof o === 'string') ? o : (o && o.text) ? o.text : JSON.stringify(o);
-                    body += '<li>' + escHtml(t) + '</li>';
-                });
-                body += '</ul></div>';
-            }
-            if (Array.isArray(pop.rewards) && pop.rewards.length) {
-                body += '<div class="wt-popup-section"><div class="wt-popup-section-title">Rewards</div><ul class="wt-popup-list">';
-                pop.rewards.slice(0, 12).forEach(function(r) {
-                    var t;
-                    if (typeof r === 'string') t = r;
-                    else if (r && r.name) t = (r.count ? (r.count + 'x ') : '') + r.name;
-                    else t = JSON.stringify(r);
-                    body += '<li>' + escHtml(t) + '</li>';
-                });
-                body += '</ul></div>';
-            }
-            if (Array.isArray(pop.items) && pop.items.length) {
-                body += '<div class="wt-popup-section"><div class="wt-popup-section-title">Items</div><ul class="wt-popup-list">';
-                pop.items.slice(0, 12).forEach(function(it) {
-                    var t = (typeof it === 'string') ? it : ((it && it.name) ? ((it.count ? (it.count + 'x ') : '') + it.name) : JSON.stringify(it));
-                    body += '<li>' + escHtml(t) + '</li>';
-                });
-                body += '</ul></div>';
-            }
-        }
-        meta += '<div>type: ' + escHtml(m.type || '') + '</div>';
-        if (typeof m.worldX === 'number' && typeof m.worldY === 'number') {
-            meta += '<div>pos: ' + Math.round(m.worldX) + ', ' + Math.round(m.worldY) + '</div>';
-        }
-        return wtPopupShell(title, kicker, iconFile, body, meta);
-    }
-    function flayout() {
-        var r = new XMLHttpRequest();
-        r.open('GET', withPublicToken(isPublicMap ? '/api/public/layout/runtime' : '/api/layout/runtime'));
-        r.timeout = 95000;
-        r.onload = function() {
-            if (r.status !== 200) { wtStatus = 'error'; rebuildLayerControl(); return; }
-            try {
-                var d = JSON.parse(r.responseText);
-                if (!d || !d.ok) {
-                    var err = d && d.error ? String(d.error) : '';
-                    if (err.indexOf('Layout runtime provider is not configured') !== -1) {
-                        wtStatus = 'unconfigured';
-                    } else {
-                        wtStatus = err ? 'error' : 'empty';
-                    }
-                    rebuildLayerControl();
-                    return;
-                }
-                if (d.layoutFingerprint && d.layoutFingerprint === lastWtFingerprint && lastWtHadData) {
-                    // same world layout AND last render carried data — keep
-                    // current overlay, but make sure status is 'ok' so the layer
-                    // control doesn't show a stale "loading…" / "unavailable"
-                    // label after a transient error. If the last render was an
-                    // empty world (no markers/polygons), fall through and re-draw
-                    // so a hydrated upgrade isn't suppressed.
-                    if (wtStatus !== 'ok') { wtStatus = 'ok'; rebuildLayerControl(); }
-                    return;
-                }
-                lastWtFingerprint = d.layoutFingerprint || '';
-
-                wtClearAll();
-                var rt = d.runtime || {};
-                var layout = rt.layout || {};
-
-                // markers (quests, POIs, dungeons, mines, etc.)
-                var markers = Array.isArray(rt.markers) ? rt.markers : [];
-                markers.forEach(function(m) {
-                    if (typeof m.worldX !== 'number' || typeof m.worldY !== 'number') return;
-                    var cat = wtCategorize(m.type);
-                    var iconFile = wtIconFile(m.type, cat);
-                    var viewPoint = overlayPoint(m.worldX, m.worldY);
-                    var marker = L.marker(wLL(viewPoint.x, viewPoint.y), { icon: wtIcon(cat, m.type), keyboard: false });
-                    var label = m.name || wtPretty(m.type) || cat;
-                    marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
-                    marker.bindPopup(wtPopupHtml(m, cat, m.type), { maxWidth: 380, autoPanPaddingTopLeft: [40, 60] });
-                    marker.addTo(wtCategoryLayers[cat]);
-                    registerMapSource(m, m.worldX, m.worldY, 'runtime-marker', marker, cat, iconFile, viewPoint);
-                    wtCounts[cat] = (wtCounts[cat] || 0) + 1;
-                });
-
-                // layout nodes + per-node manualPoiMarkers + per-node polygons
-                // Golden contract: manualPoiMarkers and polygons live under layout.nodes[*],
-                // not at rt-level. Polygons are bare arrays of {x, y} points.
-                var nodes = Array.isArray(layout.nodes) ? layout.nodes : (Array.isArray(rt.nodes) ? rt.nodes : []);
-                currentLayoutNodes = nodes;
-                var nodeById = {};
-                nodes.forEach(function(n) {
-                    var id = n.nodeId !== undefined ? n.nodeId : n.id;
-                    if (id !== undefined && id !== null) nodeById[String(id)] = n;
-                });
-                function nodeCoord(n) {
-                    if (!n) return null;
-                    var x = (typeof n.worldX === 'number') ? n.worldX : n.x;
-                    var y = (typeof n.worldY === 'number') ? n.worldY : n.y;
-                    if (typeof x !== 'number' || typeof y !== 'number') return null;
-                    return { x: x, y: y };
-                }
-                var edges = Array.isArray(layout.edges) ? layout.edges : (Array.isArray(rt.edges) ? rt.edges : []);
-                edges.forEach(function(edge) {
-                    var sourceId = edge.sourceNodeId !== undefined ? edge.sourceNodeId : (edge.source || edge.from);
-                    var targetId = edge.targetNodeId !== undefined ? edge.targetNodeId : (edge.target || edge.to);
-                    var a = nodeCoord(nodeById[String(sourceId)]);
-                    var b = nodeCoord(nodeById[String(targetId)]);
-                    if (!a || !b) return;
-                    L.polyline([overlayLL(a.x, a.y), overlayLL(b.x, b.y)], {
-                        color: '#6f8fb3',
-                        weight: 1,
-                        opacity: 0.38,
-                        dashArray: '4 7',
-                        interactive: false
-                    }).addTo(edgeLayer);
-                });
-                nodes.forEach(function(n) {
-                    // node debug dot
-                    var nx = (typeof n.worldX === 'number') ? n.worldX : n.x;
-                    var ny = (typeof n.worldY === 'number') ? n.worldY : n.y;
-                    if (typeof nx === 'number' && typeof ny === 'number') {
-                        var dot = L.circleMarker(overlayLL(nx, ny), {
-                            radius: 3, color: '#404040', fillColor: '#606060',
-                            fillOpacity: 0.6, weight: 1, opacity: 0.6
-                        });
-                        var label = n.nodeId || n.id || n.kind || n.tag;
-                        if (label) {
-                            dot.bindTooltip(escHtml(String(label)), { direction: 'top', offset: [0, -2] });
-                        }
-                        dot.addTo(nodeLayer);
-                    }
-
-                    // per-node manualPoiMarkers (curator-placed pins)
-                    var manuals = Array.isArray(n.manualPoiMarkers) ? n.manualPoiMarkers : [];
-                    manuals.forEach(function(m) {
-                        var x = (typeof m.worldX === 'number') ? m.worldX : m.x;
-                        var y = (typeof m.worldY === 'number') ? m.worldY : m.y;
-                        if (typeof x !== 'number' || typeof y !== 'number') return;
-                        var cat = wtManualCategory(m);
-                        var iconFile = wtIconFile(m.iconAssetPath || m.type, cat);
-                        var viewPoint = overlayPoint(x, y);
-                        var marker = L.marker(wLL(viewPoint.x, viewPoint.y), { icon: wtIcon(cat, m.iconAssetPath || m.type), keyboard: false });
-                        var mlabel = m.name || m.title || 'POI';
-                        marker.bindTooltip(escHtml(mlabel), { direction: 'top', offset: [0, -4], opacity: 0.95 });
-                        marker.bindPopup(wtPopupHtml(m, cat, m.iconAssetPath || m.type), { maxWidth: 380 });
-                        marker.addTo(manualPoiLayer);
-                        registerMapSource(m, x, y, 'manual-poi', marker, cat, iconFile, viewPoint);
-                        manualPoiCount++;
-                    });
-
-                    // per-node polygons (each polygon is a bare array of {x,y} points)
-                    var polys = Array.isArray(n.polygons) ? n.polygons : [];
-                    var nodeColor = wtNodeColor(n.tag || n.primaryBiomeTag);
-                    polys.forEach(function(p) {
-                        var pts = Array.isArray(p) ? p : (p && (p.points || p.polygon || p.coords)) || [];
-                        if (!Array.isArray(pts) || pts.length < 3) return;
-                        var latlngs = pts.map(function(pt) {
-                            if (Array.isArray(pt)) return overlayLL(pt[0], pt[1]);
-                            return overlayLL(pt.x !== undefined ? pt.x : pt.worldX, pt.y !== undefined ? pt.y : pt.worldY);
-                        }).filter(function(ll) { return ll && isFinite(ll.lat) && isFinite(ll.lng); });
-                        if (latlngs.length < 3) return;
-                        var color = (p && p.color) || nodeColor;
-                        var poly = L.polygon(latlngs, {
-                            color: color, weight: 1, fillColor: color,
-                            fillOpacity: 0.12, opacity: 0.7
-                        });
-                        var pname = p && (p.name || p.biome);
-                        if (pname) poly.bindTooltip(escHtml(pname), { sticky: true });
-                        poly.addTo(biomeLayer);
-                    });
-                    var levelLabel = wtLevelLabel(n.tag);
-                    if (levelLabel && typeof nx === 'number' && typeof ny === 'number' && n.kind === 'land') {
-                        L.tooltip({
-                            permanent: true,
-                            direction: 'center',
-                            className: 'wt-level-label',
-                            opacity: 1,
-                            interactive: false
-                        }).setLatLng(overlayLL(nx, ny)).setContent(escHtml(levelLabel)).addTo(levelLabelLayer);
-                    }
-                });
-                renderResourceZones(nodes);
-
-                // Mark whether this render actually produced anything renderable.
-                // Used by the fingerprint cache to avoid suppressing the empty→
-                // hydrated transition.
-                var renderedAnything = (markers.length > 0) || (Array.isArray(nodes) && nodes.length > 0);
-                lastWtHadData = renderedAnything;
-
-                wtStatus = 'ok';
-                rebuildLayerControl();
-            } catch (e) {
-                wtStatus = 'error';
-                rebuildLayerControl();
-            }
-        };
-        r.onerror = function() { wtStatus = 'error'; rebuildLayerControl(); };
-        r.ontimeout = function() { wtStatus = 'error'; rebuildLayerControl(); };
-        r.send();
-    }
-
     // POI marker styling — color by POIScan kind. Kinds come from
     // poiscan.lua (R5POIOverlapVolume / R5POIAudioVolume / BP_MarkerModel_*).
     var POI_STYLES = {
@@ -1498,6 +837,8 @@ var STATIC_CATALOG='/catalog/v1';
                 liveNodeLayer.clearLayers();
                 liveMobCount = 0;
                 liveNodeCount = 0;
+                dropMapSources('live-mob');
+                dropMapSources('live-resource');
                 var validPlayers = [];
                 if (d.players) d.players.forEach(function(p) {
                     if (p.x === undefined || p.y === undefined) return;
@@ -1523,7 +864,7 @@ var STATIC_CATALOG='/catalog/v1';
                     marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 320 });
                     marker.addTo(liveMobLayer);
-                    registerMapSource(m, m.x, m.y, 'live-mob', marker, 'npc', '');
+                    registerMapSource(m, m.x, m.y, 'live-mob', marker);
                     liveMobCount++;
                 });
 
@@ -1538,7 +879,7 @@ var STATIC_CATALOG='/catalog/v1';
                     marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 320 });
                     marker.addTo(liveNodeLayer);
-                    registerMapSource(n, n.x, n.y, 'live-resource', marker, 'resource', '');
+                    registerMapSource(n, n.x, n.y, 'live-resource', marker);
                     liveNodeCount++;
                 });
 
@@ -1557,8 +898,7 @@ var STATIC_CATALOG='/catalog/v1';
         r.send();
     }
 
-    // POIScan output from the Lua actor scanner. This is the self-hosted
-    // fallback when no curated layout-runtime provider is configured.
+    // POIScan output from the Lua actor scanner: the places layer of the chart.
     var lastPoiTimestamp = 0;
     var poiStatus = 'loading'; // loading | ok | empty | error
     function clearPoiKinds() {
@@ -1566,6 +906,7 @@ var STATIC_CATALOG='/catalog/v1';
             poiKindLayers[k].clearLayers();
             poiCounts[k] = 0;
         });
+        dropMapSources('poiscan');
     }
     function fpoi() {
         var r = new XMLHttpRequest();
@@ -1617,7 +958,7 @@ var STATIC_CATALOG='/catalog/v1';
                     marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 420 });
                     marker.addTo(poiKindLayers[kind]);
-                    registerMapSource(p, p.x, p.y, 'poiscan', marker, 'misc', '');
+                    registerMapSource(p, p.x, p.y, 'poiscan', marker);
                     poiCounts[kind] = (poiCounts[kind] || 0) + 1;
                 });
                 poiStatus = list.length ? 'ok' : 'empty';
@@ -1635,8 +976,8 @@ var STATIC_CATALOG='/catalog/v1';
 
 
     // Runtime overlay — decoded save-state data from windrose_plus_data/runtime_overlay.json.
-    // The file is optional. When absent, the Sea Chart keeps the static layout
-    // and item catalog working and simply hides live-save layers.
+    // The file is optional. When absent, the Sea Chart keeps the terrain and
+    // item catalog working and simply hides live-save layers.
     function clearOverlay() {
         islandStateLayer.clearLayers();
         chestLayer.clearLayers();
@@ -1699,16 +1040,6 @@ var STATIC_CATALOG='/catalog/v1';
                     rebuildLayerControl();
                     return;
                 }
-                var needsLayoutContext = (d.players || []).some(function(p) {
-                    var last = (p.last_position || {}).world_location || {};
-                    return typeof last.X === 'number' && typeof last.Y === 'number';
-                });
-                if (needsLayoutContext && (!currentLayoutNodes || currentLayoutNodes.length === 0) && overlayLayoutWaitAttempts < 8) {
-                    overlayLayoutWaitAttempts++;
-                    window.setTimeout(foverlay, 750);
-                    return;
-                }
-                overlayLayoutWaitAttempts = 0;
                 clearOverlay();
                 (d.islands || []).forEach(function(isle) {
                     var anchor = (isle.terrains && isle.terrains[0] && isle.terrains[0].world_location) || null;
@@ -1877,29 +1208,6 @@ var STATIC_CATALOG='/catalog/v1';
                         var html = '<b>Saved player position</b><br>player: ' + escHtml(label) + copyMiniButton(label);
                         if (idLabel && idLabel !== label) html += '<br>player id: ' + escHtml(idLabel) + copyMiniButton(idLabel);
                         html += '<br>pos: ' + Math.round(last.X) + ', ' + Math.round(last.Y);
-                        var islandCtx = layoutContextForPoint(last.X, last.Y);
-                        if (islandCtx) {
-                            var islandText = 'node ' + islandCtx.nodeId + ' · ' + String(islandCtx.template).replace(/^.*\//, '');
-                            islandText += islandCtx.inside ? ' · inside polygon' : ' · offshore ' + Math.round(islandCtx.dist) + 'u';
-                            html += '<br>nearest island: ' + escHtml(islandText);
-                            if (Array.isArray(islandCtx.polygon) && islandCtx.polygon.length >= 3) {
-                                var contextPts = islandCtx.polygon.map(function(pt) {
-                                    return wLL(pt.x !== undefined ? pt.x : pt.worldX, pt.y !== undefined ? pt.y : pt.worldY);
-                                }).filter(function(ll) { return ll && isFinite(ll.lat) && isFinite(ll.lng); });
-                                if (contextPts.length >= 3) {
-                                    L.polygon(contextPts, {
-                                        className: 'wp-save-context-polygon',
-                                        color: islandCtx.inside ? '#c8edff' : '#b39ddb',
-                                        weight: 2,
-                                        opacity: islandCtx.inside ? 0.85 : 0.65,
-                                        fillColor: islandCtx.inside ? '#c8edff' : '#b39ddb',
-                                        fillOpacity: islandCtx.inside ? 0.08 : 0.04,
-                                        dashArray: islandCtx.inside ? '' : '4 4',
-                                        interactive: false
-                                    }).addTo(savePlayerLayer);
-                                }
-                            }
-                        }
                         html += '<br>fog chunks: ' + (p.map_fog_chunks || []).length;
                         html += '<br>quest flags: ' + (p.blackboard || []).length;
                         if ((p.blackboard || []).length) {
@@ -2026,17 +1334,11 @@ var STATIC_CATALOG='/catalog/v1';
         }, true);
     }
     function layerDefaultOn(key) {
-        if (key.indexOf('poiscan:') === 0 && wtStatus === 'unconfigured') return true;
+        if (key.indexOf('poiscan:') === 0) return true;
         return {
             'base:players': true,
             'base:mobs': true,
             'base:resource_nodes': true,
-            'wt:main_quest': true,
-            'wt:side_quest': true,
-            'wt:dungeon': true,
-            'wt:mine': true,
-            'wt:tortuga': true,
-            'wt:junctions': true,
             'live:chests': true,
             'live:buildings': true,
             'live:save_players': true,
@@ -2138,37 +1440,6 @@ var STATIC_CATALOG='/catalog/v1';
         if (liveMobCount > 0) addLayerEntry('Live entities', 'base:mobs', 'Mobs', liveMobLayer, liveMobCount);
         if (liveNodeCount > 0) addLayerEntry('Live entities', 'base:resource_nodes', 'Resource nodes', liveNodeLayer, liveNodeCount);
 
-        // Curated layout overlay categories
-        if (wtStatus === 'loading') {
-            addLayerStatus('World map', 'World map loading…');
-        } else if (wtStatus === 'unconfigured') {
-            addLayerStatus('World map', 'Curated overlay not configured — see docs/config-reference.md');
-        } else if (wtStatus === 'error') {
-            addLayerStatus('World map', 'World map unavailable');
-        } else if (wtStatus === 'empty') {
-            addLayerStatus('World map', 'World map has no save yet');
-        } else {
-            WT_CATEGORIES.forEach(function(c) {
-                var n = wtCounts[c.key] || 0;
-                if (n <= 0) return;
-                var section = (c.key === 'main_quest' || c.key === 'side_quest' || c.key === 'dungeon' || c.key === 'mine' || c.key === 'tortuga') ? 'Essentials' : 'Places';
-                addLayerEntry(section, 'wt:' + c.key, c.label, wtCategoryLayers[c.key], n);
-            });
-            if (manualPoiCount > 0) addLayerEntry('Places', 'wt:manual_pois', 'Manual POIs', manualPoiLayer, manualPoiCount);
-            if (biomeLayer.getLayers().length) addLayerEntry('Places', 'wt:biomes', 'Biomes', biomeLayer, biomeLayer.getLayers().length);
-            if (edgeLayer.getLayers().length) addLayerEntry('Places', 'wt:junctions', 'Junctions', edgeLayer, edgeLayer.getLayers().length);
-            if (levelLabelLayer.getLayers().length) addLayerEntry('Scanner / debug', 'wt:level_labels', 'Level labels', levelLabelLayer, levelLabelLayer.getLayers().length);
-            if (nodeLayer.getLayers().length)  addLayerEntry('Scanner / debug', 'wt:layout_graph', 'Layout graph', nodeLayer, nodeLayer.getLayers().length);
-        }
-        if (resourceStatus === 'ok') {
-            Object.keys(resourceTypeLayers).sort(function(a, b) {
-                return resourceName(a).localeCompare(resourceName(b));
-            }).forEach(function(id) {
-                var n = resourceCounts[id] || 0;
-                if (n <= 0) return;
-                addLayerEntry('Resources', 'resource:' + id, resourceName(id), resourceTypeLayers[id], n);
-            });
-        }
         if (itemSourceCount > 0) addLayerEntry('Essentials', 'item:source_hits', 'Item source hits', itemSourceLayer, itemSourceCount);
 
         // POIScan output (Lua side — actor scanner)
@@ -2211,17 +1482,11 @@ var STATIC_CATALOG='/catalog/v1';
 
     fp();
     fpoi();
-    flayout();
     foverlay();
     setInterval(fp, 10000);
     // POIScan can land shortly after first player join. Poll cheaply and skip
     // redraw when the timestamp has not changed.
     setInterval(fpoi, 60 * 1000);
-    // Re-poll the layout overlay every 10 minutes to pick up refreshed data
-    // for the same fingerprint and detect fingerprint shifts after RocksDB
-    // compaction. The WP+ HTTP server caches by fingerprint so a no-op poll is
-    // cheap (single localhost cache hit).
-    setInterval(flayout, 10 * 60 * 1000);
     // Save-state overlay refresh — proxy caches for 30s, so 60s gives a fresh
     // pull every other panel-cycle while staying out of LOCAL_CACHED most of
     // the time. Cheap on the cache hit path, ~5s wall when cold.
@@ -3027,7 +2292,6 @@ var STATIC_CATALOG='/catalog/v1';
     var results = document.getElementById('wpsearch-results');
     var timer = null;
     var runId = 0;
-    var MAP_ICON_BASE = '/catalog/v1/icons/map/';
     function escHtml(s) {
         var d = document.createElement('div');
         d.appendChild(document.createTextNode(s == null ? '' : String(s)));
@@ -3062,9 +2326,8 @@ var STATIC_CATALOG='/catalog/v1';
         if (!rows.length) return '';
         var html = '<div class="wpsearch-section"><div class="wpsearch-section-title">Map</div>';
         rows.forEach(function(row) {
-            var icon = row.iconFile ? (MAP_ICON_BASE + row.iconFile) : '';
             html += '<button type="button" class="wpsearch-row" data-map-index="' + escAttr(row.index) + '">'
-                + resultIcon(icon, '⌖')
+                + resultIcon('', '⌖')
                 + '<span class="wpsearch-body"><span class="wpsearch-name">' + escHtml(row.name) + '</span>'
                 + '<span class="wpsearch-meta">' + escHtml(row.meta || '') + '</span></span></button>';
         });
@@ -3086,7 +2349,7 @@ var STATIC_CATALOG='/catalog/v1';
         var q = (input.value || '').trim();
         var current = ++runId;
         if (q.length < 2) {
-            results.innerHTML = '<div class="wpsearch-empty">Type at least 2 characters to search items, quests, POIs, resources, and live save layers.</div>';
+            results.innerHTML = '<div class="wpsearch-empty">Type at least 2 characters to search items and map markers.</div>';
             return;
         }
         var api = window.WindroseSeaChart || {};

@@ -105,7 +105,6 @@ Dashboard listener settings.
 | `http_port` | `8780` | Dashboard/API HTTP port. You can also pass `-Port` to `start_dashboard.bat`. |
 | `bind_ip` | `""` | Optional IP address to bind the dashboard to on multi-IP hosts. Empty means all interfaces when elevated, with localhost fallback. You can also pass `-BindIp` to `start_dashboard.bat`. |
 | `trust_loopback` | `false` | Let requests from the server machine itself skip the dashboard login. Only for a reverse proxy on the same machine that does its own login; anything else on the machine (another program, a web page open in a browser there) would get full RCON access. `WINDROSEPLUS_TRUST_LOOPBACK=1` does the same. Before v1.3.18 this was always on. |
-| `layout_runtime_url` | `""` | Optional compatible layout-runtime provider URL for curated POI, quest, biome, marker, and item-source overlays. The `WINDROSEPLUS_LAYOUT_RUNTIME_URL` environment variable can also set this. |
 
 Example:
 
@@ -113,8 +112,7 @@ Example:
 {
     "server": {
         "http_port": 8780,
-        "bind_ip": "192.0.2.10",
-        "layout_runtime_url": ""
+        "bind_ip": "192.0.2.10"
     }
 }
 ```
@@ -130,11 +128,6 @@ Live map writer and public Sea Chart settings.
 | `entity_interval_ms` | `30000` | Creature/resource position write interval. |
 | `public.enabled` | `false` | Enable the map-only public route at `/public-map`. |
 | `public.token` | `""` | Optional share token. If set, visitors must use `/public-map?token=<token>`. |
-| `overlay_transform.enabled` | `false` | Enable calibration for curated Sea Chart overlays. Terrain tiles and live player positions stay unchanged. |
-| `overlay_transform.offset_x` / `offset_y` | `0` | Shift curated overlay markers and polygons in world units. |
-| `overlay_transform.scale` / `scale_x` / `scale_y` | `1.0` | Scale curated overlay coordinates around `origin_x` / `origin_y`. |
-| `overlay_transform.rotate_degrees` | `0` | Rotate curated overlay coordinates around `origin_x` / `origin_y`. |
-| `overlay_transform.flip_x` / `flip_y` / `swap_xy` | `false` | Optional curated-overlay orientation correction for mismatched provider coordinates. |
 
 Example:
 
@@ -145,26 +138,10 @@ Example:
         "public": {
             "enabled": true,
             "token": "change-this-or-leave-blank"
-        },
-        "overlay_transform": {
-            "enabled": false,
-            "offset_x": 0,
-            "offset_y": 0,
-            "scale": 1.0,
-            "scale_x": 1.0,
-            "scale_y": 1.0,
-            "origin_x": 0,
-            "origin_y": 0,
-            "rotate_degrees": 0,
-            "flip_x": false,
-            "flip_y": false,
-            "swap_xy": false
         }
     }
 }
 ```
-
-`overlay_transform` applies only to curated layout/runtime overlay data: markers, manual POIs, layout graph lines, biome polygons, and item-source search hits. It does not move the generated terrain tiles, live players, live mobs, live resource nodes, teleport clicks, or raw runtime save overlays.
 
 ### catalog
 
@@ -181,78 +158,6 @@ The Sea Chart's item catalog is built on the server from the game's own data fil
 ```
 
 Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
-
-### Layout Runtime Provider (Optional)
-
-Windrose+ can render curated POI, quest, biome, marker, and item-source overlays on the Sea Chart when a compatible layout-runtime provider is reachable. The provider is optional and intentionally external — the dashboard, RCON, multipliers, terrain map, your own `POIScan` output, and item catalog all work without one. If `layout_runtime_url` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) is empty, the Layers panel reports "Curated overlay not configured" and you get the base map only.
-
-Set the URL via either:
-
-```json
-{
-    "server": {
-        "layout_runtime_url": "https://your.provider.example/api/layout/runtime"
-    }
-}
-```
-
-```text
-WINDROSEPLUS_LAYOUT_RUNTIME_URL=https://your.provider.example/api/layout/runtime
-```
-
-The dashboard expects two endpoints at that URL.
-
-**`GET <url>?layout=<fingerprint>`** — returns the curated runtime payload for a known layout fingerprint. The dashboard caches the response in `windrose_plus_data\layout_runtime.json` keyed by fingerprint, so repeat map loads do not re-hit the provider. A `200` with JSON body populates the layers; a `4xx` triggers the seeding `POST` below; a `5xx` / `429` / timeout serves the stale cache if one exists, otherwise leaves the layers empty.
-
-**`POST <url>`** with `Content-Type: application/json` and body:
-
-```json
-{
-    "layoutFingerprint": "<sha256>",
-    "seed": 12345678,
-    "worldPreset": "DA_CommonIsland_Personal",
-    "terrainPlacements": [ /* array of placement objects from the local scan */ ]
-}
-```
-
-Used once per new fingerprint to let the provider build/store its curated overlay. A `200` / `201` response can either return the runtime payload directly or be empty, in which case the dashboard immediately re-`GET`s.
-
-**Response payload shape** (the dashboard reads these fields):
-
-```json
-{
-    "ok": true,
-    "layoutFingerprint": "<sha256>",
-    "runtime": {
-        "markers": [
-            { "type": "main_quest", "name": "...", "worldX": 12345, "worldY": -67890, "popup": { "items": [], "rewards": [] } }
-        ],
-        "layout": {
-            "nodes": [
-                {
-                    "nodeId": "...",
-                    "worldX": 12345,
-                    "worldY": -67890,
-                    "tag": "biome.tag",
-                    "manualPoiMarkers": [
-                        { "name": "...", "worldX": 12345, "worldY": -67890, "iconAssetPath": "..." }
-                    ],
-                    "polygons": [
-                        [ { "x": 12345, "y": -67890 }, { "x": 12350, "y": -67895 } ]
-                    ]
-                }
-            ],
-            "edges": [
-                { "sourceNodeId": "...", "targetNodeId": "..." }
-            ]
-        }
-    }
-}
-```
-
-`markers`, `layout.nodes`, `layout.edges`, `layout.nodes[*].manualPoiMarkers`, and `layout.nodes[*].polygons` are all optional — the dashboard renders whichever are present. Coordinates are world-space integers.
-
-The provider is plain HTTP and stateless from the dashboard's perspective; you can run one centrally for a community of self-hosted servers, or stand one up for a single server.
 
 ---
 
