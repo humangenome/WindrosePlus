@@ -276,6 +276,28 @@ if (Test-Path -LiteralPath $modsTxt) {
     Set-Content $modsTxt $modsContent
 }
 
+# UE4SS ships sample Lua mods (console and cheat-manager enablers, keybinds,
+# the Blueprint mod loader) switched on. None of them does anything on a
+# dedicated server, and with them on Windrose crashed seconds after launch in
+# about 1 start in 4 in testing; with them off it did not. Windrose+ does not
+# use them. Switch them off; set a line back to 1 in mods.txt to use one.
+$ue4ssSampleMods = @("CheatManagerEnablerMod", "ConsoleCommandsMod", "ConsoleEnablerMod", "SplitScreenMod", "LineTraceMod", "BPML_GenericFunctions", "BPModLoaderMod", "Keybinds")
+if (Test-Path -LiteralPath $modsTxt) {
+    $content = Get-Content $modsTxt -Raw
+    $turnedOff = @()
+    foreach ($sample in $ue4ssSampleMods) {
+        $pattern = "(?m)^[ \t]*$sample[ \t]*:[ \t]*1[ \t]*(?=\r?$)"
+        if ($content -match $pattern) {
+            $content = [regex]::Replace($content, $pattern, "$sample : 0")
+            $turnedOff += $sample
+        }
+    }
+    if ($turnedOff.Count -gt 0) {
+        Set-Content $modsTxt $content
+        Write-Host "    Switched off UE4SS sample mods: $($turnedOff -join ', ')" -ForegroundColor DarkGray
+    }
+}
+
 # Step 3: Set up dashboard
 Write-Host "  [3/3] Setting up dashboard..." -NoNewline
 $wpDir = Join-Path $gameDir "windrose_plus"
