@@ -16,7 +16,7 @@ Everything your Windrose dedicated server is missing: multipliers, a live map, a
 
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
-> **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) runs Windrose servers with Windrose+ already installed.
+> **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
 ---
 

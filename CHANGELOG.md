@@ -1,6 +1,6 @@
 # Changelog
 
-> **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
+> **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
 ## [1.3.21] - 2026-10-13
 
@@ -87,7 +87,7 @@ Update, then restart the server and the dashboard. Run `wp.mapgen` once to redra
 - The README and config reference say plainly that INI settings need v1.3.16 or newer, and why. Recovery and troubleshooting steps cover all three container files.
 - `docs/commands.md` samples show the `(disabled)` markers.
 - `cpp-mods/README.md` lists `WindrosePlusNative` and states which C++ mod the installer actually enables.
-- `CONTRIBUTING.md` says what to include in a bug report and points managed-hosting questions at the host instead of the issue tracker.
+- `CONTRIBUTING.md` says what to include in a bug report and points questions about a rented server at the host instead of the issue tracker.
 - Stale examples corrected: the query-response sample reported `1.3.4`, and `wp.version` / `wp.status` samples reported `Windrose+ v1.0.0` instead of the `WindrosePlus v<version>` string the command actually prints.
 - Normalized the changelog's `Docs` / `Notes for the next release` headings to `Documentation` / `Notes`.
 

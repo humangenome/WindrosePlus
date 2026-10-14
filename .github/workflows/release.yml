@@ -163,9 +163,9 @@ jobs:
             echo
             echo "Download \`WindrosePlus.zip\`, extract into your Windrose Dedicated Server folder, run \`install.ps1\`. Reinstalling is safe: your configs and custom mods are preserved. See [the installation guide](https://github.com/HumanGenome/WindrosePlus#installation) for details."
             echo
-            echo "## Managed hosting"
+            echo "## Rent a server"
             echo
-            echo "[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=release_notes&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed."
+            echo "[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=release_notes&utm_campaign=windrose_plus). Survival Servers game servers come with Windrose+ already installed."
           } > release_notes.md
 
       - name: Stage release tree
