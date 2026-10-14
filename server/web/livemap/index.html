@@ -229,7 +229,7 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
     <button id="wpitems-close" type="button" aria-label="Close">×</button>
   </div>
   <div id="wpitems-search-wrap">
-    <input id="wpitems-search" type="search" placeholder="Search 840 items…" autocomplete="off">
+    <input id="wpitems-search" type="search" placeholder="Search items…" autocomplete="off">
     <div id="wpitems-filters">
       <select id="wpitems-category" class="wpitems-filter wpitems-native-filter" aria-label="Category"><option value="">All groups</option></select><div class="wpitems-select" data-select="wpitems-category"></div>
       <select id="wpitems-type" class="wpitems-filter wpitems-native-filter" aria-label="Type"><option value="">All types</option></select><div class="wpitems-select" data-select="wpitems-type"></div>
@@ -597,7 +597,7 @@ var STATIC_CATALOG='/catalog/v1';
     var itemSourceCount = 0;
     var searchResultMarker = null;
     var mapSourceMarkers = [];
-    var resourceStatus = 'loading';
+    var resourceStatus = 'off'; // resource-zone hints are not in the game data files
     var resourceTypes = {};
     var resourceTypeLayers = {};
     var resourceCounts = {};
@@ -1019,25 +1019,6 @@ var STATIC_CATALOG='/catalog/v1';
         var totalMarkers = Object.keys(resourceCounts).reduce(function(sum, id) { return sum + resourceCounts[id]; }, 0);
         resourceStatus = totalMarkers > 0 ? 'ok' : 'empty';
         rebuildLayerControl();
-    }
-    function loadResourceZones() {
-        fetch(STATIC_CATALOG + '/resource_zones.json?v=20260508-resources')
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(d) {
-                if (!d || !Array.isArray(d.resourceTypes) || !Array.isArray(d.zones)) {
-                    resourceStatus = 'error';
-                    rebuildLayerControl();
-                    return;
-                }
-                resourceTypes = {};
-                d.resourceTypes.forEach(function(rt) { if (rt && rt.id) resourceTypes[rt.id] = rt; });
-                resourceZones = d.zones;
-                renderResourceZones(resourceLayoutNodes);
-            })
-            .catch(function() {
-                resourceStatus = 'error';
-                rebuildLayerControl();
-            });
     }
     function findItemSourceLocations(drop) {
         if (!drop || String(drop.sourceType || '').toLowerCase() === 'creature') return [];
@@ -2160,13 +2141,7 @@ var STATIC_CATALOG='/catalog/v1';
             if (levelLabelLayer.getLayers().length) addLayerEntry('Scanner / debug', 'wt:level_labels', 'Level labels', levelLabelLayer, levelLabelLayer.getLayers().length);
             if (nodeLayer.getLayers().length)  addLayerEntry('Scanner / debug', 'wt:layout_graph', 'Layout graph', nodeLayer, nodeLayer.getLayers().length);
         }
-        if (resourceStatus === 'loading') {
-            addLayerStatus('Resources', 'Resource hints loading…');
-        } else if (resourceStatus === 'error') {
-            addLayerStatus('Resources', 'Resource hints unavailable');
-        } else if (resourceStatus === 'empty') {
-            addLayerStatus('Resources', 'No resource hints for this layout');
-        } else {
+        if (resourceStatus === 'ok') {
             Object.keys(resourceTypeLayers).sort(function(a, b) {
                 return resourceName(a).localeCompare(resourceName(b));
             }).forEach(function(id) {
@@ -2215,7 +2190,6 @@ var STATIC_CATALOG='/catalog/v1';
     }
     rebuildLayerControl();
 
-    loadResourceZones();
     fp();
     fpoi();
     flayout();
@@ -2236,8 +2210,9 @@ var STATIC_CATALOG='/catalog/v1';
 })();
 
 // Items catalog overlay — fed by /catalog/v1/.
-// Independent of per-server POIScan; 840 items from the bundled static game
-// catalog shipped with WindrosePlus.
+// Independent of per-server POIScan. The dashboard builds this catalog from the
+// server's own game files (tools/WindrosePlus-BuildCatalog.ps1); nothing from the
+// game ships with Windrose+.
 (function() {
     var btn = document.getElementById('wpitems-btn');
     var panel = document.getElementById('wpitems-panel');
@@ -2266,9 +2241,10 @@ var STATIC_CATALOG='/catalog/v1';
     var itemsByName = {};
     var CYRILLIC = /[\u0400-\u04FF]/;
     var NAME_OVERRIDES = {
-        'did-misc-musket-butt-t01': 'Musket Stock',
-        'did-misc-musket-lock-t01': 'Musket Lock',
-        'did-misc-musket-barrel-t01': 'Musket Barrel'
+        // The game's English text leaves these three untranslated.
+        'DA_DID_Misc_MusketButt_T01': 'Musket Stock',
+        'DA_DID_Misc_MusketLock_T01': 'Musket Lock',
+        'DA_DID_Misc_MusketBarrel_T01': 'Musket Barrel'
     };
 
     function escAttr(s) {
@@ -2288,7 +2264,7 @@ var STATIC_CATALOG='/catalog/v1';
         return v !== undefined && v !== null && v !== '' && v !== '$undefined';
     }
     function titleFromId(id) {
-        var s = String(id || '').replace(/^DA_/, '').replace(/\.[^.]+$/, '').replace(/_/g, '-').toLowerCase();
+        var s = String(id || '').replace(/^DA_/, '').replace(/\.[^.]+$/, '').replace(/([a-z])([A-Z])/g, '$1-$2').replace(/_/g, '-').toLowerCase();
         var parts = s.split('-').filter(Boolean).filter(function(p) {
             return !/^(aid|cid|did|eid|da|item|items|new)$/.test(p);
         });
@@ -2340,7 +2316,7 @@ var STATIC_CATALOG='/catalog/v1';
         food: 'food', alchemy: 'alchemy', medicine: 'medicine',
         armor: 'armor', ring: 'ring', necklace: 'necklace', backpack: 'backpack',
         resource: 'resource', metal: 'metal',
-        shipweapon: 'ship-weapon', shiphullmod: 'hull', shipcombatorder: 'combat-order', shipcrewequipment: 'ship-gear',
+        shipweapon: 'ship-weapon', shiphullmod: 'hull', shipsailmod: 'ship-gear', shipcombatorder: 'combat-order', shipcrewequipment: 'ship-gear',
         meleeweapon: 'melee', rangeweapon: 'ranged', tool: 'tool', ammo: 'ammo'
     };
     var ITEM_ICON_BY_TAG = [
@@ -2698,7 +2674,7 @@ var STATIC_CATALOG='/catalog/v1';
     function loadUsage() {
         if (usageLoaded) return Promise.resolve();
         if (usageLoading) return usageLoading;
-        usageLoading = fetch(CDN + '/item_usage.json?v=20260508-usage')
+        usageLoading = fetch(CDN + '/item_usage.json?v=gamefiles-1')
             .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function(data) {
                 usageByItemId = data.byItemId || {};
@@ -2875,9 +2851,14 @@ var STATIC_CATALOG='/catalog/v1';
         if (items) return Promise.resolve(items);
         if (catalogPromise) return catalogPromise;
         loaded = true;
-        listEl.innerHTML = '<div id="wpitems-loading">Loading 840 items…</div>';
-        catalogPromise = fetch(CDN + '/items_full.json?v=20260508-840')
-            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        listEl.innerHTML = '<div id="wpitems-loading">Loading items…</div>';
+        catalogPromise = fetch(CDN + '/items_full.json?v=gamefiles-1')
+            .then(function(r) {
+                if (r.status === 503) throw new Error('The item catalog is being built from the game files. Try again in a minute.');
+                if (r.status === 404) throw new Error('The item catalog has not been built yet. It is made from the game files when the dashboard starts.');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function(d) {
                 items = normalizeCatalog(d).sort(function(a, b) {
                     return itemName(a).localeCompare(itemName(b));
@@ -2889,7 +2870,7 @@ var STATIC_CATALOG='/catalog/v1';
             })
             .catch(function(e) {
                 catalogPromise = null;
-                listEl.innerHTML = '<div id="wpitems-empty">Catalog unavailable: ' + escHtml(e.message) + '</div>';
+                listEl.innerHTML = '<div id="wpitems-empty">' + escHtml(e.message) + '</div>';
                 throw e;
             });
         return catalogPromise;

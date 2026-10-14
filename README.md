@@ -33,11 +33,11 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ## Features
 
 ### Live Sea Chart
-A real-time map of your server showing island terrain, player and creature positions, POI/layout overlays when available, resource-zone hints, and a searchable 840-item catalog. Item detail pages include rarity, tier, stack, crafting recipes, vendor trades, construction uses, drop-source table IDs, and map links for sources that match known POI markers.
+A real-time map of your server showing island terrain, player and creature positions, POI/layout overlays when available, and a searchable item catalog. Item detail pages include rarity, tier, stack, stats, effects, crafting recipes and stations, trader offers, building costs, research unlocks, where the item drops, and map links for sources that match known POI markers.
 
 ![Sea Chart with default Layers panel](docs/screenshots/v1.3.0/seachart-hero.png)
 
-The Items panel browses the bundled 840-item catalog with group/type/rarity/tier filters and click-through to recipes, vendor trades, and map source hits. Each item shows an icon for its kind (food, armour, ship weapon and so on).
+The Items panel browses every item in the game with group/type/rarity/tier filters and click-through to recipes, trader offers, and map source hits. The dashboard builds this catalog on your server from your own copy of the game (`tools/WindrosePlus-BuildCatalog.ps1`, about a minute, written to `windrose_plus_data\catalog\v1`), so it always matches the game version you run and rebuilds itself after a game update. Nothing from the game ships with Windrose+. Each item shows an icon for its kind (food, armour, ship weapon and so on).
 
 ![Sea Chart with Items panel](docs/screenshots/seachart-items.png)
 
@@ -270,7 +270,7 @@ See [docs/config-reference.md](docs/config-reference.md) for every advanced INI 
 
 ### Dashboard
 
-Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, resource-zone hints, and item drop sources in real time.
+Open the dashboard in your browser to manage your server. It includes a command console with autocomplete and a live Sea Chart showing terrain, players, mobs, layout overlays, and item drop sources in real time.
 
 The dashboard asks for the RCON password from every browser, including one on the server itself. Scripts and other tools send the same password in an `X-RCON-Password` header ([HTTP API](docs/commands.md#http-api-endpoints)). If you put the dashboard behind a reverse proxy on the same machine that does its own login, set `"server": { "trust_loopback": true }` to let it through.
 
@@ -331,6 +331,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 - **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - Windrose loads the world when the first player joins, so the terrain export runs then. The dashboard must be running to draw the tiles. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the layout runtime cache.
+- **Items panel says the catalog is not built** - The dashboard builds it from the game files when it starts; the log is `windrose_plus_data\catalog\build.log`. It needs `tools\bin\repak.exe` (and `retoc.exe` for stat values), which antivirus sometimes quarantines. Rebuild by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
 - **Sea Chart shows islands from another world** - Before v1.3.18 the terrain export was never redone after a world change. Run `wp.mapexport` while a player is online; it exports the current world and rebuilds the tiles. From v1.3.18 a world change is picked up on the first player join.
 - **Sea Chart is rotated a quarter turn from the in-game map** - Tile sets generated before v1.3.16 lay world X across and world Y down, which puts north on the right. The renderer only draws north-up when `windrose_plus_data\map_coords.json` contains `"orientation": "north-up"`, and older tile sets do not have that field, so updating alone changes nothing. Rebuild the tiles with `wp.mapgen` (v1.3.18 or newer; older versions of that command did not touch the tiles, so use `wp.mapexport` with a player online there) and hard-refresh the page. Note that `overlay_transform.rotate_degrees` moves curated overlays only - it never affects terrain tiles or player positions, so it will not correct this and will double-rotate the overlays once the tiles are regenerated.
 - **Sea Chart layers say "Curated overlay not configured"** - The curated POI / quest / biome / marker / item-source layers come from an optional layout-runtime provider. The base map (terrain, players, your own POIScan output, item catalog) works without one. To enable the curated layers, point `server.layout_runtime_url` in `windrose_plus.json` (or `WINDROSEPLUS_LAYOUT_RUNTIME_URL`) at any compatible provider. The HTTP contract (GET, seeding POST, and response payload shape) is documented in [`docs/config-reference.md`](docs/config-reference.md#layout-runtime-provider-optional) so you can run your own.

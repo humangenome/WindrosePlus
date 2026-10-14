@@ -780,7 +780,7 @@ The web dashboard exposes a REST API for external tools and integrations. Dashbo
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "timestamp": ...}` |
-| GET | `/catalog/*` | No | Static bundled item catalog JSON and icons used by the Sea Chart item browser. |
+| GET | `/catalog/*` | No | Item catalog JSON for the Sea Chart item browser (built on the server from the game files, `windrose_plus_data\catalog\v1`; 503 while it is being built) and the Windrose+ item icons. |
 | GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |

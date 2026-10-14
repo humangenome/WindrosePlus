@@ -164,7 +164,23 @@ Example:
 }
 ```
 
-`overlay_transform` applies only to curated layout/runtime overlay data: markers, manual POIs, layout graph lines, biome polygons, resource hints derived from those markers, and item-source search hits. It does not move the generated terrain tiles, live players, live mobs, live resource nodes, teleport clicks, or raw runtime save overlays.
+`overlay_transform` applies only to curated layout/runtime overlay data: markers, manual POIs, layout graph lines, biome polygons, and item-source search hits. It does not move the generated terrain tiles, live players, live mobs, live resource nodes, teleport clicks, or raw runtime save overlays.
+
+### catalog
+
+The Sea Chart's item catalog is built on the server from the game's own data files each time the dashboard starts and finds the game files changed (first start, game updates). It takes about a minute at low priority and writes `windrose_plus_data\catalog\v1`; the log is `windrose_plus_data\catalog\build.log`.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `build` | `true` | Set `false` to never build the catalog (the Items panel then stays empty). `WINDROSEPLUS_CATALOG_BUILD=0` does the same. |
+
+```json
+{
+    "catalog": { "build": true }
+}
+```
+
+Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
 
 ### Layout Runtime Provider (Optional)
 

@@ -2,6 +2,17 @@
 
 > **Managed hosting:** [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus) sponsors Windrose+ development and runs Windrose servers with Windrose+ already installed.
 
+## [1.3.22] - 2026-10-14
+
+### Changed
+
+- **The Sea Chart's item catalog is built on your server from your own copy of the game.** When the dashboard starts it reads the game's item, recipe, crafting-station, trader and loot data and its English text out of the server's data files and writes the Items panel's catalog to `windrose_plus_data\catalog\v1` (about a minute at low priority, and only when the game files changed). The catalog now matches the game version you run: on Windrose 0.10.0.9.32 that is 1,254 items instead of the 840 in the old bundled snapshot, with stats and effect numbers from the game's own tables, recipes with their crafting stations, trader buy and sell offers, building costs, research unlocks, and where each item drops. No item data ships in the release zip anymore. Turn the build off with `"catalog": { "build": false }` in `windrose_plus.json`; the log is `windrose_plus_data\catalog\build.log`.
+- **Catalog item ids are the game's own asset names** (for example `DA_EID_Cannon_12_ColdBarrels_Advanced`) instead of the old lowercase ids.
+
+### Removed
+
+- **The resource-zone hints layer on the Sea Chart.** Its data did not come from the game files and went with the bundled catalog.
+
 ## [1.3.21] - 2026-10-13
 
 ### Changed

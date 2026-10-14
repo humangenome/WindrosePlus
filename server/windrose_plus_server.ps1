@@ -636,6 +636,51 @@ function Invoke-TileGenerationIfRequested {
     }
 }
 
+# Item catalog. The Sea Chart's item list is built on this server from the
+# game's own data files by tools/WindrosePlus-BuildCatalog.ps1 and kept in
+# windrose_plus_data\catalog\v1; nothing from the game ships with Windrose+.
+# The builder exits at once when the catalog already matches the installed game
+# files, so starting it with every dashboard start only does real work after a
+# game update. "catalog": { "build": false } in windrose_plus.json (or
+# WINDROSEPLUS_CATALOG_BUILD=0) turns it off.
+$catalogDataDir = Join-Path $dataDir "catalog\v1"
+$catalogBuildLog = Join-Path $dataDir "catalog\build.log"
+$script:CatalogBuildProcess = $null
+$catalogBuildScript = $null
+foreach ($candidate in @(
+    (Join-Path $gameDir "windrose_plus\tools\WindrosePlus-BuildCatalog.ps1"),
+    (Join-Path $PSScriptRoot "..\tools\WindrosePlus-BuildCatalog.ps1"),
+    (Join-Path $gameDir "tools\WindrosePlus-BuildCatalog.ps1")
+)) {
+    if (Test-Path -LiteralPath $candidate) { $catalogBuildScript = [System.IO.Path]::GetFullPath($candidate); break }
+}
+$catalogBuildEnabled = $true
+if ($config.catalog -and $config.catalog.PSObject.Properties['build'] -and $config.catalog.build -eq $false) { $catalogBuildEnabled = $false }
+if ("$env:WINDROSEPLUS_CATALOG_BUILD" -eq "0") { $catalogBuildEnabled = $false }
+function Start-CatalogBuild {
+    if (-not $catalogBuildEnabled) { Write-Host "Item catalog: building is switched off in windrose_plus.json"; return }
+    if (-not $catalogBuildScript) { Write-Host "Item catalog: WindrosePlus-BuildCatalog.ps1 not found; the Items panel stays empty"; return }
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = (Get-Process -Id $PID).Path
+        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -GameDir "{1}" -OutputDir "{2}" -LogFile "{3}"' -f $catalogBuildScript, $gameDir, $catalogDataDir, $catalogBuildLog)
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal } catch {}
+        $script:CatalogBuildProcess = $proc
+        Write-Host "Item catalog: checking it against the game files (log: $catalogBuildLog)"
+    } catch {
+        Write-Host "Item catalog: the builder could not start: $($_.Exception.Message)"
+    }
+}
+function Test-CatalogBuilding {
+    $proc = $script:CatalogBuildProcess
+    if (-not $proc) { return $false }
+    try { return -not $proc.HasExited } catch { return $false }
+}
+Start-CatalogBuild
+
 function Send-Json($context, $data, $statusCode = 200) {
     $json = if ($null -eq $data) { '{}' } else { $data | ConvertTo-Json -Depth 100 -Compress }
     if ([string]::IsNullOrEmpty($json)) { $json = '{}' }
@@ -1272,11 +1317,22 @@ try {
                 continue
             }
 
-            # Static game-catalog assets (item metadata + icons) — no auth.
-            # This is generic Windrose game data, identical on every server,
-            # no player or server identifying information. Letting public
-            # Sea Chart viewers see the catalog overlay is the whole point.
+            # Item catalog (built on this server from the game files) and the
+            # Windrose+ item icons — no auth. Nothing here identifies a player or
+            # the server; public Sea Chart viewers need it for the Items panel.
             if ($path.StartsWith("/catalog/")) {
+                if ($path -match '^/catalog/v1/([A-Za-z0-9_]+\.json)$') {
+                    $builtFile = Join-Path $catalogDataDir $Matches[1]
+                    if (Test-Path -LiteralPath $builtFile) {
+                        $context.Response.Headers.Add("Cache-Control", "no-cache")
+                        Send-File $context $builtFile
+                    } elseif (Test-CatalogBuilding) {
+                        Send-Json $context @{ error = "The item catalog is being built from the game files." } 503
+                    } else {
+                        Send-Json $context @{ error = "The item catalog has not been built. See windrose_plus_data\catalog\build.log." } 404
+                    }
+                    continue
+                }
                 $catalogRoot = [System.IO.Path]::GetFullPath((Join-Path $webDir "catalog"))
                 $candidate   = [System.IO.Path]::GetFullPath((Join-Path $webDir ($path.TrimStart("/").Replace("/", "\"))))
                 $sep         = [System.IO.Path]::DirectorySeparatorChar
