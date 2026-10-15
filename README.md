@@ -12,7 +12,7 @@
 [![Windrose](https://img.shields.io/badge/Windrose-Dedicated_Server-darkgreen.svg)](https://store.steampowered.com/app/3041230/)
 [![No Client Mods](https://img.shields.io/badge/Client_Mods-Not_Required-brightgreen.svg)](#features)
 
-Everything your Windrose dedicated server is missing: multipliers, a live map, an admin console, server browser support, and mod support. Server-side only, no client mods required.
+Everything your Windrose dedicated server is missing: multipliers, a live map, an admin console, a status feed for monitoring tools, and mod support. Server-side only, no client mods required.
 
 _Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
 
@@ -46,27 +46,32 @@ Run commands from a web dashboard with autocomplete. Check who's online, view se
 
 ![Console](docs/screenshots/console.png)
 
-### Server Query
-Windrose dedicated servers don't respond to standard server queries, so your server won't show player counts or status to external tools. Windrose+ adds a query responder so server browsers and monitoring tools can see your server.
+### Server Status
+Windrose dedicated servers don't answer standard server queries, so external tools can't read player counts or status. Windrose+ writes the server's status to `windrose_plus_data\server_status.json` every 5 seconds (every 30 with nobody online), and the dashboard serves it at `/api/status` (login or `X-RCON-Password` required), so monitoring tools and bots can read it. It does not make the server answer server-browser queries.
 
 ```json
 {
   "server": {
     "name": "My Windrose Server",
+    "game": "Windrose",
     "version": "0.10.0.9.32",
-    "windrose_plus": "1.3.18",
+    "windrose_plus": "1.3.22",
+    "invite_code": "a1b2c3d4",
     "password_protected": false,
     "max_players": 10,
-    "player_count": 3
+    "player_count": 2,
+    "game_port": 7777
   },
   "players": [
     { "name": "HumanGenome", "player_id": 12, "session_id": "player:12", "actor_id": "BP_R5Character_C_2147418445", "alive": true, "x": 14520, "y": -8340 },
     { "name": "CaptainMorgan", "player_id": 17, "session_id": "player:17", "actor_id": "BP_R5Character_C_2147418362", "alive": true, "x": 6200, "y": 1100 }
   ],
+  "perf": { "world_time": 1834.5 },
   "multipliers": {
     "xp": 3.0, "loot": 2.0,
     "craft_efficiency": 2.0, "cooking_speed": 2.0, "harvest_yield": 2.0
-  }
+  },
+  "timestamp": 1792000000
 }
 ```
 
