@@ -797,6 +797,9 @@ if ($hasCT) {
             }
             $rowsWithKeys = ($manifest.Rows | Where-Object { $_.Keys.Count -gt 0 }).Count
             Write-Host "    $($manifest.RowCount) rows, $rowsWithKeys with patchable values"
+            if ($manifest.ExpectedRowCount -gt 0 -and $manifest.RowCount -ne $manifest.ExpectedRowCount) {
+                Write-Warning "${basename}: read $($manifest.RowCount) of the $($manifest.ExpectedRowCount) rows the table lists; settings on the other rows will not apply"
+            }
 
             $rowNames = @($manifest.Rows | Where-Object { $_.Keys.Count -gt 0 } | ForEach-Object { $_.Name })
             $unmatchedPatterns = @()

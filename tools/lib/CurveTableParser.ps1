@@ -147,7 +147,8 @@ function Parse-CurveTable {
     1. Finds the name table structurally
     2. Locates the property-block-terminator None FName, supporting two layouts:
        Layout A (older engines):  [None] [int32 numRows] [first row FName] ...
-       Layout B (engine 0.10.0.5.x+): [None] [first row FName] ...
+       Layout B (fallback):        [None] [first row FName] ...
+       Layout C (current builds, tried first): [None] [int32 bHasGuid] [int32 numRows] [uint8 mode] [first row FName] ...
     3. Walks rows until the next FName fails row-name validation (no fixed row count)
     4. Parses each row's curve structure (key count, interp mode, time/value pairs)
     5. Records absolute byte offsets for every value
@@ -159,6 +160,7 @@ function Parse-CurveTable {
       - Names: string[] name table
       - NoneIndex: int index of "None" in name table
       - RowCount: int number of rows
+      - ExpectedRowCount: int row count the table states (Layout C), or -1
       - Rows: array of row objects, each with:
         - Name: string row name
         - NameOffset: int offset of the FName in uexp
@@ -182,6 +184,7 @@ function Parse-CurveTable {
         Names = @()
         NoneIndex = -1
         RowCount = 0
+        ExpectedRowCount = -1
         Rows = @()
         Error = $null
     }
@@ -263,10 +266,36 @@ function Parse-CurveTable {
 
     $firstNone = -1
     $skipRowCountField = $false
+    $rowsStart = -1
+    $expectedRows = -1
     $searchPos = 0
     while ($searchPos -le $uexp.Length - 16) {
         $cand = Find-BytePattern -Data $uexp -Pattern $noneBytes -Start $searchPos
         if ($cand -lt 0) { break }
+
+        # Layout C (UCurveTable::Serialize on current Windrose builds), checked first:
+        #   [None] [int32 bHasGuid] ([16-byte GUID] if 1) [int32 NumRows] [uint8 CurveTableMode] [first row FName]
+        # Layout B below also matches the None that ENDS the first row, so trying it first
+        # started every table at its second row.
+        if ($cand + 12 -le $uexp.Length) {
+            $hasGuid = [BitConverter]::ToInt32($uexp, $cand + 8)
+            if ($hasGuid -eq 0 -or $hasGuid -eq 1) {
+                $countAt = $cand + 12 + (16 * $hasGuid)
+                if ($countAt + 13 -le $uexp.Length) {
+                    $rcC   = [BitConverter]::ToInt32($uexp, $countAt)
+                    $modeC = $uexp[$countAt + 4]
+                    $idxC  = [BitConverter]::ToUInt32($uexp, $countAt + 5)
+                    $numC  = [BitConverter]::ToUInt32($uexp, $countAt + 9)
+                    if ($rcC -ge 1 -and $rcC -le 100000 -and $modeC -le 2 -and $numC -lt 65536 -and
+                        (_IsRowNameCandidate -Idx $idxC -NamesArr $names -NoneIdx $noneIdx -BadNames $propertyTypeNames)) {
+                        $firstNone = $cand
+                        $rowsStart = $countAt + 5
+                        $expectedRows = $rcC
+                        break
+                    }
+                }
+            }
+        }
 
         # Layout B probe: FName starts immediately after the None (need 16 bytes after cand)
         $isB = $false
@@ -319,10 +348,12 @@ function Parse-CurveTable {
     # Each row layout: [FName RowName (8 bytes)] [curve data] [None FName (8 bytes)]
     $pos = $firstNone + 8
     if ($skipRowCountField) { $pos += 4 }
+    if ($rowsStart -ge 0) { $pos = $rowsStart }
 
     $rows = [System.Collections.ArrayList]::new()
     $float1Bytes = [BitConverter]::GetBytes([float]1.0)
     $rowSafetyLimit = 5000
+    if ($expectedRows -gt 0) { $rowSafetyLimit = $expectedRows }
 
     for ($r = 0; $r -lt $rowSafetyLimit; $r++) {
         if ($pos + 8 -gt $uexp.Length) { break }
@@ -378,6 +409,7 @@ function Parse-CurveTable {
     }
 
     $result.RowCount = $rows.Count
+    $result.ExpectedRowCount = $expectedRows
     $result.Rows = $rows.ToArray()
     return $result
 }

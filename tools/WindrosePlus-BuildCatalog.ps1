@@ -211,36 +211,6 @@ if (-not $CurveTableDir -and -not $SourceDir) {
     }
 }
 $curveRows = @{}   # table name -> @{ row name -> keys }
-# Parse-CurveTable starts at the first None it can line up with a row name and can
-# step over a table's first row (CT_CombatPower_StaticData loses power_T01). Pick up
-# any row name it skipped with the same Time = 1.0 key search, row by row.
-function Add-MissedCurveRows([string]$uaPath, $manifest, $rows) {
-    $uxPath = $uaPath -replace '\.uasset$', '.uexp'
-    if (-not (Test-Path -LiteralPath $uxPath)) { return }
-    $ux = [System.IO.File]::ReadAllBytes($uxPath)
-    $noneIdx = $manifest.NoneIndex
-    $noneBytes = [byte[]]::new(8); [BitConverter]::GetBytes([uint32]$noneIdx).CopyTo($noneBytes, 0)
-    $one = [BitConverter]::GetBytes([float]1.0)
-    $notRows = '^(\w+Property|InterpMode|TangentMode|TangentWeightMode|RichCurveKey|SimpleCurveKey|Keys|DefaultValue|PreInfinityExtrap|PostInfinityExtrap|ERichCurve\w*|RCCE_\w+|RCIM_\w+|RCTM_\w+|RCTWM_\w+|Package|Class|CurveTable|Default__\w+|CT_\w+|None)$'
-    for ($i = 0; $i -lt $manifest.Names.Length; $i++) {
-        $n = [string]$manifest.Names[$i]
-        if (-not $n -or $rows.ContainsKey($n) -or $n.StartsWith('/') -or $n -match $notRows -or $n -notmatch '^[A-Za-z0-9_]+$') { continue }
-        $pat = [byte[]]::new(8); [BitConverter]::GetBytes([uint32]$i).CopyTo($pat, 0)
-        $at = Find-BytePattern -Data $ux -Pattern $pat -Start 0
-        if ($at -lt 0) { continue }
-        $end = Find-BytePattern -Data $ux -Pattern $noneBytes -Start ($at + 8)
-        if ($end -lt 0) { $end = $ux.Length }
-        $f = Find-BytePattern -Data $ux -Pattern $one -Start ($at + 8)
-        while ($f -ge 0 -and $f + 8 -le $end) {
-            $v = [BitConverter]::ToSingle($ux, $f + 4)
-            if (-not [float]::IsNaN($v) -and -not [float]::IsInfinity($v) -and [Math]::Abs($v) -lt 1e10) {
-                $rows[$n] = @(@{ Time = 1.0; Value = [Math]::Round([double]$v, 6) })
-                break
-            }
-            $f = Find-BytePattern -Data $ux -Pattern $one -Start ($f + 1)
-        }
-    }
-}
 if ($CurveTableDir -and (Test-Path -LiteralPath $CurveTableDir)) {
     . (Join-Path $PSScriptRoot "lib\CurveTableParser.ps1")
     $wanted = '^CT_(Weapon_GE_Values|CombatPower_StaticData|ShipEquipStats|Armor_GE_Values|JewelryGEValues|Food_GE_Values|Alchemy_GE_Values|OtherGEValues)$'
@@ -248,9 +218,9 @@ if ($CurveTableDir -and (Test-Path -LiteralPath $CurveTableDir)) {
         if ($ua.BaseName -notmatch $wanted) { continue }
         $manifest = Parse-CurveTable -UAssetPath $ua.FullName
         if ($manifest.Error) { Write-Step "Curve table $($ua.BaseName) could not be read: $($manifest.Error)"; continue }
+        if ($manifest.ExpectedRowCount -gt 0 -and $manifest.RowCount -ne $manifest.ExpectedRowCount) { Write-Step "Curve table $($ua.BaseName): read $($manifest.RowCount) of $($manifest.ExpectedRowCount) rows" }
         $rows = @{}
         foreach ($r in $manifest.Rows) { $rows[[string]$r.Name] = $r.Keys }
-        Add-MissedCurveRows $ua.FullName $manifest $rows
         $curveRows[$ua.BaseName] = $rows
     }
     Write-Step "Curve tables read: $($curveRows.Count)"
