@@ -9,6 +9,7 @@
 - **`server/routes.json`: every route the dashboard answers, with a version number.** Each route has its method, its login rule and a one-line description. `routes_version` (1 in this release) goes up whenever a route is added or removed or a request or response format changes, so a tool or port built against the dashboard's routes can tell after an update whether it needs to change. CI checks the list against the server code and fails when the routes changed and the number did not (#124).
 - **`tools/PAK_BUILDER_VERSION`: goes up whenever the generated PAK output changes.** That covers new or renamed config keys, different files or fields patched, changed scaling or rounding, and a new repak or retoc. CI fails when the files that decide the output change without the version being raised or the change being marked as output-neutral (#124).
 - **`/api/health` reports both numbers** as `routes_version` and `pak_builder_version`.
+- **`server.stop_with_game`: the dashboard can stop itself when its game is gone.** For hosts and control panels that start the dashboard with the game: once the game has not been running from the server folder for 10 minutes, the dashboard exits instead of staying up on its port after a crash. Off by default; `WINDROSEPLUS_STOP_WITH_GAME=1` does the same.
 
 ### Changed
 

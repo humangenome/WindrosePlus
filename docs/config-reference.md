@@ -105,6 +105,7 @@ Dashboard listener settings.
 | `http_port` | `8780` | Dashboard/API HTTP port. You can also pass `-Port` to `start_dashboard.bat`. |
 | `bind_ip` | `""` | Optional IP address to bind the dashboard to on multi-IP hosts. Empty means all interfaces when elevated, with localhost fallback. You can also pass `-BindIp` to `start_dashboard.bat`. |
 | `trust_loopback` | `false` | Let requests from the server machine itself skip the dashboard login. Only for a reverse proxy on the same machine that does its own login; anything else on the machine (another program, a web page open in a browser there) would get full RCON access. `WINDROSEPLUS_TRUST_LOOPBACK=1` does the same. Before v1.3.18 this was always on. |
+| `stop_with_game` | `false` | For a host or control panel that starts the dashboard together with the game: the dashboard stops itself once the game has not been running from its server folder for 10 minutes, so a game that crashed or exited on its own does not leave the dashboard running on its port. It never stops in its first 10 minutes, or while it cannot tell whether the game is running. `WINDROSEPLUS_STOP_WITH_GAME=1` does the same. |
 
 Example:
 

@@ -401,6 +401,61 @@ function Get-TrustLoopback {
     return (Get-ConfigBool $cfg.server "trust_loopback" $false)
 }
 
+# server.stop_with_game (or WINDROSEPLUS_STOP_WITH_GAME=1): for a host or panel that
+# starts the dashboard together with the game. The dashboard then exits once its
+# game has not been running for 10 minutes, so a game that crashed or exited on its
+# own does not leave the dashboard behind on its port. Off by default: a dashboard
+# started by hand keeps running while the server is down.
+function Get-StopWithGame {
+    $envValue = "$env:WINDROSEPLUS_STOP_WITH_GAME".Trim()
+    if ($envValue) { return ($envValue -eq "1" -or $envValue -ieq "true") }
+    $cfg = Get-CurrentConfig
+    if ($null -eq $cfg -or $null -eq $cfg.server) { return $false }
+    return (Get-ConfigBool $cfg.server "stop_with_game" $false)
+}
+
+# Decides whether to exit. GameState is "running", "gone" or "unknown" (a
+# WindroseServer process whose path cannot be read counts as unknown, never gone).
+# Never exits in the first GraceMinutes after the dashboard started, or while the
+# game's state is unknown. Returns @{ Exit; LastSeen }.
+function Get-GameWatchDecision {
+    param([datetime]$Now, [datetime]$Started, $LastSeen, [string]$GameState, [int]$GraceMinutes = 10)
+    if ($GameState -ne "gone") { return @{ Exit = $false; LastSeen = $Now } }
+    $since = if ($null -ne $LastSeen) { [datetime]$LastSeen } else { $Started }
+    if ($since -lt $Started) { $since = $Started }
+    $exit = (($Now - $Started).TotalMinutes -ge $GraceMinutes) -and (($Now - $since).TotalMinutes -ge $GraceMinutes)
+    return @{ Exit = $exit; LastSeen = $LastSeen }
+}
+
+function Get-GameState {
+    $procs = @(Get-Process -Name "WindroseServer*" -ErrorAction SilentlyContinue)
+    $prefix = $gameDir.TrimEnd("\", "/") + [System.IO.Path]::DirectorySeparatorChar
+    foreach ($p in $procs) {
+        $path = $null
+        try { $path = $p.Path } catch {}
+        if ([string]::IsNullOrEmpty($path)) { return "unknown" }
+        if ($path.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return "running" }
+    }
+    return "gone"
+}
+
+$script:GameWatchStarted = Get-Date
+$script:GameWatchLastSeen = $null
+$script:GameWatchNextCheck = (Get-Date).AddSeconds(60)
+function Invoke-GameWatch {
+    $now = Get-Date
+    if ($now -lt $script:GameWatchNextCheck) { return }
+    $script:GameWatchNextCheck = $now.AddSeconds(60)
+    if (-not (Get-StopWithGame)) { return }
+    $d = Get-GameWatchDecision -Now $now -Started $script:GameWatchStarted -LastSeen $script:GameWatchLastSeen -GameState (Get-GameState)
+    $script:GameWatchLastSeen = $d.LastSeen
+    if ($d.Exit) {
+        Write-Host "The game has not been running from $gameDir for 10 minutes and server.stop_with_game is on; the dashboard is stopping."
+        try { $listener.Stop() } catch {}
+        exit 0
+    }
+}
+
 function Test-LoopbackRequest($request) {
     $remoteAddr = $null
     try { $remoteAddr = $request.RemoteEndPoint.Address } catch {}
@@ -903,6 +958,7 @@ try {
         $contextTask = $listener.GetContextAsync()
         while (-not $contextTask.AsyncWaitHandle.WaitOne(1000)) {
             if (Test-Path -LiteralPath $tileGenTrigger) { Invoke-TileGenerationIfRequested }
+            Invoke-GameWatch
         }
         $context = $contextTask.GetAwaiter().GetResult()
         $path = $context.Request.Url.AbsolutePath.TrimEnd("/")

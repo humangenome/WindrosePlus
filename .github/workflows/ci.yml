@@ -120,3 +120,7 @@ jobs:
       - name: Curve table reader tests
         shell: pwsh
         run: ./scripts/Test-CurveTableParser.ps1
+
+      - name: Dashboard game-watch tests
+        shell: pwsh
+        run: ./scripts/Test-DashboardGameWatch.ps1

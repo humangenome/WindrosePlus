@@ -79,6 +79,10 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-CurveTableParser.ps1
 
+      - name: Dashboard game-watch tests
+        shell: pwsh
+        run: ./scripts/Test-DashboardGameWatch.ps1
+
       - name: Download and verify repak
         working-directory: /tmp
         run: |
