@@ -81,6 +81,31 @@ end)
 
 Player events fire when the player list changes between tick polls. Join fires for new names; leave fires for names that disappeared. Multiple callbacks can be registered.
 
+#### Event bus
+
+`API.on` subscribes to any named event; `API.emit` publishes one. `player.join` and `player.leave` are emitted on the
+bus too (same payload as above). Add-ons can define their own events. An optional native (C++) mod can deliver game
+events from native hooks through the same bus: it exposes `WPNative.PollEvents()`, which the bus drains on its own
+loop (without such a mod only Lua events exist).
+
+```lua
+local sub = API.on("player.join", function(payload, meta)
+    -- meta = { ev = "player.join", ts_unix = ..., seq = ..., source = "lua" | "native" }
+end, { key = "greeting" })  -- optional: re-subscribing with the same key replaces the old handler
+sub.cancel()
+
+API.once("myaddon.ready", function(payload) end)  -- fires once, then unsubscribes
+API.emit("myaddon.ready", { value = 1 })           -- payload: plain table, no UObjects
+local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, native = bool }
+```
+
+- Handlers run on the async loop, never inside a game hook, one after the other; an error in one handler is logged
+  and does not affect the others. A handler that fails 10 times in a row is disabled.
+- `API.emit` calls the handlers right away. Native events arrive with the next poll (`events.poll_ms`, default
+  100 ms; every 500 ms while nobody is online).
+- Subscriptions are attributed to the add-on that made them (logs, `API.listEvents`). On hot reload the Lua state
+  restarts, so add-ons subscribe again from scratch.
+
 ### Tick Callbacks
 
 ```lua
