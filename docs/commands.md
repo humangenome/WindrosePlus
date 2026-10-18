@@ -16,7 +16,17 @@ Show all commands or get detailed help for a specific command.
 Usage: wp.help [command|all]
 ```
 
-`wp.help` shows non-hidden commands grouped by category. `wp.help all` includes debug commands. `wp.help status` shows detailed usage for a single command.
+`wp.help` shows non-hidden commands grouped by category, one line per command (commands with subcommands show
+`<subcommand>` and how many they have). `wp.help all` includes debug commands. `wp.help status` shows detailed usage
+for a single command; for a command with subcommands it lists one line per subcommand:
+
+```
+> wp.help wp.mymod
+wp.mymod - What my mod does
+  wp.mymod status                    Show the current state
+  wp.mymod set <player> <value>      Set a value for a player
+  wp.mymod list items <filter>       Find item names
+```
 
 ```
 > wp.help status
