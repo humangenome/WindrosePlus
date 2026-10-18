@@ -69,11 +69,48 @@ Commands registered by mods appear in `wp.help` alongside built-in commands. `op
 `{ category = "debug" }` groups the command in `wp.help` (default `server`), `{ hidden = true }` keeps it out of
 `wp.help` and `commands.json` (`wp.help all` still lists it).
 
+#### Subcommands
+
+A command with several actions registers them as subcommands, each with its own usage and description, instead of
+one long usage string:
+
+```lua
+API.registerCommand("wp.mymod", nil, "What my mod does", nil, {
+    category = "admin",
+    subcommands = {
+        { name = "status", description = "Show the current state",
+          handler = function(args, caller) return "running" end },
+        { name = "set", usage = "<player> <value>", description = "Set a value for a player",
+          handler = function(args) return "set " .. tostring(args[1]) end },          -- args = words after "set"
+        { name = "list items", usage = "<filter>", description = "Find item names",
+          handler = function(args) return "matching " .. tostring(args[1]) end },
+    },
+})
+```
+
+- A subcommand's `handler` gets the words after the subcommand. Without a `handler`, the command's own handler gets
+  every call with all words (handy when one function already parses everything).
+- `wp.mymod` alone answers the list of subcommands; an unknown subcommand is an error with that list.
+- `usage` (4th argument) may be nil: it becomes `wp.mymod <status|set|list>`.
+- A name may have two words (`list items`); it is matched before a one-word name with the same first word.
+- `wp.help` shows one line per command, `wp.help wp.mymod` one line per subcommand; `commands.json` and
+  `API.listCommands()` carry `subcommands = { { name, usage, description }, ... }`.
+
+To describe the subcommands of a command you did not write (e.g. a built-in one) without replacing it:
+`API.setSubcommands("wp.config", { { name = "show", description = "..." } })`. Its own handler keeps getting every
+call; only the help and the command list change.
+
+**Suggested naming** for commands with subcommands: `wp.<area> <verb> [object] [target] [args]`, verbs `list`,
+`get`, `set`, `show`, `find`, `status`, `on` / `off`, `start` / `stop`, `clear`, e.g. `wp.mymod set <player> <value>`,
+`wp.mymod list items <filter>`. No positional shortcuts: every action has a named subcommand, so `wp.help` and
+autocomplete can show it.
+
 Add-ons that offer commands through another channel (e.g. an in-game console) can list and run commands:
 
 ```lua
 for _, c in ipairs(API.listCommands()) do  -- sorted by name
-    -- c = { name = "wp.status", usage = "...", description = "...", category = "server", hidden = false }
+    -- c = { name = "wp.status", usage = "...", description = "...", category = "server", hidden = false,
+    --       subcommands = nil or { { name = "status", usage = "", description = "..." }, ... } }
 end
 
 local status, message, opts = API.executeCommand("wp.status", {})  -- args: table or "a b c"
