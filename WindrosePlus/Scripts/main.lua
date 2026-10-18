@@ -443,6 +443,12 @@ WindrosePlus.API.getConfig = function(section, key)
     return Config.get(section, key)
 end
 
+-- fn() runs after windrose_plus.json changed (picked up on the next RCON command or wp.reload); read new values
+-- with API.getConfig inside it
+WindrosePlus.API.onConfigReload = function(fn)
+    Config.onChange(fn)
+end
+
 WindrosePlus.API.isIdle = function()
     return WindrosePlus.isIdle()
 end
