@@ -186,6 +186,14 @@ local Admin = loadModule("Admin", function()
     local m = require("modules.admin"); m.init(Config, gameDir); return m
 end)
 
+-- Roles per account and per command for in-game channels (modules/permissions.lua); RCON keeps full access
+local Permissions = loadModule("Permissions", function()
+    local m = require("modules.permissions")
+    m.init(gameDir, Admin, function(ev, payload) EventBus.emit(ev, payload, "core") end)
+    if Admin and Admin.writeCommandsJson then Admin.writeCommandsJson() end
+    return m
+end)
+
 local Query = loadModule("Query", function()
     local m = require("modules.query"); m.init(gameDir, Config); return m
 end)
@@ -472,6 +480,7 @@ end
 
 -- Command registration for mods. opts (optional): { hidden = true } keeps the command out of wp.help and
 -- commands.json (wp.help all shows it), { category = "debug" } groups it in wp.help (default "server"),
+-- { role = "member" } suggests a permission role (shown by wp.perms list unassigned, never applied by itself).
 -- { subcommands = { { name = "item", usage = "<player> <item> [count]", description = "...", handler = fn }, ... } }
 -- registers subcommands: a subcommand's handler(args, caller) gets the words after it; without a handler the
 -- command's own handler gets every call. A bare command answers its subcommand list, an unknown subcommand is an
@@ -485,14 +494,15 @@ WindrosePlus.API.registerCommand = function(name, handler, description, usage, o
     end
 end
 
--- All registered commands (built-in and mods): { { name, usage, description, category, hidden, subcommands }, ... }
--- by name (subcommands = { { name, usage, description }, ... } or nil)
+-- All registered commands (built-in and mods): { { name, usage, description, category, hidden, role, subcommands }, ... }
+-- by name (role = the suggested role from registerCommand, not the effective one: see API.requiredRole;
+-- subcommands = { { name, usage, description }, ... } or nil)
 WindrosePlus.API.listCommands = function()
     local out = {}
     if Admin then
         for name, cmd in pairs(Admin._commands) do
             out[#out + 1] = { name = name, usage = cmd.usage or name, description = cmd.description or "",
-                              category = cmd.category or "server", hidden = cmd.hidden == true,
+                              category = cmd.category or "server", hidden = cmd.hidden == true, role = cmd.role,
                               subcommands = cmd.subcommands and (function()
                                   local subs = {}
                                   for _, sub in ipairs(cmd.subcommands) do
@@ -508,9 +518,9 @@ end
 
 -- Run a command like RCON does. args: table or string. Returns status ("ok", "error" or "deferred"), message, opts.
 -- "deferred": message is the token; the answer arrives as event command.completed { token, ok, message }, or
--- never (then give up after opts.timeout seconds, default 10). Access control is the caller's job.
--- caller (optional): { accountId, name } of an in-game caller, handed to the command handler as its second argument
--- (handlers can tailor answers or checks); nil = RCON-level access.
+-- never (then give up after opts.timeout seconds, default 10). Access control is the caller's job (API.isAllowed).
+-- caller (optional): { accountId, name } of an in-game caller, handed to the command handler (wp.perms uses it for
+-- its limits); nil = RCON-level access.
 WindrosePlus.API.executeCommand = function(command, args, caller)
     if not Admin then return "error", "Admin module not loaded" end
     if type(args) == "string" then
@@ -522,6 +532,41 @@ WindrosePlus.API.executeCommand = function(command, args, caller)
                                             type(caller) == "table" and caller or nil)
     if not ok then return "error", tostring(status) end
     return status, message, opts
+end
+
+-- Permissions (modules/permissions.lua): roles public < member < admin < dev per AccountId, a role per command
+-- ("<command>" or "<command> <sub>"); a command without a rule is dev only. For channels that know the caller's
+-- AccountId; RCON and the dashboard are not checked. Changes emit permissions.changed { kind, id }.
+WindrosePlus.API.getRole = function(accountId)
+    return Permissions and Permissions.getRole(accountId) or "public"
+end
+WindrosePlus.API.requiredRole = function(command, args)
+    if not Permissions then return "dev", nil end
+    return Permissions.requiredRole(command, args)
+end
+-- ok, neededRole, rule
+WindrosePlus.API.isAllowed = function(accountId, command, args)
+    if not Permissions then return false, "dev", nil end
+    return Permissions.isAllowed(accountId, command, args)
+end
+WindrosePlus.API.setRole = function(accountId, role, note)
+    if not Permissions then return false, "Permissions module not loaded" end
+    return Permissions.setRole(accountId, role, note, nil)
+end
+WindrosePlus.API.setCommandRole = function(rule, role)
+    if not Permissions then return false, "Permissions module not loaded" end
+    return Permissions.setCommandRole(rule, role, nil)
+end
+-- A mod's defaults for its own commands: added only when the rule does not exist yet
+WindrosePlus.API.setDefaultCommandRole = function(rule, role)
+    return Permissions ~= nil and Permissions.setDefault(rule, role)
+end
+WindrosePlus.API.listPermissions = function()
+    return Permissions and Permissions.list() or { accounts = {}, commands = {}, unassigned = {}, stale = {} }
+end
+-- fn(nameOrId) -> AccountId: lets wp.perms accept online player names (a mod that can look players up sets it)
+WindrosePlus.API.setAccountResolver = function(fn)
+    if Permissions then Permissions.setAccountResolver(fn) end
 end
 
 -- Describe the subcommands of an existing command (e.g. a built-in one) for wp.help, commands.json and in-game

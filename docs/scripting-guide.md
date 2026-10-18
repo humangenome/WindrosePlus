@@ -92,7 +92,8 @@ API.registerCommand("wp.mymod", nil, "What my mod does", nil, {
   every call with all words (handy when one function already parses everything).
 - `wp.mymod` alone answers the list of subcommands; an unknown subcommand is an error with that list.
 - `usage` (4th argument) may be nil: it becomes `wp.mymod <status|set|list>`.
-- A name may have two words (`list items`); it is matched before a one-word name with the same first word.
+- A name may have two words (`list items`). Permission rules (see "Permissions") use the first word:
+  `wp.perms set wp.mymod list member` covers `list items` and `list tables`.
 - `wp.help` shows one line per command, `wp.help wp.mymod` one line per subcommand; `commands.json` and
   `API.listCommands()` carry `subcommands = { { name, usage, description }, ... }`.
 
@@ -146,6 +147,38 @@ end)
   another command.
 - On timeout the caller gets `timeout_message` (or a default) as an error.
 - Only RCON (dashboard, spool clients) can wait; `API.deferredSupported()` is false without it.
+
+### Permissions
+
+For channels that know who is calling (an in-game console, a chat bridge), Windrose+ keeps roles per AccountId and a
+role per command in `windrose_plus_data\permissions.json`. RCON and the dashboard are not checked: they keep full
+access. Roles, lowest first: `public` (account not listed), `member`, `admin`, `dev`.
+
+A command's role comes from the rule `"<command> <subcommand>"`, else `"<command>"`, else **dev**. There is no
+wildcard and no category rule, so a new command is dev only until someone assigns it (`wp.perms set`).
+
+```lua
+-- in your channel, before running a command for a player
+local ok, needed = API.isAllowed(accountId, "wp.give", { "Dummy", "Wood" })
+if not ok then return "Access denied: wp.give needs " .. needed end
+-- pass the caller along: commands like wp.perms apply their in-game limits with it
+local status, message = API.executeCommand("wp.give", args, { accountId = accountId, name = playerName })
+```
+
+| Function | Returns |
+|---|---|
+| `API.getRole(accountId)` | `"public"`, `"member"`, `"admin"` or `"dev"` |
+| `API.requiredRole(command, args)` | role, matched rule (nil = no rule, dev) |
+| `API.isAllowed(accountId, command, args)` | ok, needed role, matched rule |
+| `API.setRole(accountId, role, note)` / `API.setCommandRole(rule, role or nil)` | true, or false and the reason |
+| `API.setDefaultCommandRole(rule, role)` | adds a rule for your own command only if none exists (an admin's choice stays) |
+| `API.listPermissions()` | `{ accounts, commands, unassigned, stale }` |
+| `API.setAccountResolver(fn)` | `fn(name)` returns an AccountId, so `wp.perms` accepts online player names |
+
+`registerCommand(..., { role = "member" })` only suggests a role: `wp.perms list unassigned` shows it, nothing
+applies it. Every change emits `permissions.changed { kind = "account" | "command", id }`, e.g. to refresh a
+command list on the client. A command handler gets the caller as its second argument
+(`function(args, caller)`, nil for RCON).
 
 ### Events
 
