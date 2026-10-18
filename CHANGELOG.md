@@ -2,6 +2,10 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.23] - 2026-10-18
+
+Fresh screenshots of the current dashboard and Sea Chart in the README and `docs/screenshots`. No change to the mod.
+
 ## [1.3.22] - 2026-10-18
 
 ### Added

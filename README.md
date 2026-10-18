@@ -35,11 +35,11 @@ _Windrose+ is a community project and is not affiliated with or endorsed by the 
 ### Live Sea Chart
 A real-time map of your server showing island terrain, player and creature positions, points of interest found by the POI scanner, and a searchable item catalog. Item detail pages include rarity, tier, stack, stats, effects, crafting recipes and stations, trader offers, building costs, research unlocks, where the item drops, and map links for sources that match a POI scanner marker.
 
-![Sea Chart with default Layers panel](docs/screenshots/v1.3.0/seachart-hero.png)
+![Sea Chart with the Layers panel open](docs/screenshots/seachart.png)
 
 The Items panel browses every item in the game with group/type/rarity/tier filters and click-through to recipes, trader offers, and map source hits. The dashboard builds this catalog on your server from your own copy of the game (`tools/WindrosePlus-BuildCatalog.ps1`, about a minute, written to `windrose_plus_data\catalog\v1`), so it always matches the game version you run and rebuilds itself after a game update. Nothing from the game ships with Windrose+. Each item shows an icon for its kind (food, armour, ship weapon and so on).
 
-![Sea Chart with Items panel](docs/screenshots/seachart-items.png)
+![Items panel with an item open](docs/screenshots/seachart-items.png)
 
 ### Admin Console (RCON)
 Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 40+ built-in commands out of the box.
