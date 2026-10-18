@@ -128,7 +128,11 @@ function Mods._loadMod(dirname)
     f:close()
 
     -- Load with error isolation
+    -- Attribute event subscriptions made while loading to this add-on
+    local EventBus = require("modules.eventbus")
+    EventBus.currentOwner = manifest.name or dirname
     local loadOk, loadErr = pcall(dofile, mainPath)
+    EventBus.currentOwner = nil
     if loadOk then
         table.insert(Mods._loaded, {
             name = manifest.name or dirname,
