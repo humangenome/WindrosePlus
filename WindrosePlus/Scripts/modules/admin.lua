@@ -10,6 +10,7 @@ local Admin = {}
 Admin._commands = {}
 Admin._config = nil
 Admin._gameDir = nil  -- populated by init() for file-IO commands (wp.givestats queue)
+Admin.deferredSupported = false  -- set by main.lua when RCON can answer deferred commands
 Admin._playerJoinTimes = {}  -- track session join times for wp.playtime
 Admin._DEFAULT_PROCESS_NAME = "WindroseServer-Win64-Shipping.exe"
 Admin._bootTime = os.time()  -- track server start for uptime (no wmic needed)
@@ -48,6 +49,12 @@ function Admin.execute(command, args)
         return "error", "Unknown command: " .. command .. ". Use wp.help for list."
     end
     local ok, result = pcall(cmd.handler, args)
+    if ok and type(result) == "table" and result.deferred then
+        -- The handler answers later through API.completeDeferred (e.g. after a game-thread task of a native mod).
+        -- Optional: timeout (seconds, capped by RCON) and timeout_message (answer when no result came in time).
+        return "deferred", tostring(result.deferred),
+               { timeout = result.timeout, timeoutMessage = result.timeout_message }
+    end
     if ok then
         return "ok", result or "OK"
     else

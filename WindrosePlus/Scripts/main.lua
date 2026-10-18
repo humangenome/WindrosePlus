@@ -447,6 +447,24 @@ WindrosePlus.API.isIdle = function()
     return WindrosePlus.isIdle()
 end
 
+-- Deferred answers for mod commands: a handler that has to wait (e.g. for a game-thread task of a native mod) returns
+-- { deferred = token [, timeout = seconds] [, timeout_message = text] } and answers later with
+-- API.completeDeferred(token, ok, message). Tokens are strings; prefix them with the mod name to keep them unique.
+-- Only RCON (dashboard, spool clients) can wait; check API.deferredSupported() first and answer directly otherwise.
+if Rcon and Admin then Admin.deferredSupported = true end
+WindrosePlus.API.deferredSupported = function()
+    return Admin ~= nil and Admin.deferredSupported == true
+end
+WindrosePlus.API.deferredMaxSeconds = function()
+    return Rcon and Rcon._deferredMaxSec or 0
+end
+WindrosePlus.API.completeDeferred = function(token, ok, message)
+    if Rcon and Rcon.completeDeferred then
+        return Rcon.completeDeferred(tostring(token), ok, message)
+    end
+    return false
+end
+
 -- Command registration for mods
 WindrosePlus.API.registerCommand = function(name, handler, description, usage)
     if Admin then
