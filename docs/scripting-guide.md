@@ -54,7 +54,7 @@ local API = WindrosePlus.API
 ### Commands
 
 ```lua
-API.registerCommand(name, handler, description, usage)
+API.registerCommand(name, handler, description, usage [, opts])
 ```
 
 Register an RCON command. The handler receives an `args` table (string array, 1-indexed) and must return a string response.
@@ -65,7 +65,24 @@ API.registerCommand("wp.ping", function(args)
 end, "Test connectivity", "wp.ping")
 ```
 
-Commands registered by mods appear in `wp.help` alongside built-in commands.
+Commands registered by mods appear in `wp.help` alongside built-in commands. `opts` is optional:
+`{ category = "debug" }` groups the command in `wp.help` (default `server`), `{ hidden = true }` keeps it out of
+`wp.help` and `commands.json` (`wp.help all` still lists it).
+
+Add-ons that offer commands through another channel (e.g. an in-game console) can list and run commands:
+
+```lua
+for _, c in ipairs(API.listCommands()) do  -- sorted by name
+    -- c = { name = "wp.status", usage = "...", description = "...", category = "server", hidden = false }
+end
+
+local status, message, opts = API.executeCommand("wp.status", {})  -- args: table or "a b c"
+-- status "ok" / "error": message is the answer
+-- status "deferred": message is a token; the answer arrives as event command.completed { token, ok, message }
+API.on("command.completed", function(e) end)
+```
+
+`API.executeCommand` does no access control: the caller decides who may run what.
 
 #### Answering later (deferred answers)
 
