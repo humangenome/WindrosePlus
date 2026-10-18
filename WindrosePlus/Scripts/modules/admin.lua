@@ -119,7 +119,7 @@ function Admin.helpText(name, cmd)
     return table.concat(lines, "\n")
 end
 
--- Register (or replace) a command; opts: hidden, category, subcommands (see API.registerCommand),
+-- Register (or replace) a command; opts: hidden, category, role (suggestion), subcommands (see API.registerCommand),
 -- examples (lines shown under the help)
 function Admin.register(name, handler, description, usage, opts)
     opts = type(opts) == "table" and opts or {}
@@ -130,6 +130,7 @@ function Admin.register(name, handler, description, usage, opts)
         handler = handler,
         hidden = opts.hidden == true or nil,
         category = opts.category,
+        role = opts.role,
         subcommands = subs,
         strictSubcommands = subs ~= nil or nil,
         examples = type(opts.examples) == "table" and opts.examples or nil,

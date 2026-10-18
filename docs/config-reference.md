@@ -87,6 +87,27 @@ Server-query responder, so server browsers and monitoring tools can read your pl
 |-----|---------|-------------|
 | `steam_ids` | `[]` | Not used yet. Every admin command runs through RCON with the password. |
 
+### permissions.json (windrose_plus_data)
+
+Roles for in-game channels, managed with `wp.perms` (see [commands](commands.md#wpperms)). RCON is not affected.
+Created on first start with the built-in rules for the core commands (see [wp.perms](commands.md#wpperms));
+mods add rules for their own commands. Built-in and mod defaults are only added when a rule is missing, so a
+server's own choices stay. One entry per line, so it can be edited by hand; run `wp.perms reload` afterwards. An unreadable file or an
+unknown `version` is never overwritten: every command is then dev only until it is fixed.
+
+```json
+{
+  "version": 1,
+  "accounts": {
+    "0000000000000000000000000000ABCD": { "role": "dev", "note": "Dummy" }
+  },
+  "commands": {
+    "wp.give": "admin",
+    "wp.help": "public"
+  }
+}
+```
+
 ### poiscan
 
 Background scan that builds your own point-of-interest overlay for the Sea Chart.

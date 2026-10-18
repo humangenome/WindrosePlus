@@ -21,11 +21,11 @@ Usage: wp.help [command|all]
 for a single command; for a command with subcommands it lists one line per subcommand:
 
 ```
-> wp.help wp.mymod
-wp.mymod - What my mod does
-  wp.mymod status                    Show the current state
-  wp.mymod set <player> <value>      Set a value for a player
-  wp.mymod list items <filter>       Find item names
+> wp.help wp.perms
+wp.perms - Roles per account and per command (public < member < admin < dev) for in-game channels
+  wp.perms list [accounts|commands|unassigned|stale] [--json]  Roles and rules (members: only their own)
+  wp.perms role <player|accountId> <role> [note]               Give an account a role
+  ...
 ```
 
 ```
@@ -483,6 +483,48 @@ Connections:
 ---
 
 ## Admin
+
+### wp.perms
+
+Roles per account and per command for in-game channels (see "Permissions" in the scripting guide). RCON keeps full
+access. Roles: `public` < `member` < `admin` < `dev`. A command without a rule is dev only.
+
+```
+Usage: wp.perms list [accounts|commands|unassigned|stale] [--json]
+       wp.perms role <player|accountId> <public|member|admin|dev> [note]
+       wp.perms set <command [subcommand]> <role>
+       wp.perms unset <command [subcommand]>
+       wp.perms check <player|accountId> <command ...>
+       wp.perms prune
+       wp.perms reload
+```
+
+- `role` with `public` removes the account. Player names work when a mod sets `API.setAccountResolver`.
+- `set wp.client ping public` sets a subcommand rule; it wins over the command's own rule.
+- `unassigned` lists registered commands without a rule (dev only), with the role a mod suggests; `stale` lists rules
+  for commands that are gone, `prune` removes them. `--json` answers `[Perms] {json}` for tools.
+- `reload` re-reads the file after a hand edit.
+
+Built-in defaults (added unless the file has its own rule): `wp.help`, `wp.version` public; server state and player
+details (`wp.status`, `wp.uptime`, `wp.time`, `wp.multipliers`, `wp.players`, `wp.playtime`, `wp.pos`, `wp.health`,
+`wp.stamina`, `wp.playerinfo`) member; moderation, player changes, server operations and diagnostics admin; the
+debug commands dev. Mods add defaults for their own commands. Everything else is dev only.
+
+From an in-game channel (the caller is known): `list` and `check` need member. Below admin they show only the
+caller: `wp.perms list` = your role and the commands you may run, `wp.perms check <command ...>` = whether you may
+run it. Admins and devs see all accounts and can check anyone. An admin may only change accounts below
+admin and assign at most admin, and only rules that are at most admin before and after (an unassigned command counts
+as dev). Only dev may grant dev, change admins or devs, make a command dev only, remove a rule, `prune` or `reload`.
+Nobody changes their own role in game, and the last dev cannot be removed.
+
+```
+> wp.perms role 0000000000000000000000000000ABCD dev Dummy
+0000000000000000000000000000ABCD is now dev.
+> wp.perms set wp.give admin
+Rule wp.give = admin.
+> wp.perms check 0000000000000000000000000000ABCD wp.x
+0000000000000000000000000000ABCD is dev; wp.x needs dev (no rule): allowed
+```
 
 ### wp.speed
 
