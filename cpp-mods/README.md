@@ -39,9 +39,18 @@ You do **not** need to build these yourself. Download the pre-built DLLs from th
 git clone https://github.com/HumanGenome/WindrosePlus.git
 cd WindrosePlus/cpp-mods
 
-# Clone the UE4SS SDK (required dependency, not included as submodule)
+# Clone the UE4SS SDK (required dependency, not included as submodule) at the
+# commit of the UE4SS build install.ps1 installs (UE4SS_v3.0.1-944-g0196ef29)
 git clone https://github.com/UE4SS-RE/RE-UE4SS.git
+git -C RE-UE4SS checkout 0196ef29
+git -C RE-UE4SS submodule update --init --recursive
 ```
+
+Build against the same UE4SS commit the installer pins, not the newest one. A DLL
+built against newer UE4SS headers can import functions the installed `UE4SS.dll`
+does not export, and then UE4SS cannot load it (for example `FText`'s destructor,
+exported in later builds but not in 944). When the installer's pin moves, move this
+checkout with it and rebuild the DLLs.
 
 ### Build
 
