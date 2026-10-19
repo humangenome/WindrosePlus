@@ -11,8 +11,11 @@ You do **not** need to build these yourself. Download the pre-built DLLs from th
 - `HeightmapExporter` exports terrain height data for the live map. This is the
   only C++ mod the installer enables by default.
 - `WindrosePlusNative` backs the `wp.kick` / `wp.ban` / `wp.unban` /
-  `wp.listbans` commands. It polls `windrose_plus_data\wpn_command.txt` on the
-  game thread and persists bans to `windrose_plus_data\wpn_bans.txt`. As of
+  `wp.listbans` commands. It polls `windrose_plus_data\wpn_command.txt` from
+  UE4SS's update thread and persists bans to `windrose_plus_data\wpn_bans.txt`;
+  everything that touches game objects (finding players, kicking) runs on the
+  game thread from UE4SS's `ProcessInternal` callback, so it waits while the
+  server is empty. As of
   v1.3.15 the installer does not enable it while it is revalidated against the
   current Windrose dedicated-server build.
 - `WindroseNativeProbe` is an experimental read-only runtime UObject reflection

@@ -253,7 +253,7 @@ Recorded audit note: HumanGenome +3 stat +2 talent. This does not change the cha
 
 ### Moderation (wp.kick / wp.ban / wp.unban / wp.listbans)
 
-These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up on the game thread within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked on a timer, so a banned name is removed again if it rejoins.
+These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked every 10 seconds, so a banned name is removed again if it rejoins. The kick itself runs on the game thread (UE4SS's `ProcessInternal` callback), which only runs while a player is online; that is always the case for a kick. `wp.unban` and `wp.listbans` only touch the ban file and work on an empty server.
 
 `WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Until it is re-enabled, `wp.kick` / `wp.ban` / `wp.unban` queue a request that nothing consumes, and `wp.listbans` reads an empty list. Confirm a kick took effect with `wp.players`.
 
