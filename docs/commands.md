@@ -255,7 +255,7 @@ Recorded audit note: HumanGenome +3 stat +2 talent. This does not change the cha
 
 These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up on the game thread within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked on a timer, so a banned name is removed again if it rejoins.
 
-`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Until it is re-enabled, `wp.kick` / `wp.ban` / `wp.unban` queue a request that nothing consumes, and `wp.listbans` reads an empty list. Confirm a kick took effect with `wp.players`.
+`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Without it, `wp.kick` / `wp.ban` / `wp.unban` change nothing and answer `Kick and ban are not available on this server, so Alice was not kicked.` (or `banned` / `unbanned`), and `wp.listbans` reads an empty list. Windrose+ counts the mod as present when UE4SS would load it: `ue4ss\Mods\WindrosePlusNative\dlls\main.dll` exists and either `enabled.txt` is in that folder or `mods.txt` has `WindrosePlusNative : 1`. The examples below are the answers with the mod present. Confirm a kick took effect with `wp.players`.
 
 #### wp.kick
 

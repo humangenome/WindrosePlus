@@ -2,6 +2,12 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.24] - 2026-10-20
+
+### Fixed
+
+- **`wp.kick`, `wp.ban` and `wp.unban` say when they cannot work.** These commands are carried out by the `WindrosePlusNative` C++ mod, which the installer has not enabled since v1.3.15. Without it they still answered `Kick requested for Alice` and left a request that nothing ever read, so the player stayed on the server. They now answer `Kick and ban are not available on this server, so Alice was not kicked.` (or `banned` / `unbanned`) and queue nothing. Windrose+ counts the native mod as present by the rule UE4SS uses to load it: `ue4ss\Mods\WindrosePlusNative\dlls\main.dll` exists and either `enabled.txt` is in that folder or `mods.txt` has `WindrosePlusNative : 1`. With the mod present, nothing changes. A request left behind by an earlier version is deleted, so it cannot run on its own later if the mod is switched on.
+
 ## [1.3.23] - 2026-10-18
 
 Fresh screenshots of the current dashboard and Sea Chart in the README and `docs/screenshots`. No change to the mod.

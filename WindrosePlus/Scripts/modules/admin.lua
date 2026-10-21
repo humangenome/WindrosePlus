@@ -2002,11 +2002,20 @@ end
 -- file it polls on the game thread. Tab-separated: <verb>\t<arg1>\t<arg2>.
 -- Fire-and-forget: the native mod executes within ~1s and the player drops;
 -- confirm via wp.players. Returns a friendly message (or an error if the native
--- mod isn't deployed / game dir unknown).
+-- mod isn't deployed / game dir unknown). When UE4SS will not load the native
+-- mod, nothing would ever read the request, so say so and queue nothing.
 function Admin._wpnSend(verb, arg1, arg2, okMsg)
     if not Admin._gameDir then return "Game directory not initialized" end
     local dataDir = Admin._gameDir .. "windrose_plus_data"
     local cmdPath = dataDir .. "\\wpn_command.txt"
+    if not Admin._wpnLoaded() then
+        -- A request left by an earlier version would run the day the mod is
+        -- switched on; drop it.
+        os.remove(cmdPath)
+        Log.info("Admin", "WPN command refused, WindrosePlusNative not loaded: " .. verb .. " " .. (arg1 or ""))
+        local done = ({ kick = "kicked", ban = "banned", unban = "unbanned" })[verb] or "changed"
+        return "Kick and ban are not available on this server, so " .. (arg1 or "nobody") .. " was not " .. done .. "."
+    end
     local parts = { verb }
     if arg1 ~= nil and arg1 ~= "" then parts[#parts + 1] = arg1 end
     if arg2 ~= nil and arg2 ~= "" then parts[#parts + 1] = arg2 end
@@ -2016,6 +2025,48 @@ function Admin._wpnSend(verb, arg1, arg2, okMsg)
     f:close()
     Log.info("Admin", "WPN command queued: " .. verb .. " " .. (arg1 or ""))
     return okMsg
+end
+
+-- True when UE4SS loads WindrosePlusNative, by UE4SS's own rule for a C++ mod:
+-- Mods\WindrosePlusNative\dlls\main.dll is present, and either enabled.txt sits
+-- in that folder or mods.txt has "WindrosePlusNative : 1" (UE4SS drops spaces
+-- and skips any line containing ';'). Read on every call, so switching the mod
+-- on or off is picked up at the next server start without a stale answer here.
+function Admin._wpnLoaded()
+    local modsDirs = {}
+    local info = debug.getinfo(1, "S")
+    if info and info.source then
+        local src = info.source:gsub("^@", "")
+        local fromScript = src:match("^(.+[/\\])[^/\\]+[/\\]Scripts[/\\]modules[/\\]admin%.lua$")
+        if fromScript then modsDirs[#modsDirs + 1] = fromScript end
+    end
+    if Admin._gameDir then
+        modsDirs[#modsDirs + 1] = Admin._gameDir .. "R5\\Binaries\\Win64\\ue4ss\\Mods\\"
+    end
+    local function exists(path)
+        local f = io.open(path, "rb")
+        if f then f:close(); return true end
+        return false
+    end
+    for _, modsDir in ipairs(modsDirs) do
+        local modDir = modsDir .. "WindrosePlusNative\\"
+        if exists(modDir .. "dlls\\main.dll") then
+            if exists(modDir .. "enabled.txt") then return true end
+            local f = io.open(modsDir .. "mods.txt", "r")
+            if f then
+                local text = f:read("*a") or ""
+                f:close()
+                for line in text:gmatch("[^\r\n]+") do
+                    if not line:find(";", 1, true) then
+                        local name, value = line:gsub(" ", ""):match("^([^:]*):.-([^:]*)$")
+                        if name == "WindrosePlusNative" and value:sub(1, 1) == "1" then return true end
+                    end
+                end
+            end
+            return false
+        end
+    end
+    return false
 end
 
 -- Read the WindrosePlusNative ban list file directly (it owns wpn_bans.txt).
