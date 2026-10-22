@@ -2,6 +2,18 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.25] - unreleased
+
+**After updating, everyone has to log in to the dashboard once more.** Sessions from earlier versions are no longer accepted.
+
+### Security
+
+- **The login cookie no longer carries part of a password hash.** Up to v1.3.24 the dashboard cookie began with the first 4 bytes of an unsalted SHA-256 of the RCON password, so one copied cookie (the dashboard runs on plain HTTP) let someone test password guesses offline. The cookie is now a random id and a time, signed with a key made from the server's own secret file and the current password. Changing the RCON password still logs everyone out. The signature check no longer stops at the first different character. A new `/logout` route clears the cookie.
+- **Two dashboards on one address no longer log each other out.** Browsers send a host's cookies to every port on it, so logging in to one server's dashboard replaced the cookie of another server on the same machine. The cookie is now named after the dashboard's port (`wp_session_8780`). A cookie sent as `wp_session` is still read, for scripts that copy it.
+- **Nobody can stall the dashboard without logging in.** The dashboard answers one request at a time, and the login page and the console route read a request body of any size, at any speed, before checking the password, so one slow or huge request held every other client. Login bodies are now limited to 8 KB and console commands to 64 KB, each must arrive within 10 seconds, and a request that is too large is refused before its body is read (HTTP 413). A character-repair upload that stops sending for 30 seconds is dropped.
+- **Another web page can no longer post console commands with your login cookie.** A page served from another port of the same address counts as the same site for cookies, and the console accepted a command in any body format. A `POST` logged in by the cookie alone must now be sent as `application/json` (or `application/zip` for character repair), which browsers only send across sites after a check this dashboard does not pass. The dashboard page already sends both, and scripts that use the `X-RCON-Password` header are not affected.
+- `server/routes.json` is at `routes_version` 2 (the `/logout` route, the cookie name and the request limits).
+
 ## [1.3.24] - 2026-10-20
 
 ### Fixed

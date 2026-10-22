@@ -30,6 +30,14 @@ jobs:
       - name: Test windrose-heal
         run: cargo test --manifest-path tools/windrose-heal/Cargo.toml
 
+      - name: Dashboard login and request limit tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./scripts/Test-DashboardAuth.ps1
+
+      - name: Dashboard login and request limit tests (PowerShell 7)
+        shell: pwsh
+        run: ./scripts/Test-DashboardAuth.ps1
+
       - name: Build windrose-heal
         run: cargo build --release --manifest-path tools/windrose-heal/Cargo.toml
 

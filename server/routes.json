@@ -1,10 +1,10 @@
 {
-  "routes_version": 1,
+  "routes_version": 2,
   "about": "Every HTTP route server/windrose_plus_server.ps1 answers. routes_version goes up whenever a route is added, removed, or changes its method, auth, request or response format.",
   "auth": {
     "none": "No login.",
     "public-map": "Only when livemap.public.enabled is true; if livemap.public.token is set, add ?token=<token>.",
-    "login": "The dashboard session cookie, or the RCON password in an X-RCON-Password header."
+    "login": "The dashboard session cookie, or the RCON password in an X-RCON-Password header. A POST logged in by the cookie alone must not be sent as text/plain, application/x-www-form-urlencoded, multipart/form-data or with no Content-Type (415)."
   },
   "cors_preflight": "OPTIONS on any path answers 200 with Access-Control-Allow-Origin *.",
   "routes": [
@@ -18,7 +18,19 @@
       "match": [
         "Ieq /login"
       ],
-      "description": "Dashboard login page; POST a form field `password` to get the `wp_session` cookie."
+      "description": "Dashboard login page; POST a form field `password` (8 KB body limit) to get the `wp_session_<port>` cookie (24 hours). A cookie named `wp_session` is also accepted."
+    },
+    {
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/logout",
+      "auth": "none",
+      "match": [
+        "Ieq /logout"
+      ],
+      "description": "Clears this dashboard's session cookie and redirects to /login."
     },
     {
       "methods": [
@@ -250,7 +262,7 @@
         "switch /api/rcon",
         "Ieq /api/rcon"
       ],
-      "description": "Run a console command: JSON body `{\"command\": \"...\"}`; the password may also be a `password` field in the body."
+      "description": "Run a console command: JSON body `{\"command\": \"...\"}` (64 KB limit, sent within 10 seconds); the password may also be a `password` field in the body."
     },
     {
       "methods": [

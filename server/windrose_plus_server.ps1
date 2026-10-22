@@ -293,9 +293,10 @@ function Get-RuntimeOverlayData {
 
 # Session management — HMAC-signed tokens.
 # The secret is persisted to windrose_plus_data\dashboard_session.key so a
-# dashboard restart doesn't log everyone out. Tokens embed a password epoch
-# (first 4 bytes of SHA256(currentPassword)) so rotating the RCON password
-# invalidates outstanding sessions without invalidating the secret itself.
+# dashboard restart doesn't log everyone out. Tokens are signed with a key made
+# from that secret and the current RCON password, so changing the password ends
+# every session, while the cookie itself carries nothing derived from the
+# password (up to v1.3.24 it carried 4 bytes of an unsalted password hash).
 function Get-OrCreateSessionSecret {
     $keyPath = Join-Path $dataDir "dashboard_session.key"
     if (Test-Path -LiteralPath $keyPath) {
@@ -322,56 +323,134 @@ function Get-OrCreateSessionSecret {
 }
 $sessionSecret = Get-OrCreateSessionSecret
 
-function Get-PasswordEpoch {
-    $pw = Get-CurrentRconPassword
-    if (-not $pw) { return "00000000" }
-    $sha = [System.Security.Cryptography.SHA256]::Create()
+function Get-HmacHex([byte[]]$Key, [string]$Text) {
+    $hmac = [System.Security.Cryptography.HMACSHA256]::new($Key)
     try {
-        $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes([string]$pw))
+        return [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Text))).Replace("-","").ToLower()
     } finally {
-        $sha.Dispose()
+        $hmac.Dispose()
     }
-    return ("{0:x2}{1:x2}{2:x2}{3:x2}" -f $bytes[0], $bytes[1], $bytes[2], $bytes[3])
 }
 
+# The key that signs session tokens: HMAC(secret, password). $null when no
+# password is set, so no token is ever valid then.
+function Get-SessionSigningKey {
+    $pw = Get-CurrentRconPassword
+    if (-not $pw) { return $null }
+    $hex = Get-HmacHex ([System.Text.Encoding]::UTF8.GetBytes($sessionSecret)) ("wp-session-key:" + [string]$pw)
+    $key = New-Object byte[] 32
+    for ($i = 0; $i -lt 32; $i++) { $key[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }
+    return $key
+}
+
+# Token: wp2:<random id>:<unix time>:<signature>. 24 hours.
 function New-SessionToken {
+    $key = Get-SessionSigningKey
+    if (-not $key) { return $null }
+    $idBytes = New-Object byte[] 16
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($idBytes) } finally { $rng.Dispose() }
+    $id = [System.BitConverter]::ToString($idBytes).Replace("-","").ToLower()
     $timestamp = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $epoch = Get-PasswordEpoch
-    $payload = "wp_session:${epoch}:${timestamp}"
-    $hmac = New-Object System.Security.Cryptography.HMACSHA256
-    $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
-    $hash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
-    return "$payload`:$hash"
+    $payload = "wp2:${id}:${timestamp}"
+    return "${payload}:$(Get-HmacHex $key $payload)"
 }
 
-function Test-SessionToken($token) {
+function Test-SessionToken($token, [byte[]]$Key = $null) {
     if (-not $token) { return $false }
-    $parts = $token -split ":"
+    $parts = ([string]$token) -split ":"
     if ($parts.Count -ne 4) { return $false }
+    if ($parts[0] -cne "wp2" -or $parts[1] -cnotmatch '^[0-9a-f]{32}$' -or $parts[2] -notmatch '^\d{1,12}$' -or $parts[3] -cnotmatch '^[0-9a-f]{64}$') { return $false }
+    if (-not $Key) { $Key = Get-SessionSigningKey }
+    if (-not $Key) { return $false }
     $payload = "$($parts[0]):$($parts[1]):$($parts[2])"
-    $providedHash = $parts[3]
-    $hmac = New-Object System.Security.Cryptography.HMACSHA256
-    $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($sessionSecret)
-    $expectedHash = [System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))).Replace("-","").ToLower()
-    if ($providedHash -ne $expectedHash) { return $false }
-    # Password rotation kills old sessions
-    if ($parts[1] -ne (Get-PasswordEpoch)) { return $false }
-    # Check expiry (24 hours)
+    if (-not (Test-SecretEqual $parts[3] (Get-HmacHex $Key $payload))) { return $false }
     $timestamp = [long]$parts[2]
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    return ($now - $timestamp) -lt 86400
+    return (($now - $timestamp) -lt 86400 -and ($timestamp - $now) -lt 300)
 }
 
-function Get-SessionFromCookies($request) {
+# Browsers send a host's cookies to every port on it, so the cookie is named
+# after this dashboard's port: logging in to a second dashboard on the same
+# machine no longer replaces the first one's cookie. A cookie named plain
+# wp_session (the name up to v1.3.24) is still read, for scripts that copy it.
+$sessionCookieName = "wp_session_$Port"
+
+function Get-SessionCookieValues($request) {
+    $own = New-Object System.Collections.Generic.List[string]
+    $legacy = New-Object System.Collections.Generic.List[string]
     $cookieHeader = $request.Headers["Cookie"]
-    if (-not $cookieHeader) { return $null }
+    if (-not $cookieHeader) { return @() }
     foreach ($cookie in $cookieHeader -split ";") {
         $cookie = $cookie.Trim()
-        if ($cookie.StartsWith("wp_session=")) {
-            return $cookie.Substring(11)
-        }
+        $eq = $cookie.IndexOf("=")
+        if ($eq -lt 1) { continue }
+        $name = $cookie.Substring(0, $eq)
+        if ($name -ceq $sessionCookieName) { $own.Add($cookie.Substring($eq + 1)) }
+        elseif ($name -ceq "wp_session") { $legacy.Add($cookie.Substring($eq + 1)) }
+        if (($own.Count + $legacy.Count) -ge 8) { break }
     }
-    return $null
+    return @($own) + @($legacy)
+}
+
+function Test-SessionCookie($request) {
+    $values = @(Get-SessionCookieValues $request)
+    if ($values.Count -eq 0) { return $false }
+    $key = Get-SessionSigningKey
+    if (-not $key) { return $false }
+    foreach ($value in $values) {
+        if (Test-SessionToken $value $key) { return $true }
+    }
+    return $false
+}
+
+function Get-SessionCookieHeader([string]$Value, [int]$MaxAge) {
+    return "$sessionCookieName=$Value; Path=/; Max-Age=$MaxAge; HttpOnly; SameSite=Lax"
+}
+
+# A cross-site HTML form or a no-cors fetch can POST with the dashboard
+# cookie attached, but only with one of these content types (or none).
+# Requests logged in by cookie must use another type (the dashboard sends
+# application/json and application/zip), which a browser only sends
+# cross-origin after a CORS check this server never passes for cookies.
+function Test-CrossSiteSendableContentType([string]$ContentType) {
+    $type = ([string]$ContentType).Split(";")[0].Trim().ToLowerInvariant()
+    return ($type -eq "" -or $type -eq "text/plain" -or $type -eq "application/x-www-form-urlencoded" -or $type -eq "multipart/form-data")
+}
+
+# Reads a request body as UTF-8 text, at most MaxBytes, within DeadlineMs in
+# total. The dashboard answers one request at a time, so an unbounded or slow
+# body sent before any login used to hold every other client. Returns
+# @{ Ok; Text } on success, @{ Ok = $false; Status = 413 } when too large, and
+# @{ Ok = $false; Status = 0 } when the client was too slow (the connection is
+# dropped, nothing more can be sent on it).
+function Read-RequestBodyText($context, [int]$MaxBytes, [int]$DeadlineMs = 10000) {
+    $request = $context.Request
+    if ($request.ContentLength64 -gt $MaxBytes) { return @{ Ok = $false; Status = 413 } }
+    if (-not $request.HasEntityBody) { return @{ Ok = $true; Text = "" } }
+    $stream = $request.InputStream
+    $ms = New-Object System.IO.MemoryStream
+    $buffer = New-Object byte[] 8192
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($DeadlineMs)
+    try {
+        while ($true) {
+            $left = [int]($deadline - [DateTime]::UtcNow).TotalMilliseconds
+            if ($left -le 0) { throw "slow" }
+            $task = $stream.ReadAsync($buffer, 0, $buffer.Length)
+            if (-not $task.Wait($left)) { throw "slow" }
+            $read = $task.Result
+            if ($read -le 0) { break }
+            if (($ms.Length + $read) -gt $MaxBytes) { return @{ Ok = $false; Status = 413 } }
+            $ms.Write($buffer, 0, $read)
+        }
+    } catch {
+        try { $context.Response.Abort() } catch {}
+        return @{ Ok = $false; Status = 0 }
+    }
+    $bytes = $ms.ToArray()
+    $start = 0
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { $start = 3 }
+    return @{ Ok = $true; Text = [System.Text.Encoding]::UTF8.GetString($bytes, $start, $bytes.Length - $start) }
 }
 
 # Compares two secrets without stopping at the first different character.
@@ -566,6 +645,14 @@ if ($listenHost -eq "+") {
         exit 1
     }
 }
+
+# Windows only (not available on Linux): the HTTP stack drops a request whose
+# body stops arriving for 30 seconds and stops draining an unread body after 5
+# (both default to 2 minutes). Read-RequestBodyText has its own deadline too.
+try {
+    $listener.TimeoutManager.EntityBody = [TimeSpan]::FromSeconds(30)
+    $listener.TimeoutManager.DrainEntityBody = [TimeSpan]::FromSeconds(5)
+} catch {}
 
 # Tile generation watcher. The Lua mod writes generate_tiles_trigger (it cannot
 # run PowerShell itself); the request loop below calls this whenever it has
@@ -887,7 +974,16 @@ function Read-RequestBodyToFile($context, $targetPath, $maxBytes) {
     $buffer = New-Object byte[] 65536
     $stream = [System.IO.File]::Open($targetPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
     try {
-        while (($read = $context.Request.InputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+        while ($true) {
+            # A client that stops sending for 30 seconds is dropped: the
+            # dashboard answers one request at a time.
+            $task = $context.Request.InputStream.ReadAsync($buffer, 0, $buffer.Length)
+            if (-not $task.Wait(30000)) {
+                try { $context.Response.Abort() } catch {}
+                throw "Upload stalled."
+            }
+            $read = $task.Result
+            if ($read -le 0) { break }
             $total += $read
             if ($total -gt $maxBytes) {
                 throw "Upload exceeds the $([Math]::Round($maxBytes / 1MB)) MB limit."
@@ -984,8 +1080,12 @@ try {
                     continue
                 }
                 if ($method -eq "POST") {
-                    $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
-                    $body = $reader.ReadToEnd()
+                    $bodyRead = Read-RequestBodyText $context 8192
+                    if (-not $bodyRead.Ok) {
+                        if ($bodyRead.Status -eq 413) { Send-Html $context ($loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">The login request was too large.</div>')) 413 }
+                        continue
+                    }
+                    $body = $bodyRead.Text
                     $formPassword = ""
                     # Accept both application/x-www-form-urlencoded (browser <form>) and
                     # multipart/form-data (curl -F, some HTTP clients). The HTML form
@@ -1038,7 +1138,7 @@ try {
                         Send-Html $context $errorHtml
                     } elseif (Test-SecretEqual $formPassword $currentPassword) {
                         $token = New-SessionToken
-                        $context.Response.Headers.Add("Set-Cookie", "wp_session=$token; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax")
+                        $context.Response.Headers.Add("Set-Cookie", (Get-SessionCookieHeader $token 86400))
                         Send-Redirect $context "/"
                     } else {
                         Add-AuthFailure $clientKey
@@ -1058,6 +1158,14 @@ try {
                     $html = $loginPageHtml.Replace("ERRORPLACEHOLDER", $errorMsg)
                     Send-Html $context $html
                 }
+                continue
+            }
+
+            # Log out: clears this dashboard's cookie. Changing the RCON
+            # password ends every session at once.
+            if ($path -eq "/logout") {
+                $context.Response.Headers.Add("Set-Cookie", (Get-SessionCookieHeader "" 0))
+                Send-Redirect $context "/login"
                 continue
             }
 
@@ -1191,6 +1299,7 @@ try {
             # this machine get no free pass unless server.trust_loopback is set;
             # see Get-TrustLoopback.
             $script:RconBodyText = $null
+            $cookieAuth = $false
             $isTrustedLocal = (Test-LoopbackRequest $context.Request) -and (Get-TrustLoopback)
 
             if (-not $isTrustedLocal) {
@@ -1212,13 +1321,19 @@ try {
                     }
                     continue
                 }
-                $authenticated = Test-SessionToken (Get-SessionFromCookies $context.Request)
+                $authenticated = Test-SessionCookie $context.Request
+                $cookieAuth = $authenticated -and -not $context.Request.Headers["X-RCON-Password"]
                 if (-not $authenticated) {
                     $clientKey = Get-ClientKey $context.Request
                     $headerPassword = $context.Request.Headers["X-RCON-Password"]
                     $bodyPassword = $null
                     if (-not $headerPassword -and $path -eq "/api/rcon" -and $method -eq "POST") {
-                        $script:RconBodyText = (New-Object System.IO.StreamReader($context.Request.InputStream)).ReadToEnd()
+                        $bodyRead = Read-RequestBodyText $context 65536
+                        if (-not $bodyRead.Ok) {
+                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "Request body too large" } 413 }
+                            continue
+                        }
+                        $script:RconBodyText = $bodyRead.Text
                         try {
                             $parsedBody = $script:RconBodyText | ConvertFrom-Json
                             if ($parsedBody -and $parsedBody.password) { $bodyPassword = [string]$parsedBody.password }
@@ -1244,6 +1359,10 @@ try {
                     } else {
                         Send-Redirect $context "/login"
                     }
+                    continue
+                }
+                if ($cookieAuth -and $method -eq "POST" -and (Test-CrossSiteSendableContentType $context.Request.ContentType)) {
+                    Send-Json $context @{ error = "Send this request as application/json, or with the X-RCON-Password header." } 415
                     continue
                 }
             }
@@ -1576,7 +1695,12 @@ try {
                     }
                     $rawBody = $script:RconBodyText
                     if ($null -eq $rawBody) {
-                        $rawBody = (New-Object System.IO.StreamReader($context.Request.InputStream)).ReadToEnd()
+                        $bodyRead = Read-RequestBodyText $context 65536
+                        if (-not $bodyRead.Ok) {
+                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "Request body too large" } 413 }
+                            continue
+                        }
+                        $rawBody = $bodyRead.Text
                     }
                     $body = $null
                     try { $body = $rawBody | ConvertFrom-Json } catch {}
