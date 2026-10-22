@@ -236,7 +236,7 @@ jobs:
             --exclude='tools/windrose-heal/Cargo.lock' \
             --exclude='docs/brand' \
             --exclude='docs/screenshots' \
-            --exclude='docs/storage-hook-research.md' \
+            --exclude='docs/research' \
             --exclude='cpp-mods/MapMaterializerExporter' \
             --exclude='cpp-mods/*.md' \
             --exclude='cpp-mods/**/*.cpp' \
@@ -245,7 +245,7 @@ jobs:
             ./ staging/
           # Pictures, research notes and source stay in the repository; a server
           # needs none of them (about 8 MB the installer copied into the game folder).
-          for p in docs/brand docs/screenshots tools/windrose-heal/src cpp-mods/MapMaterializerExporter; do
+          for p in docs/brand docs/screenshots docs/research tools/windrose-heal/src cpp-mods/MapMaterializerExporter; do
             if [ -e "staging/$p" ]; then echo "staging still has $p"; exit 1; fi
           done
           if find staging -name '*.cpp' -o -name 'CMakeLists.txt' | grep -q .; then echo "staging still has C++ source"; exit 1; fi

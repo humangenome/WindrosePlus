@@ -209,7 +209,7 @@ function Test-PublicMapAccess($request) {
 
     $provided = $request.QueryString["token"]
     if (-not $provided) { $provided = $request.Headers["X-WindrosePlus-Map-Token"] }
-    if ($provided -eq $publicMap.Token) {
+    if ($provided -and (Test-SecretEqual ([string]$provided) ([string]$publicMap.Token))) {
         return @{ Allowed = $true; StatusCode = 200; Error = "" }
     }
     return @{ Allowed = $false; StatusCode = 401; Error = "Invalid public map token" }
@@ -1155,6 +1155,10 @@ function Invoke-RepairTool($healExe, $auditLog, $uploadPath, $outputPath, $timeo
 try {
     while ($listener.IsListening) {
         Invoke-TileGenerationWatch
+        # Also between requests (it checks at most once a minute): up to v1.3.24
+        # it ran only after a full idle second, so a map viewer polling every few
+        # seconds kept a stopped server's dashboard up.
+        Invoke-GameWatch
         $contextTask = $listener.GetContextAsync()
         while (-not $contextTask.AsyncWaitHandle.WaitOne(1000)) {
             Invoke-TileGenerationWatch
@@ -1968,7 +1972,6 @@ try {
                     $filePath = $path
                     if ($filePath -eq "" -or $filePath -eq "/") { $filePath = "/index.html" }
                     if ($filePath -eq "/livemap") { $filePath = "/livemap/index.html" }
-                    if ($filePath -eq "/repair") { $filePath = "/repair/index.html" }
 
                     # Serve map tiles from data directory
                     if ($filePath -match "^/livemap/tiles/(\d+)/(\d+)-(\d+)\.png$") {

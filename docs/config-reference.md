@@ -20,7 +20,7 @@ This file is created automatically on first start. Edit it for common server-own
 
 ### multipliers
 
-Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half. These are baked into `WindrosePlus_Multipliers_P.pak` by the PAK builder, so an edit needs a rebuild before the next launch — `StartWindrosePlusServer.bat` does that for you.
+Global server multipliers. `1.0` = default, `2.0` = double, `0.5` = half. These are baked into `WindrosePlus_Multipliers_P.pak` by the PAK builder, so an edit needs a rebuild before the next launch; `StartWindrosePlusServer.bat` does that for you.
 
 Multipliers belong in this file, not in `windrose_plus.ini`. A `[Multipliers]` section in the INI is ignored with a warning so the in-game `wp.config` output cannot disagree with what was actually applied.
 
@@ -63,7 +63,7 @@ Example:
 
 ### rcon
 
-Remote console listener. Read live — changes take effect on `wp.reload` without a PAK rebuild.
+Remote console. The password is read live: a new one works for the next command and dashboard login, no PAK rebuild needed. Turning RCON on needs a server restart, because the mod starts its command loop when the server starts; turning it off takes effect at once.
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -160,6 +160,18 @@ The Sea Chart's item catalog is built on the server from the game's own data fil
 
 Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
 
+### debug
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `log_level` | `"info"` | How much the mod writes to the UE4SS log: `debug`, `info`, `warn` or `error`. Read when the server starts. |
+
+```json
+{
+    "debug": { "log_level": "info" }
+}
+```
+
 ---
 
 ## windrose_plus.harvest.ini (Per-Resource Yield)
@@ -193,7 +205,7 @@ CopperOre   = 0.5   ; copper drops 2.0 * 0.5 = 1x (back to vanilla)
 
 Keys are UE asset family names. The matcher reads the
 `Resource_<Name>_T<digit>` token from each loot entry's path
-(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Case-insensitive — `Wood`,
+(e.g. `DA_DID_Resource_Wood_T01` -> `Wood`). Case-insensitive: `Wood`,
 `wood`, and `WOOD` all match.
 
 | Key | Default | Where it applies |
@@ -223,7 +235,7 @@ do.
 
 Everything in this file and in the type-specific INIs (`.weapons`, `.food`, `.gear`, `.entities`) is applied by patching the game's CurveTable assets and shipping them back as an override. **This requires Windrose+ v1.3.16 or newer.** Up to v1.3.15 the override was written as a legacy `.pak`; Windrose ships those assets in an IoStore container and UE5 resolves them from the container, so the patch was built and byte-verified but never reached the running game. On v1.3.16+ the override is written as an IoStore container (`WindrosePlus_CurveTables_P.utoc` / `.ucas` / `.pak`), which does take precedence.
 
-The container is rebuilt by `StartWindrosePlusServer.bat` and cannot be replaced while the server is running, so INI changes need a full stop and start — not a `wp.reload`.
+The container is rebuilt by `StartWindrosePlusServer.bat` and cannot be replaced while the server is running, so INI changes need a full stop and start, not a `wp.reload`.
 
 ### [Server]
 
@@ -242,7 +254,7 @@ Server network and admin settings.
 
 ### [Multipliers]
 
-Ignored. The PAK builder warns and skips this section so the in-game `wp.config` output cannot disagree with what was actually applied. Put multipliers in `windrose_plus.json` — see [multipliers](#multipliers).
+Ignored. The PAK builder warns and skips this section so the in-game `wp.config` output cannot disagree with what was actually applied. Put multipliers in `windrose_plus.json`; see [multipliers](#multipliers).
 
 ### [PlayerStats]
 

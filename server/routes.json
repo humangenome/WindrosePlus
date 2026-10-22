@@ -302,17 +302,6 @@
       "methods": [
         "GET"
       ],
-      "path": "/repair",
-      "auth": "login",
-      "match": [
-        "Ieq /repair"
-      ],
-      "description": "Character repair page."
-    },
-    {
-      "methods": [
-        "GET"
-      ],
       "path": "/livemap/tiles/{z}/{x}-{y}.png",
       "auth": "login",
       "match": [

@@ -28,7 +28,7 @@ Usage: wp.status
 
 Show server status including player count, all multipliers, and version.
 
-Multipliers marked `(disabled)` are stored but not applied — the PAK builder skips
+Multipliers marked `(disabled)` are stored but not applied: the PAK builder skips
 them because patching those values corrupts character saves. See
 [Multipliers](config-reference.md#multipliers).
 
@@ -45,7 +45,9 @@ Stack Size: 5x (disabled)
 Craft Efficiency: 2x
 Crop Speed: 2x (disabled)
 Weight: 5x (disabled)
-WindrosePlus v1.3.16
+Cooking Speed: 1x
+Harvest Yield: 2x
+WindrosePlus v1.3.25
 ```
 
 ### wp.version
@@ -78,6 +80,8 @@ WindrosePlus Config:
   Craft Efficiency: 2x
   Crop Speed: 2x (disabled)
   Weight: 5x (disabled)
+  Cooking Speed: 1x
+  Harvest Yield: 2x
   RCON: enabled
   Mods: 1
 ```
@@ -102,6 +106,8 @@ Multipliers:
   Craft Efficiency: 2x
   Crop Speed: 2x (disabled)
   Weight: 5x (disabled)
+  Cooking Speed: 1x
+  Harvest Yield: 2x
 ```
 
 Multipliers marked `(disabled)` are stored but not applied. See
@@ -320,6 +326,7 @@ Banned (2):
 
 ### wp.time
 
+Read the time-of-day values the game exposes (the `TimeOfDay`, day and night length properties it finds). Read only.
 
 ```
 Usage: wp.time
@@ -390,7 +397,7 @@ R5GameMode.TemperatureMultiplier = 1.0
 
 ### wp.perf
 
-Show server performance metrics including player count, memory usage, and uptime.
+Show server performance metrics: player count and uptime. For memory, the mod can only see its own Lua heap (`wp.memory`); use Task Manager or your host's tools for the server process.
 
 ```
 Usage: wp.perf
@@ -400,13 +407,13 @@ Usage: wp.perf
 > wp.perf
 Server Performance:
   Players: 3
-  Memory: 4821 MB
+  Memory: use wp.memory for cached data
   Uptime: 14h 32m
 ```
 
 ### wp.memory
 
-Show detailed memory usage for the server process (working set, virtual, page file).
+Show the mod's own Lua memory. The server process's memory is not visible from inside the mod.
 
 ```
 Usage: wp.memory
@@ -415,9 +422,8 @@ Usage: wp.memory
 ```
 > wp.memory
 Memory Usage:
-  Working Set: 4821 MB
-  Virtual: 8192 MB
-  Page File: 5120 MB
+  Lua Heap: 2048 KB
+  Process memory: not available (use Task Manager or perfpoll)
 ```
 
 ### wp.doctor
@@ -506,10 +512,10 @@ Usage: wp.jump [player] <multiplier>
 
 ```
 > wp.jump 2.0
-Jump set to 2.0x for 3 player(s)
+JumpZVelocity set to 2.0x for 3 player(s)
 
 > wp.jump HumanGenome 3
-Jump set to 3x for humangenome
+JumpZVelocity set to 3x for humangenome
 ```
 
 ### wp.gravity
@@ -524,10 +530,10 @@ Usage: wp.gravity [player] <multiplier>
 
 ```
 > wp.gravity 0.3
-Gravity set to 0.3x for 3 player(s)
+GravityScale set to 0.3x for 3 player(s)
 
 > wp.gravity HumanGenome 2
-Gravity set to 2x for humangenome
+GravityScale set to 2x for humangenome
 ```
 
 ### wp.tp
@@ -701,7 +707,7 @@ R5PlayerState.PlayerNamePrivate = HumanGenome
 
 ### wp.modreload
 
-Tear down and rebuild the Windrose+ Lua state through UE4SS `RestartMod`, so edits under `WindrosePlus/Scripts/` are picked up without restarting the game server. Requires a UE4SS build that exposes `RestartMod`. This only reloads Lua — it does not rebuild override PAKs, so `.ini` and multiplier edits still need a server restart through `StartWindrosePlusServer.bat`.
+Tear down and rebuild the Windrose+ Lua state through UE4SS `RestartMod`, so edits under `WindrosePlus/Scripts/` are picked up without restarting the game server. Requires a UE4SS build that exposes `RestartMod`. This only reloads Lua. It does not rebuild override PAKs, so `.ini` and multiplier edits still need a server restart through `StartWindrosePlusServer.bat`.
 
 ```
 Usage: wp.modreload
@@ -785,16 +791,22 @@ Logging in (`POST /login` with a form field `password`) sets a cookie named `wp_
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/health` | No | Health check — returns `{"status": "ok", "version": "...", "routes_version": 2, "pak_builder_version": 1, "timestamp": ...}` |
+| GET | `/api/health` | No | Health check: returns `{"status": "ok", "version": "...", "routes_version": 2, "pak_builder_version": 2, "timestamp": ...}` |
 | GET, POST | `/login` | No | Login page; a form field `password` sets the `wp_session_<port>` cookie |
 | GET, POST | `/logout` | No | Clears this dashboard's cookie and goes back to the login page |
 | GET | `/catalog/*` | No | Item catalog JSON for the Sea Chart item browser (built on the server from the game files, `windrose_plus_data\catalog\v1`; 503 while it is being built) and the Windrose+ item icons. |
-| GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>`. |
+| GET | `/vendor/*` | No | Bundled web libraries and fonts for the dashboard and Sea Chart |
+| GET | `/public-map` | No (if enabled) | Map-only Sea Chart page. Requires `livemap.public.enabled`; if `livemap.public.token` is set, pass `?token=<token>` (or send it in an `X-WindrosePlus-Map-Token` header). |
+| GET | `/public-map/tiles/{z}/{x}-{y}.png` | No (if enabled) | Sea Chart tiles for the public map. Same public-map rules. |
+| GET | `/api/public/pois` | No (if enabled) | POI scanner markers for the public map. Same public-map rules. |
 | GET | `/api/public/livemap` | No (if enabled) | Public player/creature map positions. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/mapinfo` | No (if enabled) | Public map coordinate metadata. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/public/runtime-overlay` | No (if enabled) | Public optional live save-state overlay for the Sea Chart. Same public-map config/token rules as `/public-map`. |
 | GET | `/api/status` | Yes | Server status: player list, multipliers, server info |
 | GET | `/api/livemap` | Yes | Live map data: player positions, mobs, resource nodes |
+| GET | `/api/pois` | Yes | POI scanner markers |
+| GET | `/livemap/tiles/{z}/{x}-{y}.png` | Yes | Sea Chart tiles. Asked for with `?v=<tileset_id>` from `map_coords.json`, they may be cached for a day |
+| GET | `/api/terrain_height?x={x}&y={y}` | Yes | Ground height at a world position, from the exported heightmap (used by click-to-teleport) |
 | GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for chests, buildings, saved player positions, fog reveal, and quest blackboard layers. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
 | GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |

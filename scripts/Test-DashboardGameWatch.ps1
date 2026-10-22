@@ -51,6 +51,12 @@ Case 'off unless server.stop_with_game or WINDROSEPLUS_STOP_WITH_GAME is set' {
     $watch = $functions['Invoke-GameWatch'].Extent.Text
     Assert ($watch.IndexOf('Get-StopWithGame') -ge 0 -and $watch.IndexOf('Get-StopWithGame') -lt $watch.IndexOf('Get-GameWatchDecision')) 'the watch decides before checking the setting'
 }
+Case 'the request loop runs the watch between requests too, not only after an idle second' {
+    $loopStart = $text.IndexOf('while ($listener.IsListening)')
+    $getContext = $text.IndexOf('$listener.GetContextAsync()', [Math]::Max($loopStart, 0))
+    $between = $text.Substring($loopStart, $getContext - $loopStart)
+    Assert ($loopStart -ge 0 -and $getContext -gt $loopStart -and $between.Contains('Invoke-GameWatch')) 'Invoke-GameWatch is not called before each GetContextAsync'
+}
 Case 'the request loop runs the watch while it waits' {
     $w = $text.IndexOf('AsyncWaitHandle.WaitOne(1000)')
     $c = $text.IndexOf('            Invoke-GameWatch', [Math]::Max($w, 0))

@@ -28,6 +28,6 @@ Out of scope:
 - Hardware-host vulnerabilities (those belong to your hosting provider)
 - Vulnerabilities in retail Windrose itself (report to the game's developers)
 - Vulnerabilities in third-party Lua mods running on Windrose+
-- Anti-cheat / cheating concerns — Windrose+ does not provide anti-cheat
+- Anti-cheat or cheating concerns: Windrose+ does not provide anti-cheat
 - Admin commands doing what admins asked for. `wp.speed`, `wp.tp`, and friends are intentionally powerful; protect the RCON password instead.
 - Exposing the dashboard to the public internet without a password. Set a real `rcon.password` in `windrose_plus.json`.

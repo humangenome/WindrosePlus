@@ -42,7 +42,7 @@ The Items panel browses every item in the game with group/type/rarity/tier filte
 ![Items panel with an item open](docs/screenshots/seachart-items.png)
 
 ### Admin Console (RCON)
-Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 40+ built-in commands out of the box.
+Run commands from a web dashboard with autocomplete. Check who's online, view server stats, monitor performance, and manage your server remotely. 32 built-in commands, plus 12 debug commands listed by `wp.help all`.
 
 ![Console](docs/screenshots/console.png)
 
@@ -127,7 +127,7 @@ A handful of multiplier keys are disabled, a few more are gated behind explicit 
 ### Mod Support
 Add custom commands, scheduled tasks and player join/leave hooks in Lua. Put a mod folder in `WindrosePlus/Mods/` and add its name to `Mods/mods_registry.json`; edits reload within 30 seconds without restarting the server.
 
-**For modders:** full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Server-side storage hook notes: [docs/storage-hook-research.md](docs/storage-hook-research.md).
+**For modders:** full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Research notes on server-side storage hooks: [docs/research/storage-hook-research.md](docs/research/storage-hook-research.md).
 
 Ships with an example mod:
 
@@ -192,7 +192,9 @@ You need a Windrose Dedicated Server already set up on Windows. If you do not ha
 .\install.ps1
 ```
 
-This downloads UE4SS (the exact build Windrose+ is tested with, checked against its SHA-256), installs the mod, and sets up the dashboard. Reinstalling is safe, your custom configs and mods are preserved. If the server already has a different UE4SS build, the installer swaps in the tested loader files and keeps your mods and settings; run `.\install.ps1 -KeepCurrentUE4SS` to leave yours in place.
+If PowerShell refuses to run it (scripts are blocked by default on Windows, and a zip downloaded with a browser is marked as from the internet), run `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` instead.
+
+This downloads UE4SS (the exact build Windrose+ is tested with, checked against its SHA-256), installs the mod, and sets up the dashboard. Reinstalling keeps your configs and mods; it does rewrite `ue4ss\UE4SS-settings.ini` with the settings Windrose needs, so copy that file first if you changed it. If the server already has a different UE4SS build, the installer swaps in the tested loader files and keeps your mods and settings; run `.\install.ps1 -KeepCurrentUE4SS` to leave yours in place.
 
 ### Step 2: Start Your Server
 
@@ -212,7 +214,7 @@ Non-zero exit means the build failed, so don't launch the game.
 
 Windrose+ loads automatically either way.
 
-> **Note:** You must **Run as Administrator** when starting the server. Windrose+ uses a proxy DLL (UE4SS) that requires elevated permissions to load.
+> **Note:** If the server folder is under `Program Files`, run the installer and the server as Administrator so they can write there. The dashboard needs Administrator rights (or a URL reservation) to listen on every network address; without them it listens on localhost only.
 
 To start the web dashboard, open a second terminal in your game server folder and run:
 
@@ -229,6 +231,10 @@ windrose_plus\start_dashboard.bat -BindIp 192.0.2.10
 ```
 
 You can also set `"server": { "bind_ip": "192.0.2.10" }` in `windrose_plus.json`.
+
+### Hosting panels and Docker
+
+Some hosting panels and Docker images install Windrose+ for you from the latest release. To stay on one version, use that release's own download, `https://github.com/HumanGenome/WindrosePlus/releases/download/<tag>/WindrosePlus.zip` (for example `v1.3.25` as the tag), and check it against the `SHA256SUMS.txt` published with that release (from v1.3.25 on).
 
 ---
 

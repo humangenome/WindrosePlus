@@ -37,11 +37,15 @@
 - **A broken command file no longer loops.** A command whose `command` is not text, or whose `args` is not a list, gets an error answer; one that keeps failing before it can answer is dropped after three tries instead of being retried every second forever.
 - **One bad number no longer stops a status file.** A NaN or infinite value (a coordinate read mid-update) made the JSON writer throw, and `server_status.json` stopped updating with no log line. Such values are written as `null`, and a writer that fails now logs the error once a minute.
 - **`wp.status`, `wp.config` and `wp.multipliers` show all the multipliers that work**, including cooking speed and harvest yield.
+- **`server.stop_with_game` works while someone has the map open.** The dashboard only checked for its game after a full second with no request, so a Sea Chart polling every few seconds kept a stopped server's dashboard running. It now checks between requests too (at most once a minute).
+- **The public map's share token must match exactly.** It was compared without regard to upper and lower case.
 - **`wp.kick` and `wp.ban` handle player names with spaces.** They used only the first word ("Some" for "Some Player"). The name is now the longest run of words that matches an online player, or a quoted name. `wp.unban` takes the whole name.
 
 ### Changed
 
 - **The release zip is about 8 MB smaller.** It no longer carries the logo files, the README screenshots, a research note, the windrose-heal and C++ mod source code, or the unbuilt MapMaterializerExporter mod; the installer used to copy all of that into the game folder. They stay in the repository. The tools, DLLs, docs and everything a server runs are unchanged.
+- **Docs match the code.** The README gives the real command count (32, plus 12 debug commands), a line for when PowerShell blocks `install.ps1`, what Administrator rights are actually needed for, what a reinstall overwrites, and how to stay on one version from a hosting panel or Docker image. `docs/commands.md` lists the missing HTTP routes and shows what `wp.perf`, `wp.memory`, `wp.jump`, `wp.gravity` and `wp.time` really print; `docs/config-reference.md` documents `debug.log_level` and when an RCON change takes effect. The storage hook research note moved to `docs/research/`.
+- **`/repair` is gone from the route list.** Its page was removed earlier and the address only answered "not found".
 - **Each release has a `SHA256SUMS.txt`** with the SHA-256 of `WindrosePlus.zip` and the three DLLs, so a download can be checked.
 
 ## [1.3.24] - 2026-10-20
