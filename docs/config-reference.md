@@ -160,6 +160,18 @@ The Sea Chart's item catalog is built on the server from the game's own data fil
 
 Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
 
+### events
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `poll_ms` | `100` | How often the event bus polls registered event sources (`API.registerEventSource`, e.g. a native mod's Lua side), in milliseconds; at least 50. While nobody is online it polls every 500 ms. Without a registered source nothing is polled. Read when the server starts. |
+
+```json
+{
+    "events": { "poll_ms": 100 }
+}
+```
+
 ### debug
 
 | Key | Default | Description |

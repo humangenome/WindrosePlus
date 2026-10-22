@@ -94,8 +94,9 @@ Player events fire when the player list changes between tick polls. Join fires f
 
 `API.on` subscribes to any named event; `API.emit` publishes one. `player.join` and `player.leave` are emitted on the
 bus too (same payload as above). Add-ons can define their own events. An optional native (C++) mod can deliver game
-events from native hooks through the same bus: it exposes `WPNative.PollEvents()`, which the bus drains on its own
-loop (without such a mod only Lua events exist).
+events from native hooks through the same bus: its Lua side registers a poll function with
+`API.registerEventSource`, and the bus drains it on its own loop. That loop only starts once a source is registered,
+so without one only Lua events exist and nothing extra runs.
 
 ```lua
 local sub = API.on("player.join", function(payload, meta)
@@ -105,13 +106,17 @@ sub.cancel()
 
 API.once("myaddon.ready", function(payload) end)  -- fires once, then unsubscribes
 API.emit("myaddon.ready", { value = 1 })           -- payload: plain table, no UObjects
-local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, native = bool }
+local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, sources = {...} }
+
+-- A native mod's Lua side: poll(max) returns { {ev = "name", seq = n, ts = unix, <payload fields>}, ... } and the
+-- number of events it had to drop since the last poll. The same name again replaces the source.
+API.registerEventSource("MyNativeMod", function(max) return MyNative.Poll(max) end, { version = "1.0" })
 ```
 
 - Handlers run on the async loop, never inside a game hook, one after the other; an error in one handler is logged
   and does not affect the others. A handler that fails 10 times in a row is disabled.
-- `API.emit` calls the handlers right away. Native events arrive with the next poll (`events.poll_ms`, default
-  100 ms; every 500 ms while nobody is online).
+- `API.emit` calls the handlers right away. Events from a source arrive with the next poll (`events.poll_ms`, default
+  100 ms; every 500 ms while nobody is online); their `meta.source` is `"native"`.
 - Subscriptions are attributed to the add-on that made them (logs, `API.listEvents`). On hot reload the Lua state
   restarts, so add-ons subscribe again from scratch.
 

@@ -5,10 +5,10 @@
 --   sub.cancel()
 --
 -- Events come from two places:
---   * Lua (API.emit, e.g. player.join / player.leave from the Query diff)
---   * an optional native (C++) mod that captures events in native hooks on the game thread and queues them; when
---     it exposes the global WPNative.PollEvents(), this module drains that queue from its own LoopAsync. Without
---     such a mod only Lua events exist.
+--   * Lua (API.emit, e.g. player.join / player.leave from the Query diff), dispatched right away
+--   * registered event sources: an optional native (C++) mod captures events in native hooks on the game thread and
+--     queues them; its Lua side registers a poll function with API.registerEventSource(name, poll), and this module
+--     drains it from its own LoopAsync.
 --
 -- Handlers always run on the LoopAsync (async) thread, never inside game hooks: running Lua in a hook while loops
 -- run in the same Lua state is not serialized by UE4SS and can crash the server. Native events therefore reach
@@ -29,9 +29,10 @@ local WARN_INTERVAL_S = 60
 local _subs = {}            -- event name -> list of subscriber records
 local _nextId = 0
 local _seq = 0
-local _gen = 0              -- bumped on every start(); old loops stop when it changes
+local _gen = 0              -- bumped on every startLoop(); old loops stop when it changes
 local _stats = { emitted = 0, native = 0, dropped = 0, handler_errors = 0, poll_errors = 0 }
-local _pollWarn = { lastWarn = 0, owner = "Events" }
+local _sources = {}         -- list of { name, poll, version, errors, lastWarn, owner }
+local _cfg = { pollMs = POLL_MS_DEFAULT, isIdle = nil }
 
 -- Name of the add-on currently being loaded (set by the Mods loader) for attribution in logs
 Bus.currentOwner = nil
@@ -123,35 +124,34 @@ function Bus.emit(ev, payload, source)
     dispatch(ev, payload or {}, { ev = ev, ts_unix = os.time(), seq = _seq, source = source or "lua" })
 end
 
---- Snapshot of subscriptions and counters, e.g. for a debug command.
+--- Snapshot of subscriptions, sources and counters, e.g. for a debug command.
 function Bus.list()
-    local out = { events = {}, stats = {}, native = type(WPNative) == "table" }
+    local out = { events = {}, stats = {}, sources = {} }
     for ev, list in pairs(_subs) do
         local owners = {}
         for _, s in ipairs(list) do owners[#owners + 1] = s.owner end
         out.events[ev] = owners
     end
     for k, v in pairs(_stats) do out.stats[k] = v end
-    if out.native and type(WPNative.Version) == "function" then
-        local ok, v = pcall(WPNative.Version)
-        out.native_version = ok and v or nil
+    for _, src in ipairs(_sources) do
+        out.sources[#out.sources + 1] = { name = src.name, version = src.version, owner = src.owner, errors = src.errors }
     end
     return out
 end
 
--- Drain the native queue: WPNative.PollEvents() returns { {ev=, seq=, ts=, ...payload fields}, ... }
--- plus the number of events the native side had to drop since the last poll.
-local function drainNative()
-    if type(WPNative) ~= "table" or type(WPNative.PollEvents) ~= "function" then return end
-    local ok, events, dropped = pcall(WPNative.PollEvents, MAX_PER_DRAIN)
+-- Drain one source: poll(max) returns { {ev=, seq=, ts=, ...payload fields}, ... } plus the number of events the
+-- source had to drop since the last poll.
+local function drainSource(src)
+    local ok, events, dropped = pcall(src.poll, MAX_PER_DRAIN)
     if not ok then
+        src.errors = src.errors + 1
         _stats.poll_errors = _stats.poll_errors + 1
-        warn(_pollWarn, string.format("WPNative.PollEvents failed (%d so far): %s", _stats.poll_errors, tostring(events)))
+        warn(src, string.format("event source '%s' failed (%d so far): %s", src.name, src.errors, tostring(events)))
         return
     end
     if type(dropped) == "number" and dropped > 0 then
         _stats.dropped = _stats.dropped + dropped
-        Bus.emit("events.dropped", { count = dropped }, "native")
+        Bus.emit("events.dropped", { count = dropped, source = src.name }, "native")
     end
     if type(events) ~= "table" then return end
     for _, e in ipairs(events) do
@@ -166,13 +166,12 @@ local function drainNative()
     end
 end
 
---- Start the native drain loop. isIdle() (optional) slows polling while nobody is online.
-function Bus.start(pollMs, isIdle)
-    pollMs = math.max(POLL_MS_MIN, tonumber(pollMs) or POLL_MS_DEFAULT)
+local function startLoop()
+    local pollMs = _cfg.pollMs
     _gen = _gen + 1
     local myGen = _gen
     if type(LoopAsync) ~= "function" then
-        Log.warn("Events", "LoopAsync not available, native events disabled")
+        Log.warn("Events", "LoopAsync not available, event sources are not polled")
         return
     end
     local idleEvery = math.max(1, math.floor(IDLE_POLL_MS / pollMs))
@@ -181,15 +180,36 @@ function Bus.start(pollMs, isIdle)
         if myGen ~= _gen then return true end
         tick = tick + 1
         local ok, err = pcall(function()
-            -- Nobody online: poll every IDLE_POLL_MS only (the native queue stays bounded meanwhile)
-            if type(isIdle) == "function" and isIdle() and tick % idleEvery ~= 0 then return end
-            drainNative()
+            -- Nobody online: poll every IDLE_POLL_MS only (the sources' queues stay bounded meanwhile)
+            if type(_cfg.isIdle) == "function" and _cfg.isIdle() and tick % idleEvery ~= 0 then return end
+            for _, src in ipairs(_sources) do drainSource(src) end
         end)
         if not ok then Log.warn("Events", "drain failed: " .. tostring(err)) end
         return false
     end)
-    Log.info("Events", string.format("event bus started (poll %d ms, native events %s)", pollMs,
-        type(WPNative) == "table" and "loaded" or "not loaded"))
+    Log.info("Events", string.format("polling event sources every %d ms", pollMs))
+end
+
+--- Poll interval (events.poll_ms) and an optional isIdle() that slows polling while nobody is online.
+function Bus.configure(pollMs, isIdle)
+    _cfg.pollMs = math.max(POLL_MS_MIN, tonumber(pollMs) or POLL_MS_DEFAULT)
+    _cfg.isIdle = isIdle
+end
+
+--- Register an event source, e.g. the Lua side of a native mod: poll(max) returns queued events and a dropped count.
+-- Registering the same name again replaces it. opts.version: shown in API.listEvents.
+function Bus.registerSource(name, poll, opts)
+    if type(name) ~= "string" or name == "" then error("API.registerEventSource: name must be a string", 2) end
+    if type(poll) ~= "function" then error("API.registerEventSource: poll must be a function", 2) end
+    opts = type(opts) == "table" and opts or {}
+    local src = { name = name, poll = poll, version = opts.version and tostring(opts.version) or nil,
+                  owner = Bus.currentOwner or name, errors = 0, lastWarn = 0 }
+    for i, s in ipairs(_sources) do
+        if s.name == name then _sources[i] = src; return end
+    end
+    _sources[#_sources + 1] = src
+    Log.info("Events", "event source registered: " .. name .. (src.version and (" (" .. src.version .. ")") or ""))
+    if #_sources == 1 then startLoop() end
 end
 
 return Bus

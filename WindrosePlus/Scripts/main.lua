@@ -553,6 +553,9 @@ WindrosePlus.API.on = EventBus.on
 WindrosePlus.API.once = EventBus.once
 WindrosePlus.API.emit = function(ev, payload) EventBus.emit(ev, payload, "lua") end
 WindrosePlus.API.listEvents = EventBus.list
+WindrosePlus.API.registerEventSource = EventBus.registerSource
+-- Before the add-ons load: they register their sources while loading
+EventBus.configure((Config and Config.get("events", "poll_ms")) or 100, WindrosePlus.API.isIdle)
 
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
@@ -969,9 +972,6 @@ else
         end)
     end
 end
-
--- Event bus: dispatches Lua events and drains native events of an optional C++ mod (WPNative.PollEvents)
-EventBus.start(Config.get("events", "poll_ms") or 100, WindrosePlus.API.isIdle)
 
 -- File watcher for mod hot-reload (polls every 30s — not urgent with 0 players)
 if Mods then
