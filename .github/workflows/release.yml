@@ -233,11 +233,41 @@ jobs:
             --exclude='cpp-mods/RE-UE4SS' \
             --exclude='cpp-mods/build' \
             --exclude='tools/windrose-heal/target' \
+            --exclude='tools/windrose-heal/src' \
+            --exclude='tools/windrose-heal/Cargo.toml' \
+            --exclude='tools/windrose-heal/Cargo.lock' \
+            --exclude='docs/brand' \
+            --exclude='docs/screenshots' \
+            --exclude='docs/storage-hook-research.md' \
+            --exclude='cpp-mods/MapMaterializerExporter' \
+            --exclude='cpp-mods/*.md' \
+            --exclude='cpp-mods/**/*.cpp' \
+            --exclude='cpp-mods/**/*.h' \
+            --exclude='CMakeLists.txt' \
             ./ staging/
+          # Pictures, research notes and source stay in the repository; a server
+          # needs none of them (about 8 MB the installer copied into the game folder).
+          for p in docs/brand docs/screenshots tools/windrose-heal/src cpp-mods/MapMaterializerExporter; do
+            if [ -e "staging/$p" ]; then echo "staging still has $p"; exit 1; fi
+          done
+          if find staging -name '*.cpp' -o -name 'CMakeLists.txt' | grep -q .; then echo "staging still has C++ source"; exit 1; fi
+          for f in WindrosePlus/Scripts/main.lua server/windrose_plus_server.ps1 server/routes.json tools/generateTiles.ps1 install.ps1 cpp-mods/HeightmapExporter/HeightmapExporter.dll; do
+            if [ ! -e "staging/$f" ]; then echo "staging is missing $f"; exit 1; fi
+          done
 
       - name: Build zip
         working-directory: staging
         run: zip -r ../WindrosePlus.zip .
+
+      - name: Write SHA256SUMS.txt
+        run: |
+          {
+            sha256sum WindrosePlus.zip
+            for d in HeightmapExporter WindroseNativeProbe WindrosePlusNative; do
+              (cd "cpp-mods/$d" && sha256sum "$d.dll")
+            done
+          } > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create release
         env:
@@ -250,4 +280,5 @@ jobs:
             WindrosePlus.zip \
             cpp-mods/HeightmapExporter/HeightmapExporter.dll \
             cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll \
-            cpp-mods/WindrosePlusNative/WindrosePlusNative.dll
+            cpp-mods/WindrosePlusNative/WindrosePlusNative.dll \
+            SHA256SUMS.txt

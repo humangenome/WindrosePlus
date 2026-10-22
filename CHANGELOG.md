@@ -32,6 +32,11 @@
 - **Status, map and console answers no longer fail while the mod rewrites a file.** A request that arrived while the mod was replacing a data file got an empty error; it now gets "being written, retry in a moment", and a console answer read half-written is read again.
 - **A server folder with `[` or `]` in its path starts.** The dashboard looked up its folder with a wildcard path lookup.
 
+### Changed
+
+- **The release zip is about 8 MB smaller.** It no longer carries the logo files, the README screenshots, a research note, the windrose-heal and C++ mod source code, or the unbuilt MapMaterializerExporter mod; the installer used to copy all of that into the game folder. They stay in the repository. The tools, DLLs, docs and everything a server runs are unchanged.
+- **Each release has a `SHA256SUMS.txt`** with the SHA-256 of `WindrosePlus.zip` and the three DLLs, so a download can be checked.
+
 ## [1.3.24] - 2026-10-20
 
 ### Fixed
