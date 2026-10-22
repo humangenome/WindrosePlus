@@ -2,7 +2,7 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
-## [1.3.25] - unreleased
+## [1.3.25] - 2026-10-21
 
 **After updating, everyone has to log in to the dashboard once more.** Sessions from earlier versions are no longer accepted.
 

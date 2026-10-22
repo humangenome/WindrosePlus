@@ -207,7 +207,7 @@ jobs:
             echo
             echo "## Install / Upgrade"
             echo
-            echo "Download \`WindrosePlus.zip\`, extract into your Windrose Dedicated Server folder, run \`install.ps1\`. Reinstalling is safe: your configs and custom mods are preserved. See [the installation guide](https://github.com/HumanGenome/WindrosePlus#installation) for details."
+            echo "Download \`WindrosePlus.zip\`, extract into your Windrose Dedicated Server folder, run \`install.ps1\`. Reinstalling keeps your configs and custom mods; it rewrites \`ue4ss\\UE4SS-settings.ini\` with the settings Windrose needs. Check the download against \`SHA256SUMS.txt\`. See [the installation guide](https://github.com/HumanGenome/WindrosePlus#installation) for details."
             echo
             echo "## Rent a server"
             echo
