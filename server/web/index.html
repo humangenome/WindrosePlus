@@ -1108,8 +1108,6 @@
             font-style: italic;
         }
     </style>
-    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
-    <script src="/vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
     <div class="shell">
@@ -1185,7 +1183,7 @@
                         </button>
                     </div>
                 </div>
-                <!-- Hidden elements for test compat -->
+                <!-- Hidden fields the status code still fills in -->
                 <div style="display:none;">
                     <span id="server-password">-</span>
                     <span id="server-max">-</span>
@@ -1239,7 +1237,7 @@
                 <div class="tp-hint-banner" id="tp-hint-banner" style="display:none;"></div>
             </div>
 
-            <!-- Hidden elements preserved for test compatibility -->
+            <!-- Hidden fields the console code still fills in -->
             <div style="display:none;">
                 <button id="cmd-ref-toggle"><span id="cmd-ref-arrow">&#9654;</span></button>
                 <div id="cmd-ref-body"></div>
@@ -1675,7 +1673,7 @@
                 const res = await fetch('/api/rcon/log');
                 const entries = await res.json();
 
-                // Update hidden elements for test compatibility
+                // Hidden fields the page still fills in
                 const el = document.getElementById('audit-log');
                 const countEl = document.getElementById('log-count');
 
@@ -2021,265 +2019,6 @@
             seachartInitialized = true;
             seachartInitializing = false;
             postSeaChartTeleportState();
-            return;
-            // Manifest fetch with retry — first connect can race tile generation.
-            // Poll every 3s for up to 3 minutes before showing the not-ready notice.
-            var attempts = 0, maxAttempts = 60;
-            function fetchManifest() {
-                fetch("/api/mapinfo", {credentials: "same-origin"})
-                    .then(function(r) { return r.json(); })
-                    .then(function(mapInfo) {
-                        attempts++;
-                        var stillRunning = mapInfo && mapInfo.error && mapInfo.generation && mapInfo.generation.state === 'running';
-                        if (stillRunning && attempts < maxAttempts) {
-                            var holder = document.getElementById('seachart-map');
-                            if (holder && !holder.dataset.waitNotice) {
-                                holder.innerHTML = '';
-                                var notice = document.createElement('div');
-                                notice.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:Cormorant Garamond,serif;font-size:1.2rem;text-align:center;padding:20px;';
-                                notice.textContent = 'Generating map tiles…';
-                                holder.appendChild(notice);
-                                holder.dataset.waitNotice = '1';
-                            }
-                            setTimeout(fetchManifest, 3000);
-                            return;
-                        }
-                        renderSeaChart(mapInfo);
-                    })
-                    .catch(function() {
-                        attempts++;
-                        if (attempts < maxAttempts) setTimeout(fetchManifest, 3000);
-                        else renderSeaChart({ error: 'Map not ready yet.' });
-                    });
-            }
-            fetchManifest();
-
-            function renderSeaChart(mapInfo) {
-                seachartInitializing = false;
-                var holder0 = document.getElementById('seachart-map');
-                if (holder0) delete holder0.dataset.waitNotice;
-                if (mapInfo.error) {
-                    seachartInitialized = false;
-                    var msg = mapInfo.error;
-                    if (mapInfo.generation) {
-                        if (mapInfo.generation.state === 'running') msg += ' Tile generation is currently running.';
-                        else if (mapInfo.generation.state === 'error') msg += ' Tile generation failed: ' + (mapInfo.generation.error || 'unknown error');
-                        else if (mapInfo.generation.state === 'complete') msg += ' Tile generation completed, but the map manifest is still missing.';
-                    }
-                    var holder = document.getElementById('seachart-map');
-                    holder.innerHTML = '';
-                    var notice = document.createElement('div');
-                    notice.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:Cormorant Garamond,serif;font-size:1.2rem;text-align:center;padding:20px;';
-                    notice.textContent = msg;
-                    holder.appendChild(notice);
-                    return;
-                }
-                seachartInitialized = true;
-
-                var W = { minX: mapInfo.world_min_x, maxX: mapInfo.world_max_x, minY: mapInfo.world_min_y, maxY: mapInfo.world_max_y };
-                var SIDE = Math.max(W.maxX - W.minX, W.maxY - W.minY);
-                var maxZoom = mapInfo.max_zoom || 4;
-                var fx = 256 / SIDE, fy = 256 / SIDE;
-                // The chart is drawn like the in-game map: world X to the right, world
-                // Y down, so compass north (-Y) is at the top. The CRS, markers and the
-                // click-to-teleport inverse all use this one layout.
-                var GameCRS = L.Util.extend({}, L.CRS.Simple, {
-                    transformation: new L.Transformation(fx, -W.minX * fx, fy, -W.minY * fy)
-                });
-                function wLL(x, y) { return L.latLng(y, x); }
-                function llX(latlng) { return latlng.lng; }
-                function llY(latlng) { return latlng.lat; }
-                // Tile sets built by v1.3.16-v1.3.21 say "north-up" and are a quarter
-                // turn off the in-game map; the tile layer turns those back until they
-                // are rebuilt. Updated by the generation poll below.
-                var tilesTurned = (mapInfo.orientation === 'north-up');
-                function wBounds(minX, minY, maxX, maxY) {
-                    return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
-                }
-                var IB;
-                if (mapInfo.island_bounds) {
-                    var ib = mapInfo.island_bounds;
-                    IB = wBounds(ib.min_x, ib.min_y, ib.max_x, ib.max_y);
-                } else {
-                    IB = wBounds(W.minX, W.minY, W.maxX, W.maxY);
-                }
-
-                seachartMap = L.map('seachart-map', {
-                    crs: GameCRS,
-                    minZoom: 0,
-                    maxZoom: maxZoom + 2,
-                    maxBounds: IB.pad(0.1),
-                    maxBoundsViscosity: 1.0,
-                    zoomSnap: 0.25,
-                    zoomDelta: 0.5,
-                    attributionControl: false
-                });
-
-                var tileBase = window.location.origin;
-                var tileUrl = tileBase + '/livemap/tiles/{z}/{x}-{y}.png';
-                // Draws each chart tile on a canvas. A "north-up" tile set keeps the
-                // square that belongs at column x, row y as its tile (y, n-1-x), turned
-                // a quarter turn anticlockwise, so it is fetched from there and turned
-                // back. A missing tile stays transparent (the sea background shows).
-                var ChartTiles = L.GridLayer.extend({
-                    createTile: function(coords, done) {
-                        var tile = document.createElement('canvas');
-                        tile.width = tile.height = 256;
-                        var turned = tilesTurned;
-                        var n = Math.pow(2, coords.z);
-                        var src = turned ? { z: coords.z, x: coords.y, y: n - 1 - coords.x } : coords;
-                        var img = new Image();
-                        img.onload = function() {
-                            var ctx = tile.getContext('2d');
-                            if (turned) { ctx.translate(256, 0); ctx.rotate(Math.PI / 2); }
-                            ctx.drawImage(img, 0, 0, 256, 256);
-                            done(null, tile);
-                        };
-                        img.onerror = function() { done(null, tile); };
-                        img.src = L.Util.template(tileUrl, src);
-                        return tile;
-                    }
-                });
-                var tiles = new ChartTiles({
-                    minZoom: 0,
-                    maxZoom: maxZoom + 2,
-                    maxNativeZoom: maxZoom,
-                    tileSize: 256,
-                    noWrap: true,
-                    bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY)
-                });
-                tiles.addTo(seachartMap);
-
-                // Tile generation may finish AFTER initial layer mount on a fresh world.
-                // Poll mapinfo every 10s, redrawing the layer until generation reports complete.
-                (function() {
-                    var ticks = 0, maxTicks = 60;
-                    var iv = setInterval(function() {
-                        ticks++;
-                        fetch('/api/mapinfo', {credentials: 'same-origin'})
-                            .then(function(r) { return r.ok ? r.json() : null; })
-                            .then(function(m) {
-                                if (m && !m.error) tilesTurned = (m.orientation === 'north-up');
-                                if (m && m.generation && m.generation.state === 'complete') {
-                                    tiles.redraw();
-                                    clearInterval(iv);
-                                    return;
-                                }
-                                tiles.redraw();
-                                if (ticks >= maxTicks) clearInterval(iv);
-                            })
-                            .catch(function() {
-                                if (ticks >= maxTicks) clearInterval(iv);
-                            });
-                    }, 10000);
-                })();
-
-                seachartMap.fitBounds(IB);
-
-                var playerLayer = L.layerGroup().addTo(seachartMap);
-                var mobLayer = L.layerGroup().addTo(seachartMap);
-
-                // Live preview: as the cursor moves while armed, mirror the hover point
-                // into the player row's coords field and the hint banner.
-                seachartMap.on('mousemove', function(e) {
-                    if (!tpArmedPlayer) return;
-                    updateTeleportPreview(Math.round(llX(e.latlng)), Math.round(llY(e.latlng)));
-                });
-                seachartMap.on('mouseout', function() {
-                    if (!tpArmedPlayer) return;
-                    clearTeleportPreview();
-                });
-
-                // Click-to-teleport. Active only when a player is armed via the TELEPORT
-                // button in the player list. llX/llY are the exact inverse of wLL, which
-                // is what places every marker, so a click returns the world coords of
-                // whatever is under the cursor — no projection math.
-                //
-                // For Z: we ask /api/terrain_height to sample the exported heightmap at
-                // (X, Y). Sea level is Z=0 in Windrose's heightfield. Different clearances
-                // for land vs water:
-                //   - terrain Z >= 0 (dry land): land 1m above terrain — small offset so
-                //     mountain/grass clicks don't make the player visibly drop
-                //   - terrain Z < 0 (shoreline / underwater): float 3m above sea level —
-                //     the pawn capsule extends below the feet pivot and water shaders
-                //     make even +1m look "in water", so we need more clearance
-                //
-                // We ALWAYS send a Z (never the 3-arg `wp.tp <name> <x> <y>` form). When
-                // terrain data is unavailable (ocean / out-of-bounds / pre-heightmap-export
-                // / endpoint unreachable) we fall back to the armed player's current Z
-                // captured at arm time. This avoids an arg-parser ambiguity in wp.tp where
-                // a numeric or numeric-suffix player name could be misread as a coord.
-                function commitTeleport(player, x, y, z) {
-                    sendRconCommand('wp.tp ' + player + ' ' + x + ' ' + y + ' ' + z);
-                }
-
-                seachartMap.on('click', function(e) {
-                    if (!tpArmedPlayer) return;
-                    var x = Math.round(llX(e.latlng));
-                    var y = Math.round(llY(e.latlng));
-                    var player = tpArmedPlayer;
-                    var fallbackZ = tpArmedPlayerZ;  // captured at arm time
-                    disarmTeleport();
-
-                    fetch('/api/terrain_height?x=' + x + '&y=' + y)
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            var z;
-                            if (data && typeof data.z === 'number') {
-                                z = data.z >= 0
-                                    ? Math.round(data.z + 100)
-                                    : 300;
-                            } else if (fallbackZ != null) {
-                                // Terrain data unavailable — keep player at their current Z.
-                                z = fallbackZ;
-                            } else {
-                                // Last resort: float just above sea level.
-                                z = 300;
-                            }
-                            commitTeleport(player, x, y, z);
-                        })
-                        .catch(function() {
-                            // Endpoint unreachable — fall back to player's current Z, or
-                            // a sea-level float if that's somehow missing too.
-                            var z = fallbackZ != null ? fallbackZ : 300;
-                            commitTeleport(player, x, y, z);
-                        });
-                });
-
-                function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
-
-                function fetchMapEntities() {
-                    fetch('/api/livemap').then(function(r) { return r.json(); }).then(function(data) {
-                        playerLayer.clearLayers();
-                        if (data.players) {
-                            data.players.forEach(function(p) {
-                                if (p.x === undefined || p.y === undefined) return;
-                                var icon = L.divIcon({
-                                    className: '',
-                                    html: '<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #c9a959;box-shadow:0 0 8px rgba(212,160,74,0.5);"></div><div style="position:absolute;top:18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;color:#ede0cc;font-family:IBM Plex Mono,monospace;text-shadow:0 1px 3px rgba(0,0,0,0.8);">' + escHtml(p.name || 'Player') + '</div>',
-                                    iconSize: [14, 14], iconAnchor: [7, 7]
-                                });
-                                L.marker(wLL(p.x, p.y), { icon: icon }).addTo(playerLayer);
-                            });
-                        }
-                        mobLayer.clearLayers();
-                        if (data.mobs) {
-                            data.mobs.forEach(function(m) {
-                                if (m.x === undefined || m.y === undefined) return;
-                                var icon = L.divIcon({
-                                    className: '',
-                                    html: '<div style="width:8px;height:8px;border-radius:50%;background:#cc5544;border:1px solid #aa3322;" title="' + escHtml(m.name || 'Mob') + '"></div>',
-                                    iconSize: [8, 8], iconAnchor: [4, 4]
-                                });
-                                L.marker(wLL(m.x, m.y), { icon: icon }).addTo(mobLayer);
-                            });
-                        }
-                    }).catch(function() {});
-                }
-
-                fetchMapEntities();
-                setInterval(fetchMapEntities, 5000);
-            }
         }
     </script>
 

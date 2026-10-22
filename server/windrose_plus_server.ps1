@@ -684,7 +684,7 @@ foreach ($candidate in @(
 if (-not $tileGenScript) { $tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1" }
 function Write-TileGenStatus($data) {
     try {
-        [System.IO.File]::WriteAllText($tileGenStatus, ($data | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
+        Write-AtomicUtf8Json $tileGenStatus $data
     } catch {
         Write-Host "WARN: could not write map_generation_status.json: $($_.Exception.Message)"
     }
@@ -857,8 +857,14 @@ function Write-AtomicUtf8Json($path, $data) {
     $tmpPath = "$path.tmp"
     $json = $data | ConvertTo-Json -Depth 100 -Compress
     [System.IO.File]::WriteAllText($tmpPath, $json, [System.Text.UTF8Encoding]::new($false))
+    # Swap in one step, so a reader never finds the file missing or half written.
     if (Test-Path -LiteralPath $path) {
-        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        try {
+            [System.IO.File]::Replace($tmpPath, $path, $null)
+            return
+        } catch {
+            Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        }
     }
     Move-Item -LiteralPath $tmpPath -Destination $path -Force
 }

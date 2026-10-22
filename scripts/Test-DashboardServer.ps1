@@ -96,6 +96,14 @@ function Read-RawStatus($Client) {
     return $line
 }
 
+# Reads a file the dashboard may be rewriting at that moment.
+function Read-Shared([string]$Path) {
+    for ($i = 0; $i -lt 20; $i++) {
+        try { return [System.IO.File]::ReadAllText($Path) } catch [System.IO.IOException] { Start-Sleep -Milliseconds 100 }
+    }
+    return ""
+}
+
 function Get-CookieValue([string]$SetCookie, [string]$Name) {
     if ($SetCookie -match ('(?:^|[,;]\s*)' + [regex]::Escape($Name) + '=([^;,]*)')) { return $Matches[1] }
     return $null
@@ -279,14 +287,14 @@ try {
         $statusPath = Join-Path $dirA 'windrose_plus_data\map_generation_status.json'
         [System.IO.File]::WriteAllText((Join-Path $dirA 'windrose_plus_data\generate_tiles_trigger'), '1')
         $deadline = (Get-Date).AddSeconds(5)
-        while ((Get-Date) -lt $deadline -and -not ([System.IO.File]::ReadAllText($statusPath) -match '"running"')) { Start-Sleep -Milliseconds 200 }
-        Assert ([System.IO.File]::ReadAllText($statusPath) -match '"running"') 'the build did not start'
+        while ((Get-Date) -lt $deadline -and -not ((Read-Shared $statusPath) -match '"running"')) { Start-Sleep -Milliseconds 200 }
+        Assert ((Read-Shared $statusPath) -match '"running"') 'the build did not start'
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $h = Invoke-Http GET "$baseA/api/health"
         Assert ($h.Status -eq 200 -and $sw.Elapsed.TotalSeconds -lt 2) "health took $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s during the build"
         $deadline = (Get-Date).AddSeconds(30)
-        while ((Get-Date) -lt $deadline -and -not ([System.IO.File]::ReadAllText($statusPath) -match '"complete"')) { Start-Sleep -Milliseconds 500 }
-        $st = [System.IO.File]::ReadAllText($statusPath)
+        while ((Get-Date) -lt $deadline -and -not ((Read-Shared $statusPath) -match '"complete"')) { Start-Sleep -Milliseconds 500 }
+        $st = (Read-Shared $statusPath)
         Assert ($st -match '"complete"' -and $st -match 'stand-in build done') "status: $st"
     }
     Case 'the console audit feed lists the commands from the activity log' {

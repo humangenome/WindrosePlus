@@ -46,6 +46,7 @@
 - **The release zip is about 8 MB smaller.** It no longer carries the logo files, the README screenshots, a research note, the windrose-heal and C++ mod source code, or the unbuilt MapMaterializerExporter mod; the installer used to copy all of that into the game folder. They stay in the repository. The tools, DLLs, docs and everything a server runs are unchanged.
 - **Docs match the code.** The README gives the real command count (32, plus 12 debug commands), a line for when PowerShell blocks `install.ps1`, what Administrator rights are actually needed for, what a reinstall overwrites, and how to stay on one version from a hosting panel or Docker image. `docs/commands.md` lists the missing HTTP routes and shows what `wp.perf`, `wp.memory`, `wp.jump`, `wp.gravity` and `wp.time` really print; `docs/config-reference.md` documents `debug.log_level` and when an RCON change takes effect. The storage hook research note moved to `docs/research/`.
 - **`/repair` is gone from the route list.** Its page was removed earlier and the address only answered "not found".
+- **The dashboard page no longer loads the map library twice.** About 260 lines of the old built-in map, unreachable since the Sea Chart moved into its own page, and the Leaflet library they needed (160 KB) are gone. The page looks the same.
 - **Each release has a `SHA256SUMS.txt`** with the SHA-256 of `WindrosePlus.zip` and the three DLLs, so a download can be checked.
 
 ## [1.3.24] - 2026-10-20
