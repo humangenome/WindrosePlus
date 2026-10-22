@@ -250,7 +250,7 @@
       "match": [
         "switch /api/rcon/log"
       ],
-      "description": "Recent RCON command audit log."
+      "description": "The newest console commands (up to 50) from the activity log: a JSON array of `{timestamp, ip, command, status}`, oldest first; `ip` holds who sent the command (\"Dashboard\" or the sending tool's name)."
     },
     {
       "methods": [

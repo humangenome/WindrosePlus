@@ -27,6 +27,11 @@
 - **The scanner's debug dots are off by default.** The POI scanner's audio-volume and overlap-volume markers covered the Sea Chart in blue and green dots. They start switched off now (Layers, "Scanner / debug"); places, quest and scenario markers still start on. A viewer who already changed layer settings keeps them.
 - **The public map's status no longer shows file paths.** While the map is not built, `/api/public/mapinfo` returned the tile builder's script path and output to anyone; it now gives only the build state.
 
+- **Player names and text in other languages show correctly.** On Windows PowerShell 5.1 the dashboard read its data files in the Windows code page, while the mod writes UTF-8, so "Jörg" came back as "JÃ¶rg" in `/api/status`, the map and console answers, and a password with a non-English letter could not log in. Every file is now read as UTF-8.
+- **The console's audit feed shows the commands that were run.** It read a file that nothing ever wrote, so it was always empty. `/api/rcon/log` now returns the newest 50 console commands from the activity log (`logs\YYYY-MM-DD.log`), with time, sender, command and result, in the list the dashboard expects.
+- **Status, map and console answers no longer fail while the mod rewrites a file.** A request that arrived while the mod was replacing a data file got an empty error; it now gets "being written, retry in a moment", and a console answer read half-written is read again.
+- **A server folder with `[` or `]` in its path starts.** The dashboard looked up its folder with a wildcard path lookup.
+
 ## [1.3.24] - 2026-10-20
 
 ### Fixed

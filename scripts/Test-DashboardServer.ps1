@@ -289,6 +289,34 @@ try {
         $st = [System.IO.File]::ReadAllText($statusPath)
         Assert ($st -match '"complete"' -and $st -match 'stand-in build done') "status: $st"
     }
+    Case 'the console audit feed lists the commands from the activity log' {
+        $logDir = Join-Path $dirA 'windrose_plus_data\logs'
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        # Each line in parentheses: a comma binds tighter than + in PowerShell.
+        $lines = @(
+            ('{"ts":"x","ts_unix":' + ($now - 20) + ',"sid":"s","ev":"player.join","payload":{"name":"A"}}'),
+            ('{"ts":"x","ts_unix":' + ($now - 10) + ',"sid":"s","ev":"admin.command","payload":{"command":"wp.status","admin_user":"Dashboard","status":"ok"}}'),
+            ('{"ts":"x","ts_unix":' + ($now - 5) + ',"sid":"s","ev":"admin.command","payload":{"command":"wp.say J' + [char]0x00F6 + 'rg ahoy","admin_user":"Dashboard","status":"error"}}')
+        )
+        [System.IO.File]::WriteAllText((Join-Path $logDir ([DateTime]::UtcNow.ToString('yyyy-MM-dd') + '.log')), (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+        $r = Invoke-Http GET "$baseA/api/rcon/log" -Headers @{ Cookie = "$nameA=$tokenA" }
+        Assert ($r.Status -eq 200) "status $($r.Status)"
+        $list = @($r.Body | ConvertFrom-Json | ForEach-Object { $_ })
+        Assert ($list.Count -eq 2) "$($list.Count) entries: $($r.Body)"
+        Assert ($list[0].command -eq 'wp.status' -and $list[1].status -eq 'error' -and $list[1].ip -eq 'Dashboard') "entries: $($r.Body)"
+        Assert ($list[1].command -eq ('wp.say J' + [char]0x00F6 + 'rg ahoy')) "non-English text came back as '$($list[1].command)'"
+    }
+    Case 'non-English names in data files come back as written' {
+        $name = 'J' + [char]0x00F6 + 'rg ' + [char]0x0421 + [char]0x0435 + [char]0x0440 + [char]0x0433 + [char]0x0435 + [char]0x0439
+        [System.IO.File]::WriteAllText((Join-Path $dirA 'windrose_plus_data\server_status.json'), ('{"players":[{"name":"' + $name + '"}]}'), (New-Object System.Text.UTF8Encoding($false)))
+        $req = [System.Net.HttpWebRequest]::Create("$baseA/api/status")
+        $req.Headers.Add('Cookie', "$nameA=$tokenA")
+        $resp = $req.GetResponse()
+        $body = (New-Object System.IO.StreamReader($resp.GetResponseStream(), [System.Text.Encoding]::UTF8)).ReadToEnd(); $resp.Close()
+        $got = ($body | ConvertFrom-Json).players[0].name
+        Assert ($got -eq $name) "got '$got'"
+    }
     Case 'logout clears the cookie' {
         $r = Invoke-Http GET "$baseA/logout" -Headers @{ Cookie = "$nameA=$tokenA" }
         Assert ($r.Status -eq 302 -and $r.Location -eq '/login') "status $($r.Status) location $($r.Location)"

@@ -10,6 +10,14 @@ param(
 # release time. The literal here is the development default.
 $Version = "1.0.16"
 
+# Every data file is read as UTF-8 (the Lua side writes UTF-8 without a byte
+# order mark). Get-Content on Windows PowerShell 5.1 reads such a file in the
+# Windows code page, so up to v1.3.24 "Jörg" came back as "JÃ¶rg" in /api/status,
+# the map and console answers, and a password with a non-English letter failed.
+function Read-TextUtf8([string]$Path) {
+    return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+}
+
 # Find game directory
 function Find-GameDir {
     $candidates = @()
@@ -19,7 +27,7 @@ function Find-GameDir {
 
     foreach ($path in $candidates) {
         if ($path -and (Test-Path -LiteralPath (Join-Path $path "windrose_plus.json"))) {
-            return (Resolve-Path $path).Path
+            return (Resolve-Path -LiteralPath $path).Path
         }
     }
     return $null
@@ -37,7 +45,7 @@ $configPath = Join-Path $gameDir "windrose_plus.json"
 $config = $null
 for ($i = 0; $i -lt 5; $i++) {
     try {
-        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $config = Read-TextUtf8 $configPath | ConvertFrom-Json
         break
     } catch {
         if ($i -eq 4) {
@@ -65,9 +73,9 @@ $webDir = Join-Path $PSScriptRoot "web"
 # Release metadata for other tools, reported by /api/health: the route list's version
 # (server\routes.json) and the PAK builder version (tools\PAK_BUILDER_VERSION).
 $routesVersion = $null
-try { $routesVersion = [int]((Get-Content -LiteralPath (Join-Path $PSScriptRoot "routes.json") -Raw -ErrorAction Stop | ConvertFrom-Json).routes_version) } catch {}
+try { $routesVersion = [int]((Read-TextUtf8 (Join-Path $PSScriptRoot "routes.json") | ConvertFrom-Json).routes_version) } catch {}
 $pakBuilderVersion = $null
-try { $pakBuilderVersion = [int]((Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\tools\PAK_BUILDER_VERSION") -Raw -ErrorAction Stop).Trim()) } catch {}
+try { $pakBuilderVersion = [int]((Read-TextUtf8 (Join-Path $PSScriptRoot "..\tools\PAK_BUILDER_VERSION")).Trim()) } catch {}
 
 # Resolve port
 if ($Port -eq 0) {
@@ -112,7 +120,7 @@ function Get-CurrentRconPassword {
     $jsonPath = Join-Path $gameDir "windrose_plus.json"
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            $cfg = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
+            $cfg = Read-TextUtf8 $jsonPath | ConvertFrom-Json
             if ($cfg.rcon -and $cfg.rcon.password) { return [string]$cfg.rcon.password }
             return ""
         } catch {
@@ -130,7 +138,7 @@ function Get-CurrentConfig {
     $jsonPath = Join-Path $gameDir "windrose_plus.json"
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            return (Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json)
+            return (Read-TextUtf8 $jsonPath | ConvertFrom-Json)
         } catch {
             Start-Sleep -Milliseconds 50
         }
@@ -166,7 +174,7 @@ function Get-CurrentPublicMapConfig {
     $jsonPath = Join-Path $gameDir "windrose_plus.json"
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            $cfg = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
+            $cfg = Read-TextUtf8 $jsonPath | ConvertFrom-Json
             $public = $null
             if ($cfg.livemap -and $cfg.livemap.public) { $public = $cfg.livemap.public }
             $enabled = $false
@@ -265,7 +273,7 @@ function Send-PoiScanData($context) {
     $poiFile = Join-Path $dataDir "pois.json"
     if (Test-Path -LiteralPath $poiFile) {
         try {
-            $data = Get-Content $poiFile -Raw | ConvertFrom-Json
+            $data = Read-TextUtf8 $poiFile | ConvertFrom-Json
             Send-Json $context $data
         } catch {
             Send-Json $context @{ error = "POIScan data is not readable" } 503
@@ -281,7 +289,7 @@ function Get-RuntimeOverlayData {
         return @{ Ok = $false; StatusCode = 404; Error = "No runtime overlay data" }
     }
     try {
-        $data = Get-Content -LiteralPath $overlayFile -Raw | ConvertFrom-Json
+        $data = Read-TextUtf8 $overlayFile | ConvertFrom-Json
         if ($data.PSObject.Properties.Name -contains "source_save_path") {
             $data.PSObject.Properties.Remove("source_save_path")
         }
@@ -792,6 +800,59 @@ function Send-Json($context, $data, $statusCode = 200) {
     $context.Response.Close()
 }
 
+# Reads at most the last MaxBytes of a file the Lua side may be appending to.
+function Read-FileTailUtf8([string]$Path, [int]$MaxBytes) {
+    $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+    try {
+        $start = [Math]::Max([long]0, $fs.Length - $MaxBytes)
+        [void]$fs.Seek($start, [System.IO.SeekOrigin]::Begin)
+        $buf = New-Object byte[] ([int]($fs.Length - $start))
+        $read = 0
+        while ($read -lt $buf.Length) {
+            $n = $fs.Read($buf, $read, $buf.Length - $read)
+            if ($n -le 0) { break }
+            $read += $n
+        }
+        $text = [System.Text.Encoding]::UTF8.GetString($buf, 0, $read)
+        if ($start -gt 0) {
+            $nl = $text.IndexOf("`n")
+            $text = if ($nl -ge 0) { $text.Substring($nl + 1) } else { "" }
+        }
+        return $text
+    } finally {
+        $fs.Dispose()
+    }
+}
+
+# The newest console commands from the activity log: today's file (UTC, the
+# name the Lua side uses) and yesterday's when today has fewer than Count.
+# Each entry: timestamp, ip (who sent it: "Dashboard" or the tool's name),
+# command, status.
+function Get-RecentAdminCommands([int]$Count) {
+    $found = New-Object System.Collections.Generic.List[object]
+    $now = [DateTime]::UtcNow
+    foreach ($day in @($now.AddDays(-1), $now)) {
+        $logPath = Join-Path $activityLogDir ($day.ToString("yyyy-MM-dd") + ".log")
+        if (-not (Test-Path -LiteralPath $logPath)) { continue }
+        $text = ""
+        try { $text = Read-FileTailUtf8 $logPath 262144 } catch { continue }
+        foreach ($line in ($text -split "`r?`n")) {
+            if ($line -notmatch '"ev"\s*:\s*"admin\.command"') { continue }
+            try { $e = $line | ConvertFrom-Json } catch { continue }
+            if ($null -eq $e -or $null -eq $e.payload) { continue }
+            $found.Add([ordered]@{
+                timestamp = [long]$e.ts_unix
+                ip = [string]$e.payload.admin_user
+                command = [string]$e.payload.command
+                status = [string]$e.payload.status
+            })
+        }
+    }
+    $all = @($found | Sort-Object { $_.timestamp })
+    if ($all.Count -gt $Count) { $all = $all[($all.Count - $Count)..($all.Count - 1)] }
+    return $all
+}
+
 function Write-AtomicUtf8Json($path, $data) {
     $tmpPath = "$path.tmp"
     $json = $data | ConvertTo-Json -Depth 100 -Compress
@@ -819,7 +880,7 @@ function Initialize-TerrainCache($DataDir) {
     $jsonPath = Join-Path $DataDir "terrain_v17.json"
     if (-not (Test-Path -LiteralPath $jsonPath)) { return $false }
     try {
-        $meta = Get-Content $jsonPath -Raw | ConvertFrom-Json
+        $meta = Read-TextUtf8 $jsonPath | ConvertFrom-Json
     } catch { return $false }
 
     # Per-landscape step (delta between consecutive sx values; defines compW = step * scale)
@@ -900,7 +961,7 @@ function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
 
     if (Test-Path -LiteralPath $statusPath) {
         try {
-            $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+            $status = Read-TextUtf8 $statusPath | ConvertFrom-Json
             if ($null -ne $status.ts) { $age = $now - [long]$status.ts }
         } catch {
             return "Command timed out (25s). RCON worker status exists but could not be parsed; restart the Windrose server."
@@ -1284,7 +1345,9 @@ try {
                 if ($path -eq "/api/public/livemap") {
                     $mapFile = Join-Path $dataDir "livemap_data.json"
                     if (Test-Path -LiteralPath $mapFile) {
-                        $data = Get-Content $mapFile -Raw | ConvertFrom-Json
+                        $data = $null
+                        try { $data = Read-TextUtf8 $mapFile | ConvertFrom-Json } catch {}
+                        if ($null -eq $data) { Send-Json $context @{ error = "Livemap data is being written, retry in a moment" } 503; continue }
                         Send-Json $context (ConvertTo-PublicLiveMapData $data)
                     } else {
                         Send-Json $context @{ error = "No livemap data" } 503
@@ -1310,7 +1373,9 @@ try {
                 if ($path -eq "/api/public/mapinfo") {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
-                        $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
+                        $data = $null
+                        try { $data = Read-TextUtf8 $mapCoordsFile | ConvertFrom-Json } catch {}
+                        if ($null -eq $data) { Send-Json $context @{ error = "Map data is being written, retry in a moment" } 503; continue }
                         Send-Json $context $data
                     } else {
                         # Public viewers get the build state only, not the script path
@@ -1420,7 +1485,9 @@ try {
                 "/api/status" {
                     $statusFile = Join-Path $dataDir "server_status.json"
                     if (Test-Path -LiteralPath $statusFile) {
-                        $data = Get-Content $statusFile -Raw | ConvertFrom-Json
+                        $data = $null
+                        try { $data = Read-TextUtf8 $statusFile | ConvertFrom-Json } catch {}
+                        if ($null -eq $data) { Send-Json $context @{ error = "Status data is being written, retry in a moment" } 503; continue }
                         Send-Json $context $data
                     } else {
                         Send-Json $context @{ error = "No status data" } 503
@@ -1429,7 +1496,9 @@ try {
                 "/api/livemap" {
                     $mapFile = Join-Path $dataDir "livemap_data.json"
                     if (Test-Path -LiteralPath $mapFile) {
-                        $data = Get-Content $mapFile -Raw | ConvertFrom-Json
+                        $data = $null
+                        try { $data = Read-TextUtf8 $mapFile | ConvertFrom-Json } catch {}
+                        if ($null -eq $data) { Send-Json $context @{ error = "Livemap data is being written, retry in a moment" } 503; continue }
                         Send-Json $context $data
                     } else {
                         Send-Json $context @{ error = "No livemap data" } 503
@@ -1523,7 +1592,7 @@ try {
                         $expectMultPak = $false
                         if ($status.json_present) {
                             try {
-                                $j = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
+                                $j = Read-TextUtf8 $jsonPath | ConvertFrom-Json
                                 if ($j.multipliers) {
                                     foreach ($p in $j.multipliers.PSObject.Properties) {
                                         if ($disabledPakMultipliers -contains $p.Name) { continue }
@@ -1540,7 +1609,7 @@ try {
                             $harvestIniPath = Join-Path $gameDir "windrose_plus.harvest.ini"
                             if (Test-Path -LiteralPath $harvestIniPath) {
                                 try {
-                                    foreach ($raw in Get-Content -LiteralPath $harvestIniPath) {
+                                    foreach ($raw in ((Read-TextUtf8 $harvestIniPath) -split "\r?\n")) {
                                         $line = $raw.Trim()
                                         if (-not $line) { continue }
                                         $first = $line[0]
@@ -1634,7 +1703,7 @@ try {
 
                     if (Test-Path -LiteralPath $ctManifest) {
                         try {
-                            $ctm = Get-Content -LiteralPath $ctManifest -Raw | ConvertFrom-Json
+                            $ctm = Read-TextUtf8 $ctManifest | ConvertFrom-Json
                             $status.curvetables_manifest_mtime_utc = (Get-Item -LiteralPath $ctManifest).LastWriteTimeUtc.ToString("o")
                             $status.curvetables_last_build_utc = $ctm.built_at_utc
                             $status.curvetables_changes_total = $ctm.changes_total
@@ -1655,7 +1724,7 @@ try {
                     $commandsFile = Join-Path $dataDir "commands.json"
                     if (Test-Path -LiteralPath $commandsFile) {
                         try {
-                            $payload = Get-Content -LiteralPath $commandsFile -Raw | ConvertFrom-Json
+                            $payload = Read-TextUtf8 $commandsFile | ConvertFrom-Json
                             Send-Json $context @{ commands = $payload.commands; generatedAt = $payload.generatedAt }
                             continue
                         } catch {
@@ -1678,13 +1747,15 @@ try {
                 "/api/mapinfo" {
                     $mapCoordsFile = Join-Path $dataDir "map_coords.json"
                     if (Test-Path -LiteralPath $mapCoordsFile) {
-                        $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
+                        $data = $null
+                        try { $data = Read-TextUtf8 $mapCoordsFile | ConvertFrom-Json } catch {}
+                        if ($null -eq $data) { Send-Json $context @{ error = "Map data is being written, retry in a moment" } 503; continue }
                         Send-Json $context $data
                     } else {
                         $generation = $null
                         $statusFile = Join-Path $dataDir "map_generation_status.json"
                         if (Test-Path -LiteralPath $statusFile) {
-                            try { $generation = Get-Content $statusFile -Raw | ConvertFrom-Json } catch {}
+                            try { $generation = Read-TextUtf8 $statusFile | ConvertFrom-Json } catch {}
                         }
                         Send-Json $context @{
                             error = "Map not ready yet. Join the server once to auto-generate the map."
@@ -1716,26 +1787,20 @@ try {
                     }
                 }
                 "/api/rcon/log" {
-                    $auditFile = Join-Path $dataDir "rcon_audit.json"
-                    if (Test-Path -LiteralPath $auditFile) {
-                        try {
-                            $raw = Get-Content $auditFile -Raw
-                            if ($raw) {
-                                $buffer = [System.Text.Encoding]::UTF8.GetBytes($raw)
-                                $context.Response.StatusCode = 200
-                                $context.Response.ContentType = "application/json"
-                                $context.Response.ContentLength64 = $buffer.Length
-                                $context.Response.OutputStream.Write($buffer, 0, $buffer.Length)
-                                $context.Response.Close()
-                            } else {
-                                Send-Json $context @{ entries = @() }
-                            }
-                        } catch {
-                            Send-Json $context @{ entries = @() }
-                        }
-                    } else {
-                        Send-Json $context @{ entries = @() }
-                    }
+                    # The console commands from the activity log (logs\YYYY-MM-DD.log,
+                    # admin.command events), newest last, as the dashboard's audit
+                    # feed. Up to v1.3.24 this read rcon_audit.json, which nothing
+                    # ever wrote, so the feed was always empty.
+                    $entries = @(Get-RecentAdminCommands 50)
+                    $json = ConvertTo-Json -InputObject $entries -Depth 5 -Compress
+                    if ([string]::IsNullOrEmpty($json)) { $json = "[]" }
+                    $buffer = [System.Text.Encoding]::UTF8.GetBytes($json)
+                    $context.Response.StatusCode = 200
+                    $context.Response.ContentType = "application/json"
+                    $context.Response.Headers.Add("Cache-Control", "no-store")
+                    $context.Response.ContentLength64 = $buffer.Length
+                    $context.Response.OutputStream.Write($buffer, 0, $buffer.Length)
+                    $context.Response.Close()
                 }
                 "/api/rcon" {
                     if ($method -ne "POST") {
@@ -1795,8 +1860,9 @@ try {
                     while ((Get-Date) -lt $deadline) {
                         Start-Sleep -Milliseconds 100
                         if (Test-Path -LiteralPath $resPath) {
-                            $result = Get-Content $resPath -Raw | ConvertFrom-Json
-                            Remove-Item $resPath -ErrorAction SilentlyContinue
+                            # The Lua side may still be writing it: retry on a partial read.
+                            try { $result = Read-TextUtf8 $resPath | ConvertFrom-Json } catch { $result = $null; continue }
+                            Remove-Item -LiteralPath $resPath -ErrorAction SilentlyContinue
                             break
                         }
                     }

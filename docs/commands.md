@@ -800,7 +800,7 @@ Logging in (`POST /login` with a form field `password`) sets a cookie named `wp_
 | GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |
 | GET | `/api/pak-status` | Yes | Generated PAK status, stale-config detection, and recent CurveTable patch summary. |
 | GET | `/api/mapinfo` | Yes | Map coordinate metadata for tile rendering |
-| GET | `/api/rcon/log` | Yes | Recent RCON command audit log |
+| GET | `/api/rcon/log` | Yes | The newest console commands (up to 50) from the activity log, as a JSON array of `{timestamp, ip, command, status}` |
 | POST | `/api/rcon` | Yes | Execute an RCON command |
 | POST | `/api/character-repair` | Yes | Upload a local SaveProfiles zip and download a repaired zip for known progression drift |
 
