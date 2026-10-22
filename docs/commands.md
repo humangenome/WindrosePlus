@@ -535,17 +535,19 @@ Gravity set to 2x for humangenome
 Teleport a player to absolute world coordinates in Unreal units. The trailing two or three arguments are the coordinates; everything before them is treated as the (possibly multi-word) player name, the same disambiguation `wp.speed` uses.
 
 ```
-Usage: wp.tp [player] <x> <y> [z]
+Usage: wp.tp [player|all] <x> <y> [z]
 ```
 
 If `z` is omitted the player's current Z is kept, which works for short hops but can drop you into terrain on a cross-map jump. The Sea Chart's click-to-teleport supplies a heightmap-derived Z for that case.
 
-```
-> wp.tp 100000 200000
-HumanGenome: tp -> (100000, 200000, 150) ret=true
+Without a name it moves the only player online; with more than one player online it refuses and asks for a name. `wp.tp all <x> <y> [z]` moves everyone.
 
+```
 > wp.tp HumanGenome 100000 200000 5000
 HumanGenome: tp -> (100000, 200000, 5000) ret=true
+
+> wp.tp 100000 200000
+2 players are online. Name the player to teleport, or use wp.tp all <x> <y> [z] to move everyone.
 ```
 
 ---

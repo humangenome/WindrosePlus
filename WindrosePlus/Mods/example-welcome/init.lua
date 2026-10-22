@@ -1,6 +1,6 @@
 -- Example Welcome Mod for WindrosePlus
 -- Logs player join/leave events to the server console
--- Drop this folder into WindrosePlus/Mods/ to activate
+-- Turn it on by adding "example-welcome" to WindrosePlus/Mods/mods_registry.json
 
 local API = WindrosePlus.API
 

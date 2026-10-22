@@ -921,8 +921,10 @@ end
 -- to drop the per-tick game-thread cost while keeping RCON, admin commands,
 -- multipliers, and the mods loader running. See #33.
 local _queryEnabled   = Config.isQueryEnabled()
-local _liveMapEnabled = type(Config.isLiveMapEnabled) == "function" and Config.isLiveMapEnabled() or true
-local _poiScanEnabled = type(Config.isPOIScanEnabled) == "function" and Config.isPOIScanEnabled() or true
+-- (Up to v1.3.24 these read `f() or true`, so "enabled": false came out true.)
+local function _writerEnabled(f) if type(f) ~= "function" then return true end return f() ~= false end
+local _liveMapEnabled = _writerEnabled(Config.isLiveMapEnabled)
+local _poiScanEnabled = _writerEnabled(Config.isPOIScanEnabled)
 Log.info("Core", string.format("Writers: query=%s livemap=%s poiscan=%s",
     tostring(_queryEnabled), tostring(_liveMapEnabled), tostring(_poiScanEnabled)))
 

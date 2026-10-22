@@ -125,7 +125,7 @@ A handful of multiplier keys are disabled, a few more are gated behind explicit 
 - **Full recovery / disable.** Stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move the generated overrides (`WindrosePlus_Multipliers_P.pak`, plus `WindrosePlus_CurveTables_P.pak` / `.utoc` / `.ucas`, all three parts of the CurveTable container), then delete `windrose_plus_data\.windroseplus_build.hash`. Removing settings from `windrose_plus.json` alone is not enough because UE4SS and existing PAK overrides can still load. Restore a save backup from before the inventory-affecting PAK change, confirm the character can join, then re-enable PAK overrides one at a time.
 
 ### Mod Support
-Drop a Lua script into the `Mods/` folder and it loads automatically. Add custom commands, scheduled tasks, and player join/leave hooks. Changes hot-reload without restarting the server.
+Add custom commands, scheduled tasks and player join/leave hooks in Lua. Put a mod folder in `WindrosePlus/Mods/` and add its name to `Mods/mods_registry.json`; edits reload within 30 seconds without restarting the server.
 
 **For modders:** full API reference, manifest format, and examples are in [docs/scripting-guide.md](docs/scripting-guide.md). Admin command list: [docs/commands.md](docs/commands.md). Config keys: [docs/config-reference.md](docs/config-reference.md). Server-side storage hook notes: [docs/storage-hook-research.md](docs/storage-hook-research.md).
 
@@ -321,7 +321,7 @@ Type-specific files such as `windrose_plus.food.ini` and `windrose_plus.weapons.
 
 ### Mods
 
-Windrose+ supports custom Lua mods. Drop a folder into `WindrosePlus/Mods/` with a `mod.json` and your script. It hot-reloads automatically.
+Windrose+ supports custom Lua mods. Put a folder with a `mod.json` and your script into `WindrosePlus/Mods/`, then add the folder name to `Mods/mods_registry.json` (a JSON array such as `["my-mod"]`; `install.ps1` writes it for the mod folders it finds). Edits to a listed mod reload within 30 seconds.
 
 See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 

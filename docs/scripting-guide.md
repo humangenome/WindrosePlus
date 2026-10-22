@@ -9,15 +9,24 @@ Write Lua mods that add commands, react to player events, and run scheduled task
 ```
 WindrosePlus/
   Mods/
+    mods_registry.json  # the list of mods to load (required)
     my-mod/
       mod.json          # manifest (required)
       init.lua          # entry point
       helpers.lua       # optional additional files
 ```
 
+Windrose+ loads the folders named in `Mods/mods_registry.json`, a JSON array of folder names:
+
+```json
+["my-mod", "announcements"]
+```
+
+A folder that is not in the list is not loaded, and neither is a listed folder without a `mod.json`. The list is needed because the mod cannot read a folder's contents without opening a command window. `install.ps1` writes the list the first time it finds mod folders (the bundled `example-welcome` stays off), and on later runs it names any folder that is missing from the list. Add `"example-welcome"` to try the example.
+
 Mods are loaded in alphabetical order by folder name. Each mod is wrapped in `pcall` -- one broken mod won't crash others, but may leave partial state.
 
-The `Mods/` directory is created automatically on first run.
+The `Mods/` folder and the example ship in the release zip.
 
 ---
 
@@ -89,7 +98,7 @@ API.registerTickCallback(function()
 end, 10000)  -- interval in milliseconds (default: 5000)
 ```
 
-Tick callbacks run on the main game thread during the 5-second polling loop. Keep them fast -- long-running work blocks the server.
+Tick callbacks are checked every 2 seconds (every 5 seconds when RCON is off) and run when their interval has passed. With the Windrose-safe UE4SS settings (`HookEngineTick = 0`) they run on UE4SS's background loop, not the game thread. Keep them fast: a slow callback delays every other writer and command.
 
 ### Delayed UE4SS Hooks
 
@@ -156,9 +165,9 @@ Levels: `debug`, `info`, `warn`, `error`. Logs go to the UE4SS console and log f
 
 ## Hot Reload
 
-WindrosePlus polls the `Mods/` directory every 30 seconds for file changes (new, modified, or deleted `.lua` and `.json` files). When a change is detected, the entire WindrosePlus mod restarts via UE4SS's `RestartMod()`.
+Every 30 seconds WindrosePlus checks `Mods/mods_registry.json` and, for each loaded mod, its `mod.json`, `init.lua`, `main.lua` and the main file named in `mod.json`. Any change to their contents counts. When one changes, the entire WindrosePlus mod restarts through UE4SS's `RestartMod()`. Changes to other files in a mod folder are not noticed; touch `init.lua` or run `wp.modreload`.
 
-You can also trigger a manual reload via the `wp.reload` RCON command.
+`wp.modreload` restarts the mod straight away (it is a debug command, listed by `wp.help all`). `wp.reload` only reloads `windrose_plus.json`.
 
 **What happens on reload:**
 - All Lua state is torn down and re-initialized
@@ -168,7 +177,7 @@ You can also trigger a manual reload via the `wp.reload` RCON command.
 
 **Development workflow:**
 1. Edit your mod files
-2. Wait up to 30 seconds (or run `wp.reload`)
+2. Wait up to 30 seconds (or run `wp.modreload`)
 3. Check UE4SS console for load errors
 
 ---
@@ -325,17 +334,17 @@ A mod is a self-contained folder. To share it:
 
 1. Zip the folder (e.g., `my-mod/` containing `mod.json` and `init.lua`)
 2. Distribute the zip
-3. Users extract it into their `WindrosePlus/Mods/` directory
-4. Mod loads automatically on next server start or hot-reload cycle
+3. Users extract it into their `WindrosePlus/Mods/` directory and add the folder name to `Mods/mods_registry.json`
+4. The mod loads on the next server start or within 30 seconds (the list changed)
 
-No registry, package manager, or build step is needed.
+No package manager or build step is needed.
 
 ---
 
 ## Limitations
 
 
-**Game thread only.** All Lua code runs on the game thread. Long-running operations (file I/O, `io.popen`) block the server tick. Keep tick callbacks under a few milliseconds.
+**Keep work short.** Commands, writers and tick callbacks share one loop, so a slow operation (large file I/O, `io.popen`) delays everything else. Keep tick callbacks under a few milliseconds.
 
 **No sandbox.** Mods run in the same Lua state as WindrosePlus core. A mod can access `FindAllOf`, `RegisterHook`, and other UE4SS globals directly, but these are not guaranteed stable across UE4SS versions. Prefer the `WindrosePlus.API` functions.
 

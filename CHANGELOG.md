@@ -18,6 +18,10 @@
 
 - **Decimal settings are read correctly on every Windows language.** The INI reader used the machine's number format, so on German or Brazilian Windows `0.35` became 35 and `2.5` became 25, and on French, Russian or Polish Windows those values were dropped with a parser error. A dot is now always the decimal mark. A comma works as the decimal mark when the value has no dot (`0,35`). A value like `1,000` is refused with a message, because it could mean 1 or 1000. `tools/PAK_BUILDER_VERSION` is 2, because the same settings now build a different PAK on those machines. The Sea Chart's click-to-teleport height lookup had the same number problem and is fixed too.
 
+- **`livemap.enabled` and `poiscan.enabled` set to `false` now switch those writers off.** The check read `false` as on, so the low-power advice in the config reference could not work.
+- **`wp.tp` without a player name no longer moves everyone.** `wp.tp 100000 200000 5000` with two or more players online moved all of them. Without a name it now moves the only player online, and with several online it asks for a name. `wp.tp all <x> <y> [z]` moves everyone on purpose. The dashboard always sends a name, so it is not affected.
+- **Lua mods load the way the docs say.** The loader only loads the folders named in `Mods/mods_registry.json`, and nothing wrote that file or mentioned it, so a mod dropped into `Mods/` never loaded. The README and scripting guide now explain the list. `install.ps1` writes it from the mod folders it finds (the bundled example stays off) and names any folder missing from it. Edits to a loaded mod are now noticed whatever they change; before, only the length and the first and last byte were compared, and a main file other than `init.lua` or `main.lua` was not watched.
+
 ## [1.3.24] - 2026-10-20
 
 ### Fixed

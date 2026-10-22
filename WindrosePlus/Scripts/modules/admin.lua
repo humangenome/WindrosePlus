@@ -625,13 +625,13 @@ function Admin._registerCommands()
     -- dashboard supplies a heightmap-derived Z so the player lands above terrain).
     Admin._commands["wp.tp"] = {
         description = "Teleport player to absolute world coordinates (X, Y, optional Z)",
-        usage = "wp.tp [player] <x> <y> [z]",
+        usage = "wp.tp [player|all] <x> <y> [z]",
         category = "admin",
-        examples = {"wp.tp 100000 200000", "wp.tp HumanGenome 100000 200000 5000"},
+        examples = {"wp.tp HumanGenome 100000 200000 5000", "wp.tp 100000 200000", "wp.tp all 100000 200000"},
         playerArg = true,
         handler = function(args)
             local n = #args
-            if n < 2 then return "Usage: wp.tp [player] <x> <y> [z]" end
+            if n < 2 then return "Usage: wp.tp [player|all] <x> <y> [z]" end
 
             -- Trailing 2 or 3 args are numeric coords; everything before is the (possibly
             -- multi-word) player name. Same disambiguation pattern as wp.speed.
@@ -649,9 +649,23 @@ function Admin._registerCommands()
                 return "Need 2 or 3 trailing numeric coords (x y [z])"
             end
             local targetName = nameEnd > 0 and table.concat(args, " ", 1, nameEnd):lower() or nil
+            local everyone = (targetName == "all")
+            if everyone then targetName = nil end
 
             local pcs = FindAllOf("PlayerController")
             if not pcs then return "No players found" end
+
+            -- No name moves the only player online. With more than one online it
+            -- refuses (up to v1.3.24 it moved everyone); "all" moves everyone.
+            if not targetName and not everyone then
+                local online = 0
+                for _, pc in ipairs(pcs) do
+                    if pc:IsValid() then online = online + 1 end
+                end
+                if online > 1 then
+                    return string.format("%d players are online. Name the player to teleport, or use wp.tp all <x> <y> [z] to move everyone.", online)
+                end
+            end
 
             local results = {}
             local matched = 0

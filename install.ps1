@@ -240,6 +240,34 @@ if (Test-Path -LiteralPath $modSource) {
     exit 1
 }
 
+# Lua mods: Windrose+ loads the folders listed in Mods\mods_registry.json (a JSON
+# array of folder names). Write that list once from the mod folders that have a
+# mod.json, leaving the bundled example off; after that, edit the list by hand.
+$luaModsDir = Join-Path $modDest "Mods"
+if (Test-Path -LiteralPath $luaModsDir) {
+    $registryPath = Join-Path $luaModsDir "mods_registry.json"
+    $foundMods = @(Get-ChildItem -LiteralPath $luaModsDir -Directory |
+        Where-Object { $_.Name -ne "example-welcome" -and (Test-Path -LiteralPath (Join-Path $_.FullName "mod.json")) } |
+        ForEach-Object { $_.Name } | Sort-Object)
+    if (-not (Test-Path -LiteralPath $registryPath)) {
+        if ($foundMods.Count -gt 0) {
+            $registryJson = ConvertTo-Json -InputObject @($foundMods) -Compress
+            [System.IO.File]::WriteAllText($registryPath, $registryJson, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Host "  Lua mods listed in Mods\mods_registry.json: $($foundMods -join ', ')"
+        }
+    } else {
+        $listedMods = @()
+        try {
+            $parsed = [System.IO.File]::ReadAllText($registryPath) | ConvertFrom-Json
+            $listedMods = @($parsed | ForEach-Object { [string]$_ })
+        } catch {}
+        $unlisted = @($foundMods | Where-Object { $listedMods -notcontains $_ })
+        if ($unlisted.Count -gt 0) {
+            Write-Host "  Lua mods not in Mods\mods_registry.json, so not loaded: $($unlisted -join ', ')" -ForegroundColor Yellow
+        }
+    }
+}
+
 # Add to mods.txt
 $modsTxt = Join-Path $modsDir "mods.txt"
 if (Test-Path -LiteralPath $modsTxt) {

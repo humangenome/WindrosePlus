@@ -71,6 +71,9 @@ jobs:
           done < <(find . -name '*.lua' -not -path './.git/*' -print0)
           echo "Parsed $count Lua file(s)."
 
+      - name: Offline Lua tests
+        run: lua5.4 scripts/test-lua/run.lua
+
   windrose-heal-tests:
     name: windrose-heal tests
     runs-on: windows-latest

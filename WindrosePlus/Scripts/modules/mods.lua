@@ -1,11 +1,25 @@
 -- WindrosePlus Mods Loader
--- Scans WindrosePlus/Mods/ for third-party mods and loads them
--- Supports hot-reload via UE4SS RestartMod when file changes detected
+-- Loads the Lua mods listed in WindrosePlus/Mods/mods_registry.json, a JSON array of
+-- folder names (["my-mod"]); each folder needs a mod.json. Lua here cannot list a
+-- folder without opening a command window, so the list is explicit; install.ps1
+-- writes it for the mod folders it finds. Hot-reload via UE4SS RestartMod when a
+-- listed mod's files or the list change.
 
 local json = require("modules.json")
 local Log = require("modules.log")
 
 local Mods = {}
+
+-- FNV-1a over the whole file, so any edit counts as a change (up to v1.3.24 only
+-- the length and the first and last byte were compared).
+local function contentSignature(content)
+    local h = 2166136261
+    for i = 1, #content do
+        h = ((h ~ content:byte(i)) * 16777619) & 0xffffffff
+    end
+    return #content .. ":" .. h
+end
+
 Mods._modsDir = nil
 Mods._loaded = {}
 Mods._fileSnapshots = {} -- filename -> mtime string for change detection
@@ -141,15 +155,23 @@ function Mods._takeSnapshot()
             modDir .. "\\init.lua",
             modDir .. "\\main.lua",
         }
+        -- The manifest may name another main file.
+        local mf = io.open(modDir .. "\\mod.json", "r")
+        if mf then
+            local ok, manifest = pcall(json.decode, mf:read("*a") or "")
+            mf:close()
+            if ok and type(manifest) == "table" and type(manifest.main) == "string"
+                and manifest.main ~= "init.lua" and manifest.main ~= "main.lua" then
+                table.insert(filesToCheck, modDir .. "\\" .. manifest.main)
+            end
+        end
         for _, path in ipairs(filesToCheck) do
-            local f = io.open(path, "r")
+            local f = io.open(path, "rb")
             if f then
                 local content = f:read("*a")
                 f:close()
-                -- Use content length + first/last bytes as a cheap change fingerprint
                 if content then
-                    local sig = #content .. ":" .. (content:byte(1) or 0) .. ":" .. (content:byte(-1) or 0)
-                    Mods._fileSnapshots[path] = sig
+                    Mods._fileSnapshots[path] = contentSignature(content)
                 end
             end
         end
@@ -157,12 +179,12 @@ function Mods._takeSnapshot()
 
     -- Also check the registry file itself
     local regPath = Mods._modsDir .. "\\mods_registry.json"
-    local rf = io.open(regPath, "r")
+    local rf = io.open(regPath, "rb")
     if rf then
         local content = rf:read("*a")
         rf:close()
         if content then
-            Mods._fileSnapshots[regPath] = #content .. ":" .. (content:byte(1) or 0) .. ":" .. (content:byte(-1) or 0)
+            Mods._fileSnapshots[regPath] = contentSignature(content)
         end
     end
 end
