@@ -674,45 +674,64 @@ foreach ($candidate in @(
     if (Test-Path -LiteralPath $candidate) { $tileGenScript = [System.IO.Path]::GetFullPath($candidate); break }
 }
 if (-not $tileGenScript) { $tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1" }
-function Invoke-TileGenerationIfRequested {
-    if (Test-Path -LiteralPath $tileGenTrigger) {
-        Remove-Item $tileGenTrigger -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $tileGenScript) {
-            Write-Host "Generating map tiles..."
-            try {
-                $started = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-                [System.IO.File]::WriteAllText($tileGenStatus, (@{
-                    state = "running"
-                    ts = $started
-                    script = $tileGenScript
-                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
-                $output = (& $tileGenScript -GameDir $gameDir 2>&1 | Out-String).Trim()
-                [System.IO.File]::WriteAllText($tileGenStatus, (@{
-                    state = "complete"
-                    ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-                    started_ts = $started
-                    script = $tileGenScript
-                    output = $output
-                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
-                Write-Host "Map tiles generated."
-            } catch {
-                $msg = $_.Exception.Message
-                [System.IO.File]::WriteAllText($tileGenStatus, (@{
-                    state = "error"
-                    ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-                    script = $tileGenScript
-                    error = $msg
-                } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
-                Write-Host "Tile generation failed: $msg"
-            }
+function Write-TileGenStatus($data) {
+    try {
+        [System.IO.File]::WriteAllText($tileGenStatus, ($data | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        Write-Host "WARN: could not write map_generation_status.json: $($_.Exception.Message)"
+    }
+}
+
+# The tile build runs as its own process at below-normal priority. Up to v1.3.24
+# it ran inside the request loop, so the dashboard answered nothing until all
+# tiles were written. A trigger that arrives during a build starts another one
+# when the first ends.
+$script:TileGen = $null
+function Invoke-TileGenerationWatch {
+    $job = $script:TileGen
+    if ($job) {
+        $exited = $true
+        try { $exited = $job.Process.HasExited } catch {}
+        if (-not $exited) { return }
+        $code = -1
+        try { $code = $job.Process.ExitCode } catch {}
+        $output = ""
+        try { $output = (([string]$job.Out.Result) + ([string]$job.Err.Result)).Trim() } catch {}
+        if ($output.Length -gt 8000) { $output = $output.Substring($output.Length - 8000) }
+        if ($code -eq 0) {
+            Write-TileGenStatus @{ state = "complete"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); started_ts = $job.Started; script = $tileGenScript; output = $output }
+            Write-Host "Map tiles generated."
         } else {
-            [System.IO.File]::WriteAllText($tileGenStatus, (@{
-                state = "error"
-                ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-                script = $tileGenScript
-                error = "generateTiles.ps1 not found"
-            } | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false))
+            $lastLine = @($output -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+            Write-TileGenStatus @{ state = "error"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); started_ts = $job.Started; script = $tileGenScript; error = "generateTiles.ps1 exited with code ${code}: $lastLine"; output = $output }
+            Write-Host "Tile generation failed (exit $code)."
         }
+        try { $job.Process.Dispose() } catch {}
+        $script:TileGen = $null
+    }
+    if (-not (Test-Path -LiteralPath $tileGenTrigger)) { return }
+    Remove-Item -LiteralPath $tileGenTrigger -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $tileGenScript)) {
+        Write-TileGenStatus @{ state = "error"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); script = $tileGenScript; error = "generateTiles.ps1 not found" }
+        return
+    }
+    Write-Host "Generating map tiles..."
+    $started = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = (Get-Process -Id $PID).Path
+        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -GameDir "{1}"' -f $tileGenScript, $gameDir)
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal } catch {}
+        $script:TileGen = @{ Process = $proc; Out = $proc.StandardOutput.ReadToEndAsync(); Err = $proc.StandardError.ReadToEndAsync(); Started = $started }
+        Write-TileGenStatus @{ state = "running"; ts = $started; script = $tileGenScript }
+    } catch {
+        Write-TileGenStatus @{ state = "error"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); script = $tileGenScript; error = "generateTiles.ps1 could not start: $($_.Exception.Message)" }
+        Write-Host "Tile generation could not start: $($_.Exception.Message)"
     }
 }
 
@@ -924,9 +943,33 @@ function Send-Redirect($context, $location) {
     $context.Response.Close()
 }
 
+# Tiles asked for with the tile set's id (?v=, from map_coords.json tileset_id)
+# never change under that address, so the browser may keep them for a day. A
+# tile set without an id is checked back each time (ETag) so a rebuild shows.
+function Set-TileCacheHeader($context) {
+    $v = [string]$context.Request.QueryString["v"]
+    if ($v -and $v -match '^[A-Za-z0-9_.-]{1,64}$') {
+        $context.Response.Headers.Add("Cache-Control", "public, max-age=86400")
+    }
+}
+
+# Sends a file with an ETag and Last-Modified and answers 304 when the browser
+# already has that version, so a reopened page costs no bytes. Cache-Control is
+# no-cache (the browser checks back each time) unless the caller set one first.
 function Send-File($context, $filePath) {
-    if (-not (Test-Path -LiteralPath $filePath)) {
+    if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
         $context.Response.StatusCode = 404
+        $context.Response.Close()
+        return
+    }
+    $info = Get-Item -LiteralPath $filePath
+    $etag = '"' + $info.Length.ToString("x") + "-" + $info.LastWriteTimeUtc.Ticks.ToString("x") + '"'
+    if (-not $context.Response.Headers["Cache-Control"]) { $context.Response.Headers.Add("Cache-Control", "no-cache") }
+    $context.Response.Headers.Add("ETag", $etag)
+    $context.Response.Headers.Add("Last-Modified", $info.LastWriteTimeUtc.ToString("r"))
+    $ifNoneMatch = [string]$context.Request.Headers["If-None-Match"]
+    if ($ifNoneMatch -and (@($ifNoneMatch -split ",\s*") -contains $etag)) {
+        $context.Response.StatusCode = 304
         $context.Response.Close()
         return
     }
@@ -1050,10 +1093,10 @@ function Invoke-RepairTool($healExe, $auditLog, $uploadPath, $outputPath, $timeo
 
 try {
     while ($listener.IsListening) {
-        if (Test-Path -LiteralPath $tileGenTrigger) { Invoke-TileGenerationIfRequested }
+        Invoke-TileGenerationWatch
         $contextTask = $listener.GetContextAsync()
         while (-not $contextTask.AsyncWaitHandle.WaitOne(1000)) {
-            if (Test-Path -LiteralPath $tileGenTrigger) { Invoke-TileGenerationIfRequested }
+            Invoke-TileGenerationWatch
             Invoke-GameWatch
         }
         $context = $contextTask.GetAwaiter().GetResult()
@@ -1270,10 +1313,15 @@ try {
                         $data = Get-Content $mapCoordsFile -Raw | ConvertFrom-Json
                         Send-Json $context $data
                     } else {
+                        # Public viewers get the build state only, not the script path
+                        # or the tool output (logged-in /api/mapinfo has those).
                         $generation = $null
                         $statusFile = Join-Path $dataDir "map_generation_status.json"
                         if (Test-Path -LiteralPath $statusFile) {
-                            try { $generation = Get-Content $statusFile -Raw | ConvertFrom-Json } catch {}
+                            try {
+                                $g = [System.IO.File]::ReadAllText($statusFile) | ConvertFrom-Json
+                                $generation = @{ state = [string]$g.state; ts = $g.ts }
+                            } catch {}
                         }
                         Send-Json $context @{
                             error = "Map not ready yet. Join the server once to auto-generate the map."
@@ -1285,6 +1333,7 @@ try {
 
                 if ($path -match "^/public-map/tiles/(\d+)/(\d+)-(\d+)\.png$") {
                     $tilePath = Join-Path $dataDir "map_tiles\$($Matches[1])\$($Matches[2])-$($Matches[3]).png"
+                    Set-TileCacheHeader $context
                     Send-File $context $tilePath
                     continue
                 }
@@ -1836,6 +1885,7 @@ try {
                     # Serve map tiles from data directory
                     if ($filePath -match "^/livemap/tiles/(\d+)/(\d+)-(\d+)\.png$") {
                         $tilePath = Join-Path $dataDir "map_tiles\$($Matches[1])\$($Matches[2])-$($Matches[3]).png"
+                        Set-TileCacheHeader $context
                         Send-File $context $tilePath
                         continue
                     }

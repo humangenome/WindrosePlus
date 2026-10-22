@@ -94,7 +94,7 @@ jobs:
         run: cargo test --locked --manifest-path tools/windrose-heal/Cargo.toml
 
   dashboard-auth:
-    name: Dashboard login and request limits
+    name: Dashboard server and map tiles
     runs-on: windows-latest
 
     steps:
@@ -103,11 +103,19 @@ jobs:
 
       - name: Windows PowerShell 5.1
         shell: powershell
-        run: ./scripts/Test-DashboardAuth.ps1
+        run: ./scripts/Test-DashboardServer.ps1
 
       - name: PowerShell 7
         shell: pwsh
-        run: ./scripts/Test-DashboardAuth.ps1
+        run: ./scripts/Test-DashboardServer.ps1
+
+      - name: Tile build (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./scripts/Test-TileBuild.ps1
+
+      - name: Tile build (PowerShell 7)
+        shell: pwsh
+        run: ./scripts/Test-TileBuild.ps1
 
   release-metadata:
     name: Route list, PAK builder version, curve table reader

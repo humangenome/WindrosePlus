@@ -1,9 +1,10 @@
-# Live tests for the dashboard's login, session cookie and request limits
-# (server/windrose_plus_server.ps1). Starts two copies of the real server on
-# 127.0.0.1, each with its own throwaway game folder, and talks to them over HTTP.
+# Live tests for the dashboard server (server/windrose_plus_server.ps1): login,
+# session cookie, request limits, file caching, background tile builds and the
+# public map info. Starts two copies of the real server on 127.0.0.1, each with
+# its own throwaway game folder, and talks to them over HTTP.
 # Windows only (the request limits use the Windows HTTP stack).
-# Run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-DashboardAuth.ps1   (Windows PowerShell 5.1)
-#      pwsh -File scripts/Test-DashboardAuth.ps1
+# Run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-DashboardServer.ps1   (Windows PowerShell 5.1)
+#      pwsh -File scripts/Test-DashboardServer.ps1
 param([string]$Shell = "")
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -23,11 +24,21 @@ function Get-FreePort {
     $l.Start(); $p = $l.LocalEndpoint.Port; $l.Stop(); return $p
 }
 
-function New-GameDir([int]$Port) {
-    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("wp-auth-test-" + [guid]::NewGuid().ToString('N'))
+function New-GameDir([int]$Port, [switch]$PublicMap) {
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("wp-server-test-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $dir | Out-Null
-    $cfg = '{"server":{"http_port":' + $Port + ',"bind_ip":"127.0.0.1"},"rcon":{"enabled":true,"password":"' + $password + '"},"catalog":{"build":false}}'
+    $public = if ($PublicMap) { ',"livemap":{"public":{"enabled":true}}' } else { '' }
+    $cfg = '{"server":{"http_port":' + $Port + ',"bind_ip":"127.0.0.1"},"rcon":{"enabled":true,"password":"' + $password + '"},"catalog":{"build":false}' + $public + '}'
     [System.IO.File]::WriteAllText((Join-Path $dir 'windrose_plus.json'), $cfg)
+    # A map tile, a stand-in tile builder that takes 6 seconds, and a build status
+    # with the fields the public map must not show.
+    $data = Join-Path $dir 'windrose_plus_data'
+    New-Item -ItemType Directory -Path (Join-Path $data 'map_tiles\0') -Force | Out-Null
+    [System.IO.File]::WriteAllBytes((Join-Path $data 'map_tiles\0\0-0.png'), [byte[]](137, 80, 78, 71, 1, 2, 3))
+    $tools = Join-Path $dir 'windrose_plus\tools'
+    New-Item -ItemType Directory -Path $tools -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $tools 'generateTiles.ps1'), "param([string]`$GameDir)`nStart-Sleep -Seconds 6`nWrite-Host 'stand-in build done'`n")
+    [System.IO.File]::WriteAllText((Join-Path $data 'map_generation_status.json'), '{"state":"error","ts":1,"script":"C:\\secret\\path\\generateTiles.ps1","error":"boom at C:\\secret","output":"tool output"}')
     return $dir
 }
 
@@ -97,7 +108,7 @@ function Get-HexHmac([byte[]]$Key, [string]$Text) {
 
 $portA = Get-FreePort; $portB = Get-FreePort
 while ($portB -eq $portA) { $portB = Get-FreePort }
-$dirA = New-GameDir $portA; $dirB = New-GameDir $portB
+$dirA = New-GameDir $portA; $dirB = New-GameDir $portB -PublicMap
 $a = Start-Dashboard $dirA $portA
 $b = Start-Dashboard $dirB $portB
 $baseA = "http://127.0.0.1:$portA"; $baseB = "http://127.0.0.1:$portB"
@@ -238,6 +249,46 @@ try {
         Assert ($droppedAt -lt 16) "dropped only after $([int]$droppedAt) s"
         Assert ($health -eq 'RanToCompletion' -and $healthAt -lt 14) "the other client waited $([int]$healthAt) s ($health)"
     }
+    Case 'a tile asked for with ?v= may be kept for a day, with an ETag' {
+        $r = Invoke-Http GET "$baseA/livemap/tiles/0/0-0.png?v=20261021T000000Z" -Headers @{ Cookie = "$nameA=$tokenA" }
+        Assert ($r.Status -eq 200) "status $($r.Status)"
+        $req = [System.Net.HttpWebRequest]::Create("$baseA/livemap/tiles/0/0-0.png?v=20261021T000000Z")
+        $req.Headers.Add('Cookie', "$nameA=$tokenA")
+        $resp = $req.GetResponse()
+        $script:tileEtag = $resp.Headers['ETag']; $cc = $resp.Headers['Cache-Control']; $resp.Close()
+        Assert ($cc -eq 'public, max-age=86400') "Cache-Control '$cc'"
+        Assert ($script:tileEtag -match '^"[0-9a-f]+-[0-9a-f]+"$') "ETag '$($script:tileEtag)'"
+    }
+    Case 'the same tile again with its ETag answers 304 and no body' {
+        $r = Invoke-Http GET "$baseA/livemap/tiles/0/0-0.png?v=20261021T000000Z" -Headers @{ Cookie = "$nameA=$tokenA"; 'If-None-Match' = $script:tileEtag }
+        Assert ($r.Status -eq 304 -and $r.Body.Length -eq 0) "status $($r.Status), $($r.Body.Length) bytes"
+    }
+    Case 'a tile asked for without ?v= is checked back each time' {
+        $req = [System.Net.HttpWebRequest]::Create("$baseA/livemap/tiles/0/0-0.png")
+        $req.Headers.Add('Cookie', "$nameA=$tokenA")
+        $resp = $req.GetResponse(); $cc = $resp.Headers['Cache-Control']; $resp.Close()
+        Assert ($cc -eq 'no-cache') "Cache-Control '$cc'"
+    }
+    Case 'the public map info shows the build state but not its path or output' {
+        $r = Invoke-Http GET "$baseB/api/public/mapinfo"
+        Assert ($r.Status -eq 503) "status $($r.Status)"
+        Assert ($r.Body -match '"state":"error"') "body $($r.Body)"
+        Assert ($r.Body -notmatch 'secret' -and $r.Body -notmatch 'tool output') "body $($r.Body)"
+    }
+    Case 'a tile build runs beside the dashboard, which keeps answering' {
+        $statusPath = Join-Path $dirA 'windrose_plus_data\map_generation_status.json'
+        [System.IO.File]::WriteAllText((Join-Path $dirA 'windrose_plus_data\generate_tiles_trigger'), '1')
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $deadline -and -not ([System.IO.File]::ReadAllText($statusPath) -match '"running"')) { Start-Sleep -Milliseconds 200 }
+        Assert ([System.IO.File]::ReadAllText($statusPath) -match '"running"') 'the build did not start'
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $h = Invoke-Http GET "$baseA/api/health"
+        Assert ($h.Status -eq 200 -and $sw.Elapsed.TotalSeconds -lt 2) "health took $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s during the build"
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and -not ([System.IO.File]::ReadAllText($statusPath) -match '"complete"')) { Start-Sleep -Milliseconds 500 }
+        $st = [System.IO.File]::ReadAllText($statusPath)
+        Assert ($st -match '"complete"' -and $st -match 'stand-in build done') "status: $st"
+    }
     Case 'logout clears the cookie' {
         $r = Invoke-Http GET "$baseA/logout" -Headers @{ Cookie = "$nameA=$tokenA" }
         Assert ($r.Status -eq 302 -and $r.Location -eq '/login') "status $($r.Status) location $($r.Location)"
@@ -263,4 +314,4 @@ try {
 }
 
 if ($failed) { Write-Host "$failed test(s) failed"; exit 1 }
-Write-Host "All dashboard auth tests passed."
+Write-Host "All dashboard server tests passed."

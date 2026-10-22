@@ -398,15 +398,24 @@ for ($i = 0; $i -lt $compIndex.Count; $i++) {
     $csharpComps[$i] = $cd
 }
 
-# Clean output dir
-if (Test-Path -LiteralPath $OutputDir) { Remove-Item $OutputDir -Recurse -Force }
+# Build into a sibling folder and swap it in at the end. Up to v1.3.24 the old
+# tiles were deleted first, so the map was blank while this ran and stayed broken
+# if it failed half way; now the old tiles stay in place until the new set is done.
+$buildDir = "$OutputDir.building"
+$oldDir = "$OutputDir.old"
+foreach ($leftover in @($buildDir, $oldDir)) {
+    if (Test-Path -LiteralPath $leftover) { Remove-Item -LiteralPath $leftover -Recurse -Force }
+}
+
+# Every ocean tile is the same picture: render it once and write its bytes.
+$oceanBytes = $null
 
 # Generate tiles at each zoom level
 $totalTiles = 0
 for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
     $tps = [int][Math]::Pow(2, $zoom)
     $tileWorldSize = $worldW / $tps
-    $zoomDir = Join-Path $OutputDir $zoom
+    $zoomDir = Join-Path $buildDir $zoom
     New-Item -ItemType Directory -Path $zoomDir -Force | Out-Null
 
     $zoomTiles = 0
@@ -426,8 +435,14 @@ for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
 
             if (-not $hasOverlap) {
                 # Pure ocean tile.
-                $pixels = [TileRenderer]::RenderSolidTile($tileSize, 20, 35, 65)
-                [PngWriter]::SaveRgb((Join-Path $zoomDir "${col}-${row}.png"), $tileSize, $tileSize, $pixels)
+                $oceanPath = Join-Path $zoomDir "${col}-${row}.png"
+                if ($null -eq $oceanBytes) {
+                    $pixels = [TileRenderer]::RenderSolidTile($tileSize, 20, 35, 65)
+                    [PngWriter]::SaveRgb($oceanPath, $tileSize, $tileSize, $pixels)
+                    $oceanBytes = [System.IO.File]::ReadAllBytes($oceanPath)
+                } else {
+                    [System.IO.File]::WriteAllBytes($oceanPath, $oceanBytes)
+                }
             } else {
                 $pixels = [TileRenderer]::RenderTile($tileSize, $tileMx, $tileMy, $tileWorldSize, $csharpComps)
                 [PngWriter]::SaveRgb((Join-Path $zoomDir "${col}-${row}.png"), $tileSize, $tileSize, $pixels)
@@ -438,6 +453,23 @@ for ($zoom = 0; $zoom -le $MaxZoom; $zoom++) {
     $totalTiles += $zoomTiles
     Write-Host "  Zoom ${zoom}: ${tps}x${tps} = $zoomTiles tiles ($([int]$sw.Elapsed.TotalSeconds)s)"
 }
+
+# Swap the new set in. A folder rename fails while a file in it is being read
+# (a map viewer fetching a tile), so try a few times.
+function Move-DirWithRetry([string]$From, [string]$To) {
+    for ($try = 1; $try -le 10; $try++) {
+        try { Move-Item -LiteralPath $From -Destination $To -ErrorAction Stop; return }
+        catch { if ($try -eq 10) { throw "Could not rename $From to ${To}: $($_.Exception.Message)" }; Start-Sleep -Milliseconds 300 }
+    }
+}
+if (Test-Path -LiteralPath $OutputDir) { Move-DirWithRetry $OutputDir $oldDir }
+try {
+    Move-DirWithRetry $buildDir $OutputDir
+} catch {
+    if (Test-Path -LiteralPath $oldDir) { try { Move-DirWithRetry $oldDir $OutputDir } catch {} }
+    throw
+}
+if (Test-Path -LiteralPath $oldDir) { Remove-Item -LiteralPath $oldDir -Recurse -Force -ErrorAction SilentlyContinue }
 
 # Calculate island bounds (only components with significant terrain)
 $aboveSeaComps = @($landComps | Where-Object { $_.maxZ -gt 100 })
@@ -467,6 +499,9 @@ $mapCoords = @{
     # like the in-game map. "north-up" tiles from v1.3.16-v1.3.21 were a quarter
     # turn off; the viewers turn those back tile by tile until they are rebuilt.
     orientation = "game"
+    # Changes with every build; the map viewers add it to tile addresses so a
+    # browser can keep tiles without ever showing ones from an older build.
+    tileset_id = [DateTime]::UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'")
     total_components = $landComps.Count
     island_bounds = @{
         min_x = $ibMinX; min_y = $ibMinY

@@ -338,6 +338,13 @@ var STATIC_CATALOG='/catalog/v1';
     // Tile sets built by v1.3.16-v1.3.21 say "north-up" and are a quarter turn
     // off the in-game map; the tile layer turns those back until they are rebuilt.
     var tilesTurned = (manifest.orientation === 'north-up');
+    // A tile set with an id (map_coords.json tileset_id, v1.3.25+) is fetched as
+    // ?v=<id>; the server lets the browser keep those tiles, and a rebuild gets a
+    // new id, so the chart never shows an old tile.
+    var tileUrl = TU;
+    if (manifest.tileset_id && /^[A-Za-z0-9_.-]{1,64}$/.test(String(manifest.tileset_id))) {
+        tileUrl += (TU.indexOf('?') >= 0 ? '&' : '?') + 'v=' + encodeURIComponent(manifest.tileset_id);
+    }
     function wBounds(minX, minY, maxX, maxY) {
         return L.latLngBounds(wLL(minX, minY), wLL(maxX, maxY));
     }
@@ -379,7 +386,7 @@ var STATIC_CATALOG='/catalog/v1';
                 done(null, tile);
             };
             img.onerror = function() { done(null, tile); };
-            img.src = L.Util.template(TU, src);
+            img.src = L.Util.template(tileUrl, src);
             return tile;
         }
     });
@@ -387,7 +394,7 @@ var STATIC_CATALOG='/catalog/v1';
         minZoom: 0, maxZoom: maxZoom, maxNativeZoom: maxZoom,
         tileSize: 256, noWrap: true,
         bounds: wBounds(W.minX, W.minY, W.maxX, W.maxY),
-        keepBuffer: 100,              // never unload tiles from DOM (small tileset fits in memory)
+        keepBuffer: 100,              // keep tiles already drawn (no refetch when panning back)
         updateWhenZooming: false,     // don't flicker during zoom animation
         updateWhenIdle: true
     }).addTo(map);
@@ -404,39 +411,9 @@ var STATIC_CATALOG='/catalog/v1';
         postEmbedMessage('map-click', { x: Math.round(llX(e.latlng)), y: Math.round(llY(e.latlng)) });
     });
 
-    // Preload all tiles for all zoom levels (small tileset ~5K tiles, fits in browser cache)
-    // This prevents loading delays when zooming in/out
-    (function preloadTiles() {
-        var total = 0, loaded = 0;
-        for (var z = 0; z <= maxZoom; z++) {
-            var tps = Math.pow(2, z);
-            for (var x = 0; x < tps; x++) {
-                for (var y = 0; y < tps; y++) {
-                    total++;
-                }
-            }
-        }
-        // Preload in batches to avoid overwhelming the browser
-        var queue = [];
-        for (var z = maxZoom; z >= 0; z--) {
-            var tps = Math.pow(2, z);
-            for (var x = 0; x < tps; x++) {
-                for (var y = 0; y < tps; y++) {
-                    queue.push(TU.replace('{z}', z).replace('{x}', x).replace('{y}', y));
-                }
-            }
-        }
-        var idx = 0, concurrent = 6;
-        function loadNext() {
-            while (idx < queue.length && concurrent > 0) {
-                concurrent--;
-                var img = new Image();
-                img.onload = img.onerror = function() { concurrent++; loaded++; loadNext(); };
-                img.src = queue[idx++];
-            }
-        }
-        loadNext();
-    })();
+    // Only the tiles in view are fetched. Up to v1.3.24 the page also queued every
+    // tile of every zoom level (5,461 at max zoom 6) on each open, through a server
+    // that answers one request at a time.
 
     var pL = L.layerGroup().addTo(map);
     var liveMobLayer = L.layerGroup().addTo(map);
@@ -1334,6 +1311,9 @@ var STATIC_CATALOG='/catalog/v1';
         }, true);
     }
     function layerDefaultOn(key) {
+        // Scanner debug classes (audio and overlap volumes) start off; they covered
+        // the chart in dots. Places, quests and markers start on.
+        if (key === 'poiscan:audio' || key === 'poiscan:overlap') return false;
         if (key.indexOf('poiscan:') === 0) return true;
         return {
             'base:players': true,
