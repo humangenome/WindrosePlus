@@ -12,7 +12,8 @@ Config._lastContent = nil
 Config._changeListeners = {}  -- fn() called after a reload that read different file content (API.onConfigReload)
 
 --- Registers fn() to run after a reload that changed the config. RCON reloads before every command, so listeners
--- only run when the file content differs from the last load (also after wp.reload with an edited file).
+-- only run when the file content differs from the last good load (also after wp.reload with an edited file), and only
+-- when the file parsed.
 function Config.onChange(fn)
     if type(fn) == "function" then table.insert(Config._changeListeners, fn) end
 end
@@ -74,7 +75,6 @@ function Config.reload()
             reason = tostring(data),
             byte_size = #content,
         })
-        notifyChange(content)
     end
 end
 

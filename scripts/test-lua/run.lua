@@ -231,6 +231,26 @@ case("rcon: a command that is not text gets an error, not a retry loop", functio
     check(readFile(spool .. "\\pending_commands.txt") == nil, "it was queued again")
 end)
 
+-- ---------------------------------------------------------------- config reload hook
+case("config: listeners run after a changed file that parsed, not after a broken one", function()
+    local Config = require("modules.config")
+    local cfgDir = tempDir()
+    Config._path = cfgDir .. "\\windrose_plus.json"
+    Config._lastContent, Config._changeListeners = nil, {}
+    writeFile(Config._path, '{"rcon":{"enabled":true}}')
+    Config.reload()
+    local calls = 0
+    Config.onChange(function() calls = calls + 1 end)
+    writeFile(Config._path, '{"rcon":{"enabled":tr')
+    Config.reload()
+    check(calls == 0, "a broken file called the listeners")
+    writeFile(Config._path, '{"rcon":{"enabled":true},"query":{"enabled":true}}')
+    Config.reload()
+    check(calls == 1, "the next good save did not call them (" .. calls .. ")")
+    Config.reload()
+    check(calls == 1, "an unchanged reload called them again")
+end)
+
 -- ---------------------------------------------------------------- writer switches (main.lua)
 case("main: livemap.enabled / poiscan.enabled = false switch the writers off", function()
     local f = assert(io.open("WindrosePlus/Scripts/main.lua", "rb")); local text = f:read("a"); f:close()

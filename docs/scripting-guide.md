@@ -147,7 +147,8 @@ local info = API.getServerInfo()
 local value = API.getConfig("section", "key")
 
 -- Run fn() after windrose_plus.json changed (seen on the next RCON command or wp.reload);
--- read the new values with API.getConfig inside it
+-- read the new values with API.getConfig inside it. Not called for a file that does not parse
+-- (e.g. half-saved); the next good save calls it.
 API.onConfigReload(function() end)
 
 -- True when 0 players are connected
