@@ -8,8 +8,8 @@ windrose_plus.ini
 windrose_plus.weapons.ini
 windrose_plus.food.ini
 windrose_plus.gear.ini
-windrose_plus.creatures.ini
-windrose_plus.ships.ini
+windrose_plus.entities.ini
+windrose_plus.harvest.ini
 !*.default.ini
 rcon/
 
@@ -36,10 +36,6 @@ StartWindrosePlusServer.bat
 tools/bin/*.exe
 tools/repak.exe
 tools/retoc.exe
-
-# Python
-__pycache__/
-*.pyc
 
 # C++ build
 cpp-mods/RE-UE4SS/
