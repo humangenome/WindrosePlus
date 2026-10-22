@@ -200,7 +200,9 @@ public:
         ModVersion = STR("0.3.0");
         m_startedMs = GetTickCount64();
     }
-    ~WindrosePlusNative() override {}
+    ~WindrosePlusNative() override {
+        if (m_gameThreadCallback != Hook::ERROR_ID) Hook::UnregisterCallback(m_gameThreadCallback);
+    }
 
     auto on_unreal_init() -> void override {
         // UE4SS's ProcessInternal callback runs on the game thread (it fires whenever the
@@ -210,7 +212,7 @@ public:
         options.bReadonly = true;
         options.OwnerModName = STR("WindrosePlusNative");
         options.HookName = STR("GameThreadJobs");
-        Hook::RegisterProcessInternalPreCallback(
+        m_gameThreadCallback = Hook::RegisterProcessInternalPreCallback(
             [this](Hook::TCallbackIterationData<void>&, UObject*, FFrame&, void*) { run_game_jobs(); },
             options);
         Output::send<LogLevel::Verbose>(STR("[WPN] native helper ready\n"));
@@ -240,6 +242,7 @@ public:
     }
 
 private:
+    Hook::GlobalCallbackId m_gameThreadCallback = Hook::ERROR_ID;
     ULONGLONG m_startedMs = 0;
     ULONGLONG m_lastPollMs = 0;
     ULONGLONG m_lastBanCheckMs = 0;
