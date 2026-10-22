@@ -98,17 +98,19 @@ try {
         Expect (Invoke-Check $d @('-RecordPakFingerprint', '-PakOutputUnchanged')) 0
         Expect (Invoke-Check $d) 0
     }
+    $pakNow = [int]([System.IO.File]::ReadAllText((Join-Path $root 'tools/PAK_BUILDER_VERSION')).Trim())
+    $pakNext = $pakNow + 1
     Case 'raising the version, then recording, passes' {
         $d = New-Copy
         Edit-File $d 'tools/lib/CurveTablePatcher.ps1' { param($t) $t + "`n# new rounding`n" }
-        [System.IO.File]::WriteAllText((Join-Path $d 'tools/PAK_BUILDER_VERSION'), "2`n")
+        [System.IO.File]::WriteAllText((Join-Path $d 'tools/PAK_BUILDER_VERSION'), "$pakNext`n")
         Expect (Invoke-Check $d @('-RecordPakFingerprint')) 0
-        Expect (Invoke-Check $d) 0 'PAK_BUILDER_VERSION 2'
+        Expect (Invoke-Check $d) 0 "PAK_BUILDER_VERSION $pakNext"
     }
     Case 'raising the version without recording fails' {
         $d = New-Copy
-        [System.IO.File]::WriteAllText((Join-Path $d 'tools/PAK_BUILDER_VERSION'), "2`n")
-        Expect (Invoke-Check $d) 1 'recorded for 1'
+        [System.IO.File]::WriteAllText((Join-Path $d 'tools/PAK_BUILDER_VERSION'), "$pakNext`n")
+        Expect (Invoke-Check $d) 1 "recorded for $pakNow"
     }
     Case 'Windows line endings give the same fingerprint' {
         $d = New-Copy
