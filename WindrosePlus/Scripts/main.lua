@@ -21,6 +21,7 @@ WindrosePlus = {
 
 local Log = require("modules.log")
 local Events = require("modules.events")
+local EventBus = require("modules.eventbus")
 
 print("[Windrose+] v" .. WindrosePlus.VERSION .. " loaded\n")
 
@@ -447,17 +448,87 @@ WindrosePlus.API.isIdle = function()
     return WindrosePlus.isIdle()
 end
 
--- Command registration for mods
-WindrosePlus.API.registerCommand = function(name, handler, description, usage)
+-- Deferred answers for mod commands: a handler that has to wait (e.g. for a game-thread task of a native mod) returns
+-- { deferred = token [, timeout = seconds] [, timeout_message = text] } and answers later with
+-- API.completeDeferred(token, ok, message). Tokens are strings; prefix them with the mod name to keep them unique.
+-- Only RCON (dashboard, spool clients) can wait; check API.deferredSupported() first and answer directly otherwise.
+if Rcon and Admin then Admin.deferredSupported = true end
+WindrosePlus.API.deferredSupported = function()
+    return Admin ~= nil and Admin.deferredSupported == true
+end
+WindrosePlus.API.deferredMaxSeconds = function()
+    return Rcon and Rcon._deferredMaxSec or 0
+end
+WindrosePlus.API.completeDeferred = function(token, ok, message)
+    local sToken = tostring(token)
+    local handled = false
+    if Rcon and Rcon.completeDeferred then
+        handled = Rcon.completeDeferred(sToken, ok, message)
+    end
+    -- Other callers of API.executeCommand (e.g. an in-game console add-on) wait for their own tokens here
+    EventBus.emit("command.completed", { token = sToken, ok = ok == true or ok == "ok", message = message }, "core")
+    return handled
+end
+
+-- Command registration for mods. opts (optional): { hidden = true } keeps the command out of wp.help and
+-- commands.json (wp.help all shows it), { category = "debug" } groups it in wp.help (default "server"),
+-- { subcommands = { { name = "item", usage = "<player> <item> [count]", description = "...", handler = fn }, ... } }
+-- registers subcommands: a subcommand's handler(args, caller) gets the words after it; without a handler the
+-- command's own handler gets every call. A bare command answers its subcommand list, an unknown subcommand is an
+-- error. usage may then be nil (generated). handler may be nil when every subcommand has its own.
+-- { examples = { "line", ... } } adds lines under wp.help <command> (worked examples, notes).
+WindrosePlus.API.registerCommand = function(name, handler, description, usage, opts)
     if Admin then
-        Admin._commands[name] = {
-            description = description or "",
-            usage = usage or name,
-            handler = handler
-        }
+        Admin.register(name, handler, description, usage, opts)
         Log.info("API", "Mod command registered: " .. name)
         if Admin.writeCommandsJson then Admin.writeCommandsJson() end
     end
+end
+
+-- All registered commands (built-in and mods): { { name, usage, description, category, hidden, subcommands }, ... }
+-- by name (subcommands = { { name, usage, description }, ... } or nil)
+WindrosePlus.API.listCommands = function()
+    local out = {}
+    if Admin then
+        for name, cmd in pairs(Admin._commands) do
+            out[#out + 1] = { name = name, usage = cmd.usage or name, description = cmd.description or "",
+                              category = cmd.category or "server", hidden = cmd.hidden == true,
+                              subcommands = cmd.subcommands and (function()
+                                  local subs = {}
+                                  for _, sub in ipairs(cmd.subcommands) do
+                                      subs[#subs + 1] = { name = sub.name, usage = sub.usage, description = sub.description }
+                                  end
+                                  return subs
+                              end)() or nil }
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+-- Run a command like RCON does. args: table or string. Returns status ("ok", "error" or "deferred"), message, opts.
+-- "deferred": message is the token; the answer arrives as event command.completed { token, ok, message }, or
+-- never (then give up after opts.timeout seconds, default 10). Access control is the caller's job.
+-- caller (optional): { accountId, name } of an in-game caller, handed to the command handler as its second argument
+-- (handlers can tailor answers or checks); nil = RCON-level access.
+WindrosePlus.API.executeCommand = function(command, args, caller)
+    if not Admin then return "error", "Admin module not loaded" end
+    if type(args) == "string" then
+        local list = {}
+        for part in args:gmatch("%S+") do list[#list + 1] = part end
+        args = list
+    end
+    local ok, status, message, opts = pcall(Admin.execute, tostring(command), type(args) == "table" and args or {},
+                                            type(caller) == "table" and caller or nil)
+    if not ok then return "error", tostring(status) end
+    return status, message, opts
+end
+
+-- Describe the subcommands of an existing command (e.g. a built-in one) for wp.help, commands.json and in-game
+-- consoles, without replacing its handler: subs = { { name, usage, description }, ... }. Returns true or false, reason.
+WindrosePlus.API.setSubcommands = function(name, subs)
+    if not Admin then return false, "Admin module not loaded" end
+    return Admin.setSubcommands(name, subs)
 end
 
 -- Tick callback registration for mods
@@ -547,6 +618,12 @@ WindrosePlus.API.registerHookWhenAvailable = function(path, preHook, postHook, o
     return handle
 end
 
+-- Event subscriptions (modules/eventbus.lua): add-ons call API.on("ship.captain", fn) etc.
+WindrosePlus.API.on = EventBus.on
+WindrosePlus.API.once = EventBus.once
+WindrosePlus.API.emit = function(ev, payload) EventBus.emit(ev, payload, "lua") end
+WindrosePlus.API.listEvents = EventBus.list
+
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
 local _playerLeaveCallbacks = {}
@@ -572,6 +649,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerJoinCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.join", player)
         end
     end
 
@@ -581,6 +659,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerLeaveCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.leave", player)
         end
     end
 
@@ -960,6 +1039,9 @@ else
         end)
     end
 end
+
+-- Event bus: dispatches Lua events and drains native events of an optional C++ mod (WPNative.PollEvents)
+EventBus.start(Config.get("events", "poll_ms") or 100, WindrosePlus.API.isIdle)
 
 -- File watcher for mod hot-reload (polls every 30s — not urgent with 0 players)
 if Mods then
