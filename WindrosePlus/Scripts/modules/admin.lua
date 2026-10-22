@@ -203,6 +203,8 @@ function Admin._registerCommands()
                 _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()),
                 _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"),
                 _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"),
+                _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier()),
+                _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier()),
                 "WindrosePlus v" .. (WindrosePlus and WindrosePlus.VERSION or "?")
             }
             return table.concat(lines, "\n")
@@ -1334,6 +1336,8 @@ function Admin._registerCommands()
             table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
             table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
             table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
+            table.insert(lines, _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
             table.insert(lines, "  RCON: " .. (Admin._config.isRconEnabled() and "enabled" or "disabled"))
             local mods = WindrosePlus._modules.Mods
             if mods then
@@ -1356,6 +1360,8 @@ function Admin._registerCommands()
             table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
             table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
             table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
+            table.insert(lines, _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
             return table.concat(lines, "\n")
         end
     }
@@ -1960,6 +1966,37 @@ function Admin._registerCommands()
     -- game thread. The ban list is a plain file (wpn_bans.txt) the native mod
     -- enforces on a timer, so wp.listbans reads it directly.
 
+    -- "<player> [reason]" where the name may have spaces: the longest run of
+    -- leading words that names an online player, else a quoted name
+    -- ("Some Player"), else the first word. Up to v1.3.24 only the first word
+    -- was used ("Some Player" was looked up as "Some").
+    local function splitNameAndReason(args)
+        local okP, players = pcall(Admin._getPlayers)
+        local online = {}
+        if okP and type(players) == "table" then
+            for _, p in ipairs(players) do
+                for _, n in ipairs({ p.name, p.displayName }) do
+                    if type(n) == "string" and n ~= "" then online[n:lower()] = n end
+                end
+            end
+        end
+        for take = #args, 1, -1 do
+            local candidate = table.concat(args, " ", 1, take)
+            if online[candidate:lower()] then
+                return online[candidate:lower()], table.concat(args, " ", take + 1)
+            end
+        end
+        if args[1] and args[1]:sub(1, 1) == '"' then
+            for i = 1, #args do
+                if args[i]:sub(-1) == '"' and (i > 1 or #args[1] > 1) then
+                    local quoted = table.concat(args, " ", 1, i)
+                    return quoted:sub(2, -2), table.concat(args, " ", i + 1)
+                end
+            end
+        end
+        return args[1], table.concat(args, " ", 2)
+    end
+
     Admin._commands["wp.kick"] = {
         description = "Kick a connected player by name",
         usage = "wp.kick <player> [reason]",
@@ -1967,8 +2004,7 @@ function Admin._registerCommands()
         examples = {"wp.kick Alice", "wp.kick Bob Griefing the build"},
         handler = function(args)
             if #args < 1 then return "Usage: wp.kick <player> [reason]" end
-            local name = args[1]
-            local reason = (#args >= 2) and table.concat({table.unpack(args, 2)}, " ") or ""
+            local name, reason = splitNameAndReason(args)
             return Admin._wpnSend("kick", name, reason, "Kick requested for " .. name)
         end
     }
@@ -1980,8 +2016,7 @@ function Admin._registerCommands()
         examples = {"wp.ban Alice", "wp.ban Bob Repeated griefing"},
         handler = function(args)
             if #args < 1 then return "Usage: wp.ban <player> [reason]" end
-            local name = args[1]
-            local reason = (#args >= 2) and table.concat({table.unpack(args, 2)}, " ") or ""
+            local name, reason = splitNameAndReason(args)
             return Admin._wpnSend("ban", name, reason, "Ban requested for " .. name)
         end
     }
@@ -1993,7 +2028,10 @@ function Admin._registerCommands()
         examples = {"wp.unban Alice"},
         handler = function(args)
             if #args < 1 then return "Usage: wp.unban <player>" end
-            return Admin._wpnSend("unban", args[1], "", "Unban requested for " .. args[1])
+            -- Banned players are offline, so the whole argument is the name.
+            local name = table.concat(args, " ")
+            if name:sub(1, 1) == '"' and name:sub(-1) == '"' and #name > 1 then name = name:sub(2, -2) end
+            return Admin._wpnSend("unban", name, "", "Unban requested for " .. name)
         end
     }
 

@@ -1833,6 +1833,14 @@ try {
                         continue
                     }
 
+                    # The mod runs nothing with rcon.enabled off, so say so now
+                    # instead of waiting 25 seconds for an answer that never comes.
+                    $liveCfg = Get-CurrentConfig
+                    if ($liveCfg -and $liveCfg.rcon -and $liveCfg.rcon.enabled -ne $true) {
+                        Send-Json $context @{ error = "RCON is switched off (rcon.enabled in windrose_plus.json)" } 503
+                        continue
+                    }
+
                     # The auth gate above already checked the session cookie,
                     # X-RCON-Password header or body password.
 
@@ -1840,6 +1848,14 @@ try {
                     $cmdId = "ps_" + [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + "_" + (Get-Random -Maximum 999999)
                     $spoolDir = Join-Path $dataDir "rcon"
                     if (-not (Test-Path -LiteralPath $spoolDir)) { New-Item -ItemType Directory -Path $spoolDir -Force | Out-Null }
+                    # Answers nobody collected (a timed-out command answered late)
+                    # are removed after 5 minutes; the mod's own cleanup never
+                    # matched these ids.
+                    try {
+                        Get-ChildItem -LiteralPath $spoolDir -Filter "res_*.json" -File -ErrorAction Stop |
+                            Where-Object { $_.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-5) } |
+                            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
+                    } catch {}
                     $cmdData = @{
                         id = $cmdId
                         command = $body.command
@@ -1855,9 +1871,9 @@ try {
 
                     # Poll for response
                     $resPath = Join-Path $spoolDir "res_$cmdId.json"
-                    $deadline = (Get-Date).AddSeconds(25)
+                    $deadline = [DateTime]::UtcNow.AddSeconds(25)
                     $result = $null
-                    while ((Get-Date) -lt $deadline) {
+                    while ([DateTime]::UtcNow -lt $deadline) {
                         Start-Sleep -Milliseconds 100
                         if (Test-Path -LiteralPath $resPath) {
                             # The Lua side may still be writing it: retry on a partial read.
@@ -1868,6 +1884,12 @@ try {
                     }
                     if (-not $result) {
                         $message = Get-RconWorkerDiagnostic $spoolDir $cmdPath
+                        # The mod runs commands up to 30 seconds old: withdraw one it
+                        # has not picked up, so a retry cannot make it run twice.
+                        if (Test-Path -LiteralPath $cmdPath) {
+                            Remove-Item -LiteralPath $cmdPath -Force -ErrorAction SilentlyContinue
+                            if (-not (Test-Path -LiteralPath $cmdPath)) { $message = "$message The command was withdrawn and did not run." }
+                        }
                         Send-Json $context @{ id = $cmdId; status = "error"; message = $message } 504
                         continue
                     }

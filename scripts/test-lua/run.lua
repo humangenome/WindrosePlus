@@ -32,7 +32,7 @@ _G.NotifyOnNewObject = function() end
 _G.StaticFindObject = function() return nil end
 _G.FindFirstOf = function() return nil end
 _G.FindAllOf = function() return nil end
-_G.WindrosePlus = { _modules = {}, state = {} }
+_G.WindrosePlus = { _modules = {}, state = {}, _isConnected = function() return true end }
 
 -- ---------------------------------------------------------------- mods loader
 local Mods = require("modules.mods")
@@ -143,6 +143,92 @@ case("wp.tp: with one player online no name is needed", function()
     online = { player("Solo", 3) }
     Admin.execute("wp.tp", { "100", "200" })
     check(moved(online[1]) and online[1].Pawn.loc.Z == 100, "not moved, or z changed")
+end)
+
+-- ---------------------------------------------------------------- wp.status / wp.kick
+case("wp.status lists cooking speed and harvest yield", function()
+    online = {}
+    local cfg = {}
+    for _, k in ipairs({"Loot", "Xp", "StackSize", "CraftEfficiency", "CropSpeed", "Weight", "CookingSpeed", "HarvestYield"}) do
+        cfg["get" .. k .. "Multiplier"] = function() return 2 end
+    end
+    local saved = Admin._config
+    Admin._config = cfg
+    local _, msg = Admin.execute("wp.status", {})
+    Admin._config = saved
+    check(tostring(msg):find("Cooking Speed: 2x", 1, true) and tostring(msg):find("Harvest Yield: 2x", 1, true), tostring(msg))
+end)
+
+case("wp.kick finds a player name with spaces", function()
+    online = { player("Some Player", 7) }
+    local status, msg = Admin.execute("wp.kick", { "Some", "Player", "griefing", "the", "dock" })
+    check(tostring(msg):find("Some Player was not kicked", 1, true), tostring(msg))
+end)
+
+case("wp.kick takes a quoted name when nobody online matches", function()
+    online = {}
+    local _, msg = Admin.execute("wp.kick", { '"Gone', 'Player"', "reason" })
+    check(tostring(msg):find("Gone Player was not kicked", 1, true), tostring(msg))
+end)
+
+-- ---------------------------------------------------------------- json
+case("json: NaN and infinity are written as null", function()
+    local json = require("modules.json")
+    local out = json.encode({ x = 0/0, y = math.huge, z = 1.5 })
+    check(out:find('"x":null', 1, true) and out:find('"y":null', 1, true) and out:find('"z":1.5', 1, true), out)
+end)
+
+-- ---------------------------------------------------------------- RCON spool
+local Rcon = require("modules.rcon")
+local spool = tempDir()
+local enabled = true
+Rcon._spoolDir = spool
+Rcon._gameDir = tempDir() .. "/"
+Rcon._config = {
+    reload = function() end,
+    getRconPassword = function() return "secret-pass" end,
+    isRconEnabled = function() return enabled end,
+}
+local ran = {}
+Rcon._admin = { execute = function(cmd, args) ran[#ran + 1] = cmd; return "ok", "done " .. cmd end }
+local function readFile(path) local f = io.open(path, "rb"); if not f then return nil end; local t = f:read("a"); f:close(); return t end
+local function queue(names) writeFile(spool .. "\\pending_commands.txt", table.concat(names, "\r\n") .. "\r\n") end
+
+case("rcon: a pending line that is a path is ignored and its target survives", function()
+    local victim = spool .. "\\..\\victim.txt"
+    writeFile(victim, "keep me")
+    queue({ "..\\victim.txt" })
+    Rcon._processCommands()
+    check(readFile(victim) == "keep me", "the file named in the line was deleted")
+end)
+
+case("rcon: a command runs when RCON is on and the password matches", function()
+    ran = {}
+    writeFile(spool .. "\\cmd_t1.json", '{"id":"t1","command":"wp.ping","password":"secret-pass"}')
+    queue({ "cmd_t1.json" })
+    Rcon._processCommands()
+    check(#ran == 1 and (readFile(spool .. "\\res_t1.json") or ""):find('"status":"ok"', 1, true), "did not run: " .. tostring(readFile(spool .. "\\res_t1.json")))
+end)
+
+case("rcon: with rcon.enabled off a matching password runs nothing", function()
+    ran = {}
+    enabled = false
+    writeFile(spool .. "\\cmd_t2.json", '{"id":"t2","command":"wp.ping","password":"secret-pass"}')
+    queue({ "cmd_t2.json" })
+    Rcon._processCommands()
+    enabled = true
+    check(#ran == 0, "the command ran")
+    check((readFile(spool .. "\\res_t2.json") or ""):find("RCON is off", 1, true), tostring(readFile(spool .. "\\res_t2.json")))
+end)
+
+case("rcon: a command that is not text gets an error, not a retry loop", function()
+    ran = {}
+    writeFile(spool .. "\\cmd_t3.json", '{"id":"t3","command":123,"password":"secret-pass"}')
+    queue({ "cmd_t3.json" })
+    Rcon._processCommands()
+    check(readFile(spool .. "\\cmd_t3.json") == nil, "the command file is still there")
+    check((readFile(spool .. "\\res_t3.json") or ""):find("Malformed command", 1, true), tostring(readFile(spool .. "\\res_t3.json")))
+    check(readFile(spool .. "\\pending_commands.txt") == nil, "it was queued again")
 end)
 
 -- ---------------------------------------------------------------- writer switches (main.lua)

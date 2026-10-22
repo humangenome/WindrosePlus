@@ -317,6 +317,24 @@ try {
         $got = ($body | ConvertFrom-Json).players[0].name
         Assert ($got -eq $name) "got '$got'"
     }
+    Case 'with rcon.enabled off a console command is refused at once' {
+        $cfgPath = Join-Path $dirB 'windrose_plus.json'
+        $saved = [System.IO.File]::ReadAllText($cfgPath)
+        [System.IO.File]::WriteAllText($cfgPath, $saved.Replace('"enabled":true,"password"', '"enabled":false,"password"'))
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $r = Invoke-Http POST "$baseB/api/rcon" '{"command":"wp.ping"}' 'application/json' -Headers @{ 'X-RCON-Password' = $password }
+            Assert ($r.Status -eq 503 -and $r.Body -match 'switched off' -and $sw.Elapsed.TotalSeconds -lt 3) "status $($r.Status) after $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s: $($r.Body)"
+        } finally {
+            [System.IO.File]::WriteAllText($cfgPath, $saved)
+        }
+    }
+    Case 'a command nobody answers is withdrawn when the dashboard gives up' {
+        $r = Invoke-Http POST "$baseA/api/rcon" '{"command":"wp.ping"}' 'application/json' -Headers @{ 'X-RCON-Password' = $password }
+        Assert ($r.Status -eq 504 -and $r.Body -match 'withdrawn') "status $($r.Status): $($r.Body)"
+        $left = @(Get-ChildItem -LiteralPath (Join-Path $dirA 'windrose_plus_data\rcon') -Filter 'cmd_*.json' -File -ErrorAction SilentlyContinue)
+        Assert ($left.Count -eq 0) "$($left.Count) command file(s) left in the spool"
+    }
     Case 'logout clears the cookie' {
         $r = Invoke-Http GET "$baseA/logout" -Headers @{ Cookie = "$nameA=$tokenA" }
         Assert ($r.Status -eq 302 -and $r.Location -eq '/login') "status $($r.Status) location $($r.Location)"

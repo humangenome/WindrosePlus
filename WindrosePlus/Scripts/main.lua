@@ -830,6 +830,21 @@ local function _enterDegraded(key, name)
     end
 end
 
+-- A writer that throws is reported at most once a minute per writer (up to
+-- v1.3.24 its errors were dropped, so a status file could stop with no log line).
+local _tickErrorAt = {}
+local function _runTick(fn, name)
+    local ok, err = pcall(fn)
+    if not ok then
+        local key = name or "tick"
+        local now = os.time()
+        if (now - (_tickErrorAt[key] or 0)) >= 60 then
+            _tickErrorAt[key] = now
+            Log.warn("Core", key .. " failed: " .. tostring(err))
+        end
+    end
+end
+
 local function dispatchTick(fn, name)
     -- Tick callbacks resolve their target lazily through WindrosePlus._modules.
     -- A failed module init or a Lua GC pass on a captured upvalue can land us
@@ -838,7 +853,7 @@ local function dispatchTick(fn, name)
     if type(fn) ~= "function" then return end
     local key = name or fn
     if not _hasExecuteInGameThread then
-        pcall(fn)
+        _runTick(fn, name)
         return
     end
     if _degraded[key] then
@@ -876,7 +891,7 @@ local function dispatchTick(fn, name)
             _pendingTicks[key] = nil
             _pendingSince[key] = nil
             _consecutiveStales[key] = 0
-            pcall(fn)
+            _runTick(fn, name)
         end)
     end)
     if not ok then

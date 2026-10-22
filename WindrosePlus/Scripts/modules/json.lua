@@ -104,9 +104,10 @@ end
 
 
 local function encode_number(val)
-  -- Check for NaN, -inf and inf
+  -- NaN, -inf and inf have no JSON form; write null (as JavaScript does). Up to
+  -- v1.3.24 this threw, and one bad coordinate stopped a status file updating.
   if val ~= val or val <= -math.huge or val >= math.huge then
-    error("unexpected number value '" .. tostring(val) .. "'")
+    return "null"
   end
   return string.format("%.14g", val)
 end

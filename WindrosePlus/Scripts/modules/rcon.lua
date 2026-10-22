@@ -244,7 +244,11 @@ function Rcon._processCommands()
     local found = {}
     for filename in content:gmatch("[^\r\n]+") do
         filename = filename:match("^%s*(.-)%s*$") -- trim
-        if filename ~= "" then
+        -- Only plain command file names. Up to v1.3.24 a line was used as a path
+        -- and the file deleted after processing, so "..\\..\\<file>" deleted that file.
+        if filename ~= "" and not filename:match("^cmd_[%w_%-]+%.json$") then
+            Log.warn("RCON", "Ignored a pending_commands.txt line that is not a command file name")
+        elseif filename ~= "" then
             local filePath = Rcon._spoolDir .. "\\" .. filename
             local f = io.open(filePath, "r")
             if f then
@@ -283,6 +287,23 @@ function Rcon._processCommands()
             end
         end
     end
+
+    -- A command that keeps failing before it can answer is given up after three
+    -- tries (up to v1.3.24 one with no timestamp was requeued forever).
+    Rcon._failCounts = Rcon._failCounts or {}
+    local requeue = {}
+    for _, name in ipairs(failed) do
+        local n = (Rcon._failCounts[name] or 0) + 1
+        if n >= 3 then
+            Rcon._failCounts[name] = nil
+            os.remove(Rcon._spoolDir .. "\\" .. name)
+            Log.warn("RCON", "Gave up on " .. name .. " after 3 failed tries")
+        else
+            Rcon._failCounts[name] = n
+            requeue[#requeue + 1] = name
+        end
+    end
+    failed = requeue
 
     if #failed > 0 then
         local out = io.open(indexPath, "a")
@@ -350,6 +371,10 @@ function Rcon._processFile(filePath, filename)
         finish("error", "Missing 'command' field", originalCommand, adminUser)
         return
     end
+    if type(command) ~= "string" or (data.args ~= nil and type(data.args) ~= "table") then
+        finish("error", "Malformed command: 'command' must be text and 'args' a list", nil, adminUser)
+        return
+    end
 
     if data.timestamp then
         local timestamp = tonumber(data.timestamp)
@@ -375,6 +400,14 @@ function Rcon._processFile(filePath, filename)
     local okPassword, expectedPassword = pcall(Rcon._config.getRconPassword)
     if not okPassword then
         finish("error", "Config password read failed: " .. tostring(expectedPassword), originalCommand, adminUser)
+        return
+    end
+
+    -- Up to v1.3.24 a command ran whenever its password matched the config, even
+    -- with rcon.enabled false or a blank or "changeme" password (a half-written or
+    -- recreated config falls back to those).
+    if Rcon._config.isRconEnabled and not Rcon._config.isRconEnabled() then
+        finish("error", "RCON is off: set rcon.enabled to true and a real password in windrose_plus.json")
         return
     end
 
