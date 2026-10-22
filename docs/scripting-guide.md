@@ -146,6 +146,10 @@ local info = API.getServerInfo()
 -- Read a config value from windrose_plus.json
 local value = API.getConfig("section", "key")
 
+-- Run fn() after windrose_plus.json changed (seen on the next RCON command or wp.reload);
+-- read the new values with API.getConfig inside it
+API.onConfigReload(function() end)
+
 -- True when 0 players are connected
 local idle = API.isIdle()
 
