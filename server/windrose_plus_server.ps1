@@ -1653,9 +1653,9 @@ try {
                     $worldX = 0.0; $worldY = 0.0
                     if ([string]::IsNullOrWhiteSpace($xRaw) -or [string]::IsNullOrWhiteSpace($yRaw)) {
                         Send-Json $context @{ error = "x and y query params required" } 400
-                    } elseif (-not [double]::TryParse($xRaw, [ref]$worldX)) {
+                    } elseif (-not [double]::TryParse($xRaw, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$worldX)) {
                         Send-Json $context @{ error = "x must be numeric" } 400
-                    } elseif (-not [double]::TryParse($yRaw, [ref]$worldY)) {
+                    } elseif (-not [double]::TryParse($yRaw, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$worldY)) {
                         Send-Json $context @{ error = "y must be numeric" } 400
                     } else {
                         $z = Get-TerrainHeightAt -DataDir $dataDir -WorldX $worldX -WorldY $worldY

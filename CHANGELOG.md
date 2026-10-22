@@ -14,6 +14,10 @@
 - **Another web page can no longer post console commands with your login cookie.** A page served from another port of the same address counts as the same site for cookies, and the console accepted a command in any body format. A `POST` logged in by the cookie alone must now be sent as `application/json` (or `application/zip` for character repair), which browsers only send across sites after a check this dashboard does not pass. The dashboard page already sends both, and scripts that use the `X-RCON-Password` header are not affected.
 - `server/routes.json` is at `routes_version` 2 (the `/logout` route, the cookie name and the request limits).
 
+### Fixed
+
+- **Decimal settings are read correctly on every Windows language.** The INI reader used the machine's number format, so on German or Brazilian Windows `0.35` became 35 and `2.5` became 25, and on French, Russian or Polish Windows those values were dropped with a parser error. A dot is now always the decimal mark. A comma works as the decimal mark when the value has no dot (`0,35`). A value like `1,000` is refused with a message, because it could mean 1 or 1000. `tools/PAK_BUILDER_VERSION` is 2, because the same settings now build a different PAK on those machines. The Sea Chart's click-to-teleport height lookup had the same number problem and is fixed too.
+
 ## [1.3.24] - 2026-10-20
 
 ### Fixed

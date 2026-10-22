@@ -158,10 +158,25 @@ function ConvertTo-Boolean {
     return $truthy -contains $Value.ToLower()
 }
 
+# Numbers are read the same way on every Windows language: a dot is the decimal
+# mark. Up to v1.3.24 this used the machine's number format, so on German or
+# Brazilian Windows 0.35 was read as 35 and on French, Russian or Polish Windows
+# it was refused. A comma is taken as the decimal mark when the value has no dot
+# and one comma (0,35); "1,000" is refused because it could mean 1 or 1000.
 function ConvertTo-SafeDouble {
     param([string]$Value, [string]$Context = "")
+    $text = ([string]$Value).Trim()
+    if ($text.IndexOf('.') -lt 0 -and ($text.Split(',').Count -eq 2)) {
+        if ($text -match '^[+-]?\d{1,3},\d{3}$') {
+            Add-WindrosePlusParserError "Cannot tell whether '$Value' means a thousands separator or a decimal comma${Context}; write it without the comma, with a dot for decimals."
+            return $null
+        }
+        $text = $text.Replace(',', '.')
+    }
     $result = 0.0
-    if ([double]::TryParse($Value, [ref]$result)) {
+    $styles = [System.Globalization.NumberStyles]::Float
+    $invariant = [System.Globalization.CultureInfo]::InvariantCulture
+    if ([double]::TryParse($text, $styles, $invariant, [ref]$result) -and -not [double]::IsNaN($result) -and -not [double]::IsInfinity($result)) {
         return $result
     }
     Add-WindrosePlusParserError "Cannot parse '$Value' as a number${Context}."
