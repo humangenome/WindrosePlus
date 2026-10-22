@@ -10,6 +10,7 @@ local Admin = {}
 Admin._commands = {}
 Admin._config = nil
 Admin._gameDir = nil  -- populated by init() for file-IO commands (wp.givestats queue)
+Admin.deferredSupported = false  -- set by main.lua when RCON can answer deferred commands
 Admin._playerJoinTimes = {}  -- track session join times for wp.playtime
 Admin._DEFAULT_PROCESS_NAME = "WindroseServer-Win64-Shipping.exe"
 Admin._bootTime = os.time()  -- track server start for uptime (no wmic needed)
@@ -41,18 +42,149 @@ function Admin.init(config, gameDir)
     Admin.writeCommandsJson()
 end
 
--- Execute a command. Returns status ("ok"/"error") and message.
-function Admin.execute(command, args)
-    local cmd = Admin._commands[command] or Admin._commands["wp." .. command]
+-- ---------------------------------------------------------------------------------------------------------------
+-- Subcommands: a command may carry a list { name, usage, description, handler? }. name may be two words
+-- ("list creature"); usage is what follows "<command> <name>". Registered by the command's owner (strict: a bare
+-- command shows its subcommand list, an unknown subcommand is an error) or attached later as a description only
+-- (Admin.setSubcommands: the command's own handler still gets every call).
+-- ---------------------------------------------------------------------------------------------------------------
+
+-- Validated copy of a subcommand list, or nil
+function Admin.normalizeSubcommands(list)
+    if type(list) ~= "table" then return nil end
+    local out = {}
+    for _, sub in ipairs(list) do
+        if type(sub) == "table" and type(sub.name) == "string" and sub.name:match("%S") then
+            local name = sub.name:lower():gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+            local words = {}
+            for w in name:gmatch("%S+") do words[#words + 1] = w end
+            out[#out + 1] = {
+                name = name, words = words,
+                usage = type(sub.usage) == "string" and sub.usage or "",
+                description = type(sub.description) == "string" and sub.description or "",
+                handler = type(sub.handler) == "function" and sub.handler or nil,
+            }
+        end
+    end
+    return #out > 0 and out or nil
+end
+
+-- "wp.give <item|status|list|...>" from the first words of the subcommands
+function Admin.subcommandSummary(name, subs)
+    local seen, firsts = {}, {}
+    for _, sub in ipairs(subs) do
+        if not seen[sub.words[1]] then seen[sub.words[1]] = true; firsts[#firsts + 1] = sub.words[1] end
+    end
+    return name .. " <" .. table.concat(firsts, "|") .. ">"
+end
+
+-- The subcommand the arguments name (longest match first), and how many words it used
+function Admin.matchSubcommand(cmd, args)
+    if not cmd.subcommands or type(args) ~= "table" or args[1] == nil then return nil, 0 end
+    local best, bestLen = nil, 0
+    for _, sub in ipairs(cmd.subcommands) do
+        local n = #sub.words
+        if n > bestLen then
+            local match = true
+            for i = 1, n do
+                if args[i] == nil or tostring(args[i]):lower() ~= sub.words[i] then match = false; break end
+            end
+            if match then best, bestLen = sub, n end
+        end
+    end
+    return best, bestLen
+end
+
+-- Help for one command: its description, then one line per subcommand
+function Admin.helpText(name, cmd)
+    local lines = { name .. " - " .. (cmd.description or "") }
+    if cmd.subcommands then
+        local width = 0
+        local heads = {}
+        for i, sub in ipairs(cmd.subcommands) do
+            heads[i] = name .. " " .. sub.name .. (sub.usage ~= "" and (" " .. sub.usage) or "")
+            width = math.max(width, #heads[i])
+        end
+        for i, sub in ipairs(cmd.subcommands) do
+            lines[#lines + 1] = "  " .. heads[i] .. string.rep(" ", width - #heads[i]) ..
+                (sub.description ~= "" and ("  " .. sub.description) or "")
+        end
+    else
+        lines[#lines + 1] = "Usage: " .. (cmd.usage or name)
+    end
+    if cmd.examples then
+        lines[#lines + 1] = "Examples:"
+        for _, ex in ipairs(cmd.examples) do lines[#lines + 1] = "  " .. ex end
+    end
+    return table.concat(lines, "\n")
+end
+
+-- Register (or replace) a command; opts: hidden, category, role (suggestion), subcommands (see API.registerCommand),
+-- examples (lines shown under the help)
+function Admin.register(name, handler, description, usage, opts)
+    opts = type(opts) == "table" and opts or {}
+    local subs = Admin.normalizeSubcommands(opts.subcommands)
+    Admin._commands[name] = {
+        description = description or "",
+        usage = usage or (subs and Admin.subcommandSummary(name, subs)) or name,
+        handler = handler,
+        hidden = opts.hidden == true or nil,
+        category = opts.category,
+        role = opts.role,
+        subcommands = subs,
+        strictSubcommands = subs ~= nil or nil,
+        examples = type(opts.examples) == "table" and opts.examples or nil,
+    }
+    return Admin._commands[name]
+end
+
+-- Attach subcommand descriptions to an existing command without touching its handler (e.g. describe a built-in
+-- command from a mod). Returns true, or false and the reason.
+function Admin.setSubcommands(name, list)
+    local cmd = Admin._commands[name]
+    if not cmd then return false, "unknown command " .. tostring(name) end
+    local subs = Admin.normalizeSubcommands(list)
+    if not subs then return false, "no valid subcommands" end
+    for _, sub in ipairs(subs) do sub.handler = nil end
+    cmd.subcommands, cmd.strictSubcommands = subs, false
+    Admin.writeCommandsJson()
+    return true
+end
+
+local function runHandler(fn, args, caller)
+    local ok, result = pcall(fn, args, caller)
+    if ok and type(result) == "table" and result.deferred then
+        -- The handler answers later through API.completeDeferred (e.g. after a game-thread task of a native mod).
+        -- Optional: timeout (seconds, capped by RCON) and timeout_message (answer when no result came in time).
+        return "deferred", tostring(result.deferred), { timeout = result.timeout, timeoutMessage = result.timeout_message }
+    end
+    if ok then return "ok", result or "OK" end
+    return "error", tostring(result)
+end
+
+-- Execute a command. Returns status ("ok"/"error") and message. caller (optional): { accountId, name } of an
+-- in-game caller, passed to the handler as its second argument; nil for RCON / dashboard.
+function Admin.execute(command, args, caller)
+    local name = Admin._commands[command] and command or ("wp." .. command)
+    local cmd = Admin._commands[name]
     if not cmd then
         return "error", "Unknown command: " .. command .. ". Use wp.help for list."
     end
-    local ok, result = pcall(cmd.handler, args)
-    if ok then
-        return "ok", result or "OK"
-    else
-        return "error", tostring(result)
+    args = type(args) == "table" and args or {}
+    if cmd.subcommands and cmd.strictSubcommands then
+        if args[1] == nil then return "ok", Admin.helpText(name, cmd) end
+        local sub, used = Admin.matchSubcommand(cmd, args)
+        if not sub then
+            return "error", "Unknown subcommand: " .. name .. " " .. tostring(args[1]) .. "\n" .. Admin.helpText(name, cmd)
+        end
+        if sub.handler then
+            local rest = {}
+            for i = used + 1, #args do rest[#rest + 1] = args[i] end
+            return runHandler(sub.handler, rest, caller)
+        end
     end
+    if not cmd.handler then return "error", name .. " has no handler" end
+    return runHandler(cmd.handler, args, caller)
 end
 
 -- Get the configured process name, falling back to the default
@@ -84,12 +216,19 @@ function Admin.writeCommandsJson()
     local out = {}
     for name, cmd in pairs(Admin._commands) do
         if not cmd.hidden then
-            out[#out + 1] = {
+            local entry = {
                 name = name,
                 usage = cmd.usage or name,
                 description = cmd.description or "",
                 category = cmd.category or "server"
             }
+            if cmd.subcommands then
+                entry.subcommands = {}
+                for _, sub in ipairs(cmd.subcommands) do
+                    entry.subcommands[#entry.subcommands + 1] = { name = sub.name, usage = sub.usage, description = sub.description }
+                end
+            end
+            out[#out + 1] = entry
         end
     end
     table.sort(out, function(a, b)
@@ -131,17 +270,7 @@ function Admin._registerCommands()
                 local cmdName = args[1]:lower()
                 if not cmdName:match("^wp%.") then cmdName = "wp." .. cmdName end
                 local cmd = Admin._commands[cmdName]
-                if cmd then
-                    local lines = {cmdName .. " - " .. cmd.description}
-                    table.insert(lines, "Usage: " .. cmd.usage)
-                    if cmd.examples then
-                        table.insert(lines, "Examples:")
-                        for _, ex in ipairs(cmd.examples) do
-                            table.insert(lines, "  " .. ex)
-                        end
-                    end
-                    return table.concat(lines, "\n")
-                end
+                if cmd then return Admin.helpText(cmdName, cmd) end
                 return "Unknown command: " .. cmdName
             end
 
@@ -172,7 +301,13 @@ function Admin._registerCommands()
                 if #cmds > 0 then
                     table.insert(lines, "\n[" .. catLabel .. "]")
                     for _, cmd in ipairs(cmds) do
-                        table.insert(lines, "  " .. cmd.usage .. " - " .. cmd.description)
+                        if cmd.subcommands then
+                            -- one line per command; wp.help <command> shows its subcommands
+                            table.insert(lines, "  " .. cmd.name .. " <subcommand> - " .. cmd.description ..
+                                " (" .. #cmd.subcommands .. " subcommands)")
+                        else
+                            table.insert(lines, "  " .. cmd.usage .. " - " .. cmd.description)
+                        end
                     end
                 end
             end

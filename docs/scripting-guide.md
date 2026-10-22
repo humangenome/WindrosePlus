@@ -63,7 +63,7 @@ local API = WindrosePlus.API
 ### Commands
 
 ```lua
-API.registerCommand(name, handler, description, usage)
+API.registerCommand(name, handler, description, usage [, opts])
 ```
 
 Register an RCON command. The handler receives an `args` table (string array, 1-indexed) and must return a string response.
@@ -74,7 +74,120 @@ API.registerCommand("wp.ping", function(args)
 end, "Test connectivity", "wp.ping")
 ```
 
-Commands registered by mods appear in `wp.help` alongside built-in commands.
+Commands registered by mods appear in `wp.help` alongside built-in commands. `opts` is optional:
+`{ category = "debug" }` groups the command in `wp.help` (default `server`), `{ hidden = true }` keeps it out of
+`wp.help` and `commands.json` (`wp.help all` still lists it).
+
+#### Subcommands
+
+A command with several actions registers them as subcommands, each with its own usage and description, instead of
+one long usage string:
+
+```lua
+API.registerCommand("wp.mymod", nil, "What my mod does", nil, {
+    category = "admin",
+    subcommands = {
+        { name = "status", description = "Show the current state",
+          handler = function(args, caller) return "running" end },
+        { name = "set", usage = "<player> <value>", description = "Set a value for a player",
+          handler = function(args) return "set " .. tostring(args[1]) end },          -- args = words after "set"
+        { name = "list items", usage = "<filter>", description = "Find item names",
+          handler = function(args) return "matching " .. tostring(args[1]) end },
+    },
+})
+```
+
+- A subcommand's `handler` gets the words after the subcommand. Without a `handler`, the command's own handler gets
+  every call with all words (handy when one function already parses everything).
+- `wp.mymod` alone answers the list of subcommands; an unknown subcommand is an error with that list.
+- `usage` (4th argument) may be nil: it becomes `wp.mymod <status|set|list>`.
+- A name may have two words (`list items`). Permission rules (see "Permissions") use the first word:
+  `wp.perms set wp.mymod list member` covers `list items` and `list tables`.
+- `wp.help` shows one line per command, `wp.help wp.mymod` one line per subcommand; `commands.json` and
+  `API.listCommands()` carry `subcommands = { { name, usage, description }, ... }`.
+
+To describe the subcommands of a command you did not write (e.g. a built-in one) without replacing it:
+`API.setSubcommands("wp.config", { { name = "show", description = "..." } })`. Its own handler keeps getting every
+call; only the help and the command list change.
+
+**Suggested naming** for commands with subcommands: `wp.<area> <verb> [object] [target] [args]`, verbs `list`,
+`get`, `set`, `show`, `find`, `status`, `on` / `off`, `start` / `stop`, `clear`, e.g. `wp.mymod set <player> <value>`,
+`wp.mymod list items <filter>`. No positional shortcuts: every action has a named subcommand, so `wp.help` and
+autocomplete can show it.
+
+Add-ons that offer commands through another channel (e.g. an in-game console) can list and run commands:
+
+```lua
+for _, c in ipairs(API.listCommands()) do  -- sorted by name
+    -- c = { name = "wp.status", usage = "...", description = "...", category = "server", hidden = false,
+    --       subcommands = nil or { { name = "status", usage = "", description = "..." }, ... } }
+end
+
+local status, message, opts = API.executeCommand("wp.status", {})  -- args: table or "a b c"
+-- status "ok" / "error": message is the answer
+-- status "deferred": message is a token; the answer arrives as event command.completed { token, ok, message }
+API.on("command.completed", function(e) end)
+```
+
+`API.executeCommand` does no access control: the caller decides who may run what.
+
+#### Answering later (deferred answers)
+
+A handler must not wait inside the call (it holds the Lua lock). When the result only arrives later, for example
+from an event, return `{ deferred = token }` and answer with `API.completeDeferred`:
+
+```lua
+API.registerCommand("wp.mything", function(args)
+    if not API.deferredSupported() then return "wp.mything needs RCON" end
+    local id = startSomething()                       -- e.g. a task whose result arrives as an event
+    return { deferred = "mymod:" .. id, timeout = 15, -- seconds, capped at API.deferredMaxSeconds() (20)
+             timeout_message = "No answer in time" }
+end, "Does something that takes a moment", "wp.mything")
+
+API.on("mything.result", function(e)
+    -- true/false or "ok"/"error"; returns false if the command already timed out
+    API.completeDeferred("mymod:" .. e.id, e.ok, e.message)
+end)
+```
+
+- Tokens are strings and must be unique: prefix them with your mod name.
+- Without `timeout` the command waits 10 s. The upper limit is 20 s because the dashboard waits 25 s for any
+  answer. For anything that takes longer, answer right away ("started …") and let the player check the outcome with
+  another command.
+- On timeout the caller gets `timeout_message` (or a default) as an error.
+- Only RCON (dashboard, spool clients) can wait; `API.deferredSupported()` is false without it.
+
+### Permissions
+
+For channels that know who is calling (an in-game console, a chat bridge), Windrose+ keeps roles per AccountId and a
+role per command in `windrose_plus_data\permissions.json`. RCON and the dashboard are not checked: they keep full
+access. Roles, lowest first: `public` (account not listed), `member`, `admin`, `dev`.
+
+A command's role comes from the rule `"<command> <subcommand>"`, else `"<command>"`, else **dev**. There is no
+wildcard and no category rule, so a new command is dev only until someone assigns it (`wp.perms set`).
+
+```lua
+-- in your channel, before running a command for a player
+local ok, needed = API.isAllowed(accountId, "wp.give", { "Dummy", "Wood" })
+if not ok then return "Access denied: wp.give needs " .. needed end
+-- pass the caller along: commands like wp.perms apply their in-game limits with it
+local status, message = API.executeCommand("wp.give", args, { accountId = accountId, name = playerName })
+```
+
+| Function | Returns |
+|---|---|
+| `API.getRole(accountId)` | `"public"`, `"member"`, `"admin"` or `"dev"` |
+| `API.requiredRole(command, args)` | role, matched rule (nil = no rule, dev) |
+| `API.isAllowed(accountId, command, args)` | ok, needed role, matched rule |
+| `API.setRole(accountId, role, note)` / `API.setCommandRole(rule, role or nil)` | true, or false and the reason |
+| `API.setDefaultCommandRole(rule, role)` | adds a rule for your own command only if none exists (an admin's choice stays) |
+| `API.listPermissions()` | `{ accounts, commands, unassigned, stale }` |
+| `API.setAccountResolver(fn)` | `fn(name)` returns an AccountId, so `wp.perms` accepts online player names |
+
+`registerCommand(..., { role = "member" })` only suggests a role: `wp.perms list unassigned` shows it, nothing
+applies it. Every change emits `permissions.changed { kind = "account" | "command", id }`, e.g. to refresh a
+command list on the client. A command handler gets the caller as its second argument
+(`function(args, caller)`, nil for RCON).
 
 ### Events
 
@@ -89,6 +202,31 @@ end)
 ```
 
 Player events fire when the player list changes between tick polls. Join fires for new names; leave fires for names that disappeared. Multiple callbacks can be registered.
+
+#### Event bus
+
+`API.on` subscribes to any named event; `API.emit` publishes one. `player.join` and `player.leave` are emitted on the
+bus too (same payload as above). Add-ons can define their own events. An optional native (C++) mod can deliver game
+events from native hooks through the same bus: it exposes `WPNative.PollEvents()`, which the bus drains on its own
+loop (without such a mod only Lua events exist).
+
+```lua
+local sub = API.on("player.join", function(payload, meta)
+    -- meta = { ev = "player.join", ts_unix = ..., seq = ..., source = "lua" | "native" }
+end, { key = "greeting" })  -- optional: re-subscribing with the same key replaces the old handler
+sub.cancel()
+
+API.once("myaddon.ready", function(payload) end)  -- fires once, then unsubscribes
+API.emit("myaddon.ready", { value = 1 })           -- payload: plain table, no UObjects
+local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, native = bool }
+```
+
+- Handlers run on the async loop, never inside a game hook, one after the other; an error in one handler is logged
+  and does not affect the others. A handler that fails 10 times in a row is disabled.
+- `API.emit` calls the handlers right away. Native events arrive with the next poll (`events.poll_ms`, default
+  100 ms; every 500 ms while nobody is online).
+- Subscriptions are attributed to the add-on that made them (logs, `API.listEvents`). On hot reload the Lua state
+  restarts, so add-ons subscribe again from scratch.
 
 ### Tick Callbacks
 
