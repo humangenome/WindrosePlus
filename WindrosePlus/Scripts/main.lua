@@ -21,6 +21,7 @@ WindrosePlus = {
 
 local Log = require("modules.log")
 local Events = require("modules.events")
+local EventBus = require("modules.eventbus")
 
 print("[Windrose+] v" .. WindrosePlus.VERSION .. " loaded\n")
 
@@ -547,6 +548,12 @@ WindrosePlus.API.registerHookWhenAvailable = function(path, preHook, postHook, o
     return handle
 end
 
+-- Event subscriptions (modules/eventbus.lua): add-ons call API.on("ship.captain", fn) etc.
+WindrosePlus.API.on = EventBus.on
+WindrosePlus.API.once = EventBus.once
+WindrosePlus.API.emit = function(ev, payload) EventBus.emit(ev, payload, "lua") end
+WindrosePlus.API.listEvents = EventBus.list
+
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
 local _playerLeaveCallbacks = {}
@@ -572,6 +579,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerJoinCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.join", player)
         end
     end
 
@@ -581,6 +589,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerLeaveCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.leave", player)
         end
     end
 
@@ -960,6 +969,9 @@ else
         end)
     end
 end
+
+-- Event bus: dispatches Lua events and drains native events of an optional C++ mod (WPNative.PollEvents)
+EventBus.start(Config.get("events", "poll_ms") or 100, WindrosePlus.API.isIdle)
 
 -- File watcher for mod hot-reload (polls every 30s — not urgent with 0 players)
 if Mods then
