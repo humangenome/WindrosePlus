@@ -85,7 +85,7 @@ from an event, return `{ deferred = token }` and answer with `API.completeDeferr
 API.registerCommand("wp.mything", function(args)
     if not API.deferredSupported() then return "wp.mything needs RCON" end
     local id = startSomething()                       -- e.g. a task whose result arrives as an event
-    return { deferred = "mymod:" .. id, timeout = 15, -- seconds, capped at API.deferredMaxSeconds() (20)
+    return { deferred = "mymod:" .. id, timeout = 8,  -- seconds, capped at API.deferredMaxSeconds() (10)
              timeout_message = "No answer in time" }
 end, "Does something that takes a moment", "wp.mything")
 
@@ -95,10 +95,12 @@ API.on("mything.result", function(e)
 end)
 ```
 
-- Tokens are strings and must be unique: prefix them with your mod name.
-- Without `timeout` the command waits 10 s. The upper limit is 20 s because the dashboard waits 25 s for any
-  answer. For anything that takes longer, answer right away ("started …") and let the player check the outcome with
-  another command.
+- Tokens are strings and must be unique: prefix them with your mod name. A second command with a token that is still
+  waiting is refused with an error.
+- Without `timeout` the command waits 10 s, which is also the upper limit: the dashboard serves one request at a time,
+  so a waiting answer holds its other routes until it arrives. For anything that takes longer, answer right away
+  ("started …") and let the player check the outcome with another command.
+- The activity log gets the command's record when it is answered or times out.
 - On timeout the caller gets `timeout_message` (or a default) as an error.
 - Only RCON (dashboard, spool clients) can wait; `API.deferredSupported()` is false without it.
 
