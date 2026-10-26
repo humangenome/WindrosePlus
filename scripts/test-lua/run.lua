@@ -231,6 +231,52 @@ case("rcon: a command that is not text gets an error, not a retry loop", functio
     check(readFile(spool .. "\\pending_commands.txt") == nil, "it was queued again")
 end)
 
+-- deferred answers: the handler returns { deferred = token } and answers later through Rcon.completeDeferred
+local Events = require("modules.events")
+local records = {}
+local realRecord = Events.record
+Events.record = function(_, rec) records[#records + 1] = rec end
+local deferredToken = "mymod:1"
+Rcon._admin = { execute = function(cmd) ran[#ran + 1] = cmd; return "deferred", deferredToken, { timeout = 30 } end }
+
+case("rcon: a deferred command answers later, capped at 10 s, and gets its activity record then", function()
+    ran, records = {}, {}
+    writeFile(spool .. "\\cmd_d1.json", '{"id":"d1","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d1.json" })
+    Rcon._processCommands()
+    local d = Rcon._deferred[deferredToken]
+    check(d and readFile(spool .. "\\res_d1.json") == nil, "answered or dropped right away")
+    check(d.expires - d.started <= 10, "timeout not capped at 10 s: " .. (d.expires - d.started))
+    check(#records == 0, "recorded before the answer")
+    check(Rcon.completeDeferred(deferredToken, true, "later done") == true, "completeDeferred refused")
+    check((readFile(spool .. "\\res_d1.json") or ""):find("later done", 1, true), tostring(readFile(spool .. "\\res_d1.json")))
+    check(#records == 1 and records[1].status == "ok" and records[1].command == "wp.later", "no activity record on answer")
+end)
+
+case("rcon: a second command with a pending token is refused, the first still answers", function()
+    ran, records = {}, {}
+    writeFile(spool .. "\\cmd_d2.json", '{"id":"d2","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d2.json" })
+    Rcon._processCommands()
+    writeFile(spool .. "\\cmd_d3.json", '{"id":"d3","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d3.json" })
+    Rcon._processCommands()
+    check((readFile(spool .. "\\res_d3.json") or ""):find("same deferred token", 1, true), tostring(readFile(spool .. "\\res_d3.json")))
+    check(Rcon.completeDeferred(deferredToken, "ok", "first") == true, "the first command lost its slot")
+    check((readFile(spool .. "\\res_d2.json") or ""):find("first", 1, true), tostring(readFile(spool .. "\\res_d2.json")))
+    check(#records == 2, "expected records for the refusal and the answer, got " .. #records)
+end)
+
+case("rcon: a timed-out deferred command gets its activity record", function()
+    records = {}
+    Rcon._deferred["mymod:t"] = { finish = function() end, id = "dt", command = "wp.slow", resolved = "wp.slow",
+                                  admin = "test", started = os.time() - 10, expires = os.time() - 1 }
+    local d = Rcon._deferred["mymod:t"]; Rcon._deferred["mymod:t"] = nil
+    Rcon._answerDeferred(d, "error", "No answer in time")
+    check(#records == 1 and records[1].status == "error" and records[1].message == "No answer in time", "no record on timeout")
+end)
+Events.record = realRecord
+
 -- ---------------------------------------------------------------- writer switches (main.lua)
 case("main: livemap.enabled / poiscan.enabled = false switch the writers off", function()
     local f = assert(io.open("WindrosePlus/Scripts/main.lua", "rb")); local text = f:read("a"); f:close()
