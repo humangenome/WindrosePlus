@@ -11,6 +11,52 @@ local Log = require("modules.log")
 local Events = require("modules.events")
 
 local Rcon = {}
+Rcon._deferred = {}            -- token -> pending answer of a deferred command (Admin returns { deferred = token })
+Rcon._deferredTimeoutSec = 10  -- default wait for a deferred answer
+-- Upper limit for a command's own timeout: the dashboard serves one request at a time, so a pending answer holds its
+-- map and status routes until it arrives
+Rcon._deferredMaxSec = 10
+Rcon._deferredTimeoutMessage = "No answer in time"
+
+--- Answers a deferred command (e.g. wp.x once the game thread has run it). status is "ok"/"error" or a boolean.
+-- Returns false if the token is unknown (already answered or timed out).
+function Rcon.completeDeferred(token, status, message)
+    local d = Rcon._deferred[token]
+    if not d then return false end
+    Rcon._deferred[token] = nil
+    if type(status) == "boolean" then status = status and "ok" or "error" end
+    return Rcon._answerDeferred(d, status, message)
+end
+
+-- Writes the activity-log record of a deferred command and its answer (answered or timed out).
+function Rcon._answerDeferred(d, status, message)
+    Rcon._recordCommand(d.id, d.command, d.resolved, d.args, d.admin, true, status, message,
+        (os.time() - d.started) * 1000)
+    local ok, err = pcall(d.finish, status, message, d.command, d.admin)
+    if not ok then Log.warn("RCON", "deferred answer failed: " .. tostring(err)) end
+    return ok
+end
+
+-- One activity-log record per command. The message is truncated to keep entries small; the caller still gets all of it.
+function Rcon._recordCommand(id, originalCommand, command, args, adminUser, ok, status, message, durationMs)
+    local recordedMessage = nil
+    if message ~= nil then
+        local s = tostring(message)
+        if #s > 512 then s = s:sub(1, 512) .. "...(truncated)" end
+        recordedMessage = s
+    end
+    Events.record("admin.command", {
+        id = id,
+        command = originalCommand,
+        resolved_command = command,
+        args = args,
+        admin_user = adminUser,
+        ok = ok,
+        status = ok and status or "error",
+        message = ok and recordedMessage or tostring(status),
+        duration_ms = durationMs,
+    })
+end
 Rcon._spoolDir = nil
 Rcon._gameDir = nil
 Rcon._loopHandle = nil
@@ -90,6 +136,12 @@ function Rcon.init(gameDir, config, adminModule)
         end
         for _, cb in ipairs(Rcon._tickCallbacks) do
             pcall(cb)
+        end
+        for token, d in pairs(Rcon._deferred) do
+            if now > d.expires then
+                Rcon._deferred[token] = nil
+                Rcon._answerDeferred(d, "error", d.timeoutMessage or Rcon._deferredTimeoutMessage)
+            end
         end
         return false
     end)
@@ -432,28 +484,27 @@ function Rcon._processFile(filePath, filename)
         end
     end
     local startMs = (os.clock() * 1000)
-    local ok, status, message = pcall(Rcon._admin.execute, command, args)
-    local durationMs = math.floor((os.clock() * 1000) - startMs + 0.5)
-
-    -- Truncate response message in the activity log to keep entries small.
-    -- Full message still goes back to the caller; this is just the record.
-    local recordedMessage = nil
-    if message ~= nil then
-        local s = tostring(message)
-        if #s > 512 then s = s:sub(1, 512) .. "...(truncated)" end
-        recordedMessage = s
+    local ok, status, message, opts = pcall(Rcon._admin.execute, command, args)
+    if ok and status == "deferred" then
+        -- Answered later by Rcon.completeDeferred(token, ...); the command file must not be picked up again
+        opts = type(opts) == "table" and opts or {}
+        local token = tostring(message)
+        if Rcon._deferred[token] then
+            local refusal = "Another command with the same deferred token is still waiting for its answer"
+            Rcon._recordCommand(id, originalCommand, command, args, adminUser, true, "error", refusal, 0)
+            finish("error", refusal, originalCommand, adminUser)
+            return
+        end
+        local timeout = math.max(1, math.min(tonumber(opts.timeout) or Rcon._deferredTimeoutSec, Rcon._deferredMaxSec))
+        local now = os.time()
+        Rcon._deferred[token] = { finish = finish, id = id, command = originalCommand, resolved = command, args = args,
+                                  admin = adminUser, started = now, expires = now + math.ceil(timeout),
+                                  timeoutMessage = opts.timeoutMessage }
+        os.remove(filePath)
+        return
     end
-    Events.record("admin.command", {
-        id = id,
-        command = originalCommand,
-        resolved_command = command,
-        args = args,
-        admin_user = adminUser,
-        ok = ok,
-        status = ok and status or "error",
-        message = ok and recordedMessage or tostring(status),
-        duration_ms = durationMs,
-    })
+    local durationMs = math.floor((os.clock() * 1000) - startMs + 0.5)
+    Rcon._recordCommand(id, originalCommand, command, args, adminUser, ok, status, message, durationMs)
 
     if ok then
         finish(status, message, originalCommand, adminUser)

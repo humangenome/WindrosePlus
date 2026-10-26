@@ -231,6 +231,140 @@ case("rcon: a command that is not text gets an error, not a retry loop", functio
     check(readFile(spool .. "\\pending_commands.txt") == nil, "it was queued again")
 end)
 
+-- deferred answers: the handler returns { deferred = token } and answers later through Rcon.completeDeferred
+local Events = require("modules.events")
+local records = {}
+local realRecord = Events.record
+Events.record = function(_, rec) records[#records + 1] = rec end
+local deferredToken = "mymod:1"
+Rcon._admin = { execute = function(cmd) ran[#ran + 1] = cmd; return "deferred", deferredToken, { timeout = 30 } end }
+
+case("rcon: a deferred command answers later, capped at 10 s, and gets its activity record then", function()
+    ran, records = {}, {}
+    writeFile(spool .. "\\cmd_d1.json", '{"id":"d1","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d1.json" })
+    Rcon._processCommands()
+    local d = Rcon._deferred[deferredToken]
+    check(d and readFile(spool .. "\\res_d1.json") == nil, "answered or dropped right away")
+    check(d.expires - d.started <= 10, "timeout not capped at 10 s: " .. (d.expires - d.started))
+    check(#records == 0, "recorded before the answer")
+    check(Rcon.completeDeferred(deferredToken, true, "later done") == true, "completeDeferred refused")
+    check((readFile(spool .. "\\res_d1.json") or ""):find("later done", 1, true), tostring(readFile(spool .. "\\res_d1.json")))
+    check(#records == 1 and records[1].status == "ok" and records[1].command == "wp.later", "no activity record on answer")
+end)
+
+case("rcon: a second command with a pending token is refused, the first still answers", function()
+    ran, records = {}, {}
+    writeFile(spool .. "\\cmd_d2.json", '{"id":"d2","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d2.json" })
+    Rcon._processCommands()
+    writeFile(spool .. "\\cmd_d3.json", '{"id":"d3","command":"wp.later","password":"secret-pass"}')
+    queue({ "cmd_d3.json" })
+    Rcon._processCommands()
+    check((readFile(spool .. "\\res_d3.json") or ""):find("same deferred token", 1, true), tostring(readFile(spool .. "\\res_d3.json")))
+    check(Rcon.completeDeferred(deferredToken, "ok", "first") == true, "the first command lost its slot")
+    check((readFile(spool .. "\\res_d2.json") or ""):find("first", 1, true), tostring(readFile(spool .. "\\res_d2.json")))
+    check(#records == 2, "expected records for the refusal and the answer, got " .. #records)
+end)
+
+case("rcon: a timed-out deferred command gets its activity record", function()
+    records = {}
+    Rcon._deferred["mymod:t"] = { finish = function() end, id = "dt", command = "wp.slow", resolved = "wp.slow",
+                                  admin = "test", started = os.time() - 10, expires = os.time() - 1 }
+    local d = Rcon._deferred["mymod:t"]; Rcon._deferred["mymod:t"] = nil
+    Rcon._answerDeferred(d, "error", "No answer in time")
+    check(#records == 1 and records[1].status == "error" and records[1].message == "No answer in time", "no record on timeout")
+end)
+Events.record = realRecord
+
+-- ---------------------------------------------------------------- subcommands (admin.lua)
+-- Own command table for these cases; the built-in commands registered above are restored afterwards.
+local savedCommands, savedGameDir = Admin._commands, Admin._gameDir
+Admin._commands = {}
+Admin._gameDir = tempDir() .. "/"
+local subCalls = {}
+Admin.register("wp.give", nil, "Spawn items through palms or bushes", nil, {
+    category = "admin",
+    subcommands = {
+        { name = "item", usage = "<player> <item> [count]", description = "Arm a palm",
+          handler = function(args, caller) subCalls[#subCalls + 1] = { args, caller }; return "armed " .. tostring(args[2]) end },
+        { name = "status", description = "Armed palms", handler = function() return "nothing armed" end },
+        { name = "list items", usage = "<filter>", description = "Find item names",
+          handler = function(args) return "items matching " .. tostring(args[1]) end },
+        { name = "list tables", usage = "<filter>", description = "Find loot tables",
+          handler = function(args) return "tables matching " .. tostring(args[1]) end },
+        { name = "later", description = "Deferred", handler = function() return { deferred = "t1", timeout = 3 } end },
+        { name = "boom", description = "Fails", handler = function() error("kaputt") end },
+    },
+})
+-- subcommands without handlers: the main handler gets every call
+Admin.register("wp.yield", function(args) return "main " .. table.concat(args, " ") end, "Gathering yield", nil, {
+    subcommands = { { name = "set", usage = "<factor>", description = "Set the factor" }, { name = "off", description = "Off" } },
+})
+Admin.register("wp.status", function() return "status ok" end, "Show server status", "wp.status")
+local function answer(cmd, args) return select(2, Admin.execute(cmd, args)) end
+
+case("subcommands: dispatch, caller, case, two words, longest match", function()
+    local st, msg = Admin.execute("wp.give", { "item", "Dummy", "Wood", "5" }, { accountId = "ACC-ONE" })
+    check(st == "ok" and msg == "armed Wood" and subCalls[1][1][1] == "Dummy", "sub handler did not get the words after it")
+    check(subCalls[1][2].accountId == "ACC-ONE", "caller did not reach the sub handler")
+    check(answer("wp.give", { "STATUS" }) == "nothing armed", "match is not case-insensitive")
+    check(answer("wp.give", { "list", "tables", "palm" }) == "tables matching palm", "two-word subcommand")
+    check(answer("wp.give", { "list", "items", "iron" }) == "items matching iron", "longest match")
+end)
+
+case("subcommands: bare command lists them, unknown ones are errors with the list", function()
+    local st, msg = Admin.execute("wp.give", { "list" })
+    check(st == "error" and msg:find("Unknown subcommand: wp.give list"), "first word alone matched")
+    st, msg = Admin.execute("wp.give", {})
+    check(st == "ok" and msg:find("^wp.give %- Spawn items") and msg:find("wp.give list tables <filter>"), "no list: " .. tostring(msg))
+    st, msg = Admin.execute("wp.give", { "nope" })
+    check(st == "error" and msg:find("Unknown subcommand: wp.give nope") and msg:find("wp.give status"), "no error list")
+end)
+
+case("subcommands: deferred, errors, short name, main handler fallback, old-style commands", function()
+    local st, msg, opts = Admin.execute("wp.give", { "later" })
+    check(st == "deferred" and msg == "t1" and opts.timeout == 3, "deferred lost")
+    st, msg = Admin.execute("give", { "boom" })
+    check(st == "error" and msg:find("kaputt"), "short name or handler error")
+    check(answer("wp.yield", { "set", "2" }) == "main set 2", "main handler fallback")
+    check(answer("wp.status", { "x" }) == "status ok", "old-style command changed")
+end)
+
+case("subcommands: generated usage and aligned help", function()
+    check(Admin._commands["wp.give"].usage == "wp.give <item|status|list|later|boom>", Admin._commands["wp.give"].usage)
+    local help = Admin.helpText("wp.give", Admin._commands["wp.give"])
+    check(help:find("\n  wp.give item <player> <item> %[count%]  +Arm a palm") and help:find("\n  wp.give status +Armed palms"), help)
+    check(Admin.helpText("wp.status", Admin._commands["wp.status"]) == "wp.status - Show server status\nUsage: wp.status", "old-style help changed")
+    Admin.register("wp.ex", nil, "With examples", nil, { subcommands = { { name = "a", handler = function() return "a" end } }, examples = { "wp.ex a   does a" } })
+    check(answer("wp.ex", {}):find("\nExamples:\n  wp.ex a   does a", 1, true), "examples missing")
+end)
+
+case("subcommands: setSubcommands describes, keeps the handler", function()
+    check(Admin.setSubcommands("wp.none", { { name = "x" } }) == false, "unknown command accepted")
+    check(Admin.setSubcommands("wp.status", { { name = "full", description = "everything", handler = function() return "hijacked" end } }) == true, "refused")
+    check(answer("wp.status", { "full" }) == "status ok" and answer("wp.status", {}) == "status ok", "handler replaced")
+    check(Admin.helpText("wp.status", Admin._commands["wp.status"]):find("wp.status full +everything"), "tree missing in help")
+end)
+
+case("subcommands: commands.json lists them without handlers", function()
+    Admin.writeCommandsJson()
+    local f = io.open(Admin._gameDir .. "windrose_plus_data\\commands.json", "r")
+    local data = f and require("modules.json").decode(f:read("a")); if f then f:close() end
+    local give
+    for _, c in ipairs(data and data.commands or {}) do if c.name == "wp.give" then give = c end end
+    check(give and give.usage == "wp.give <item|status|list|later|boom>" and give.description:find("Spawn"), "usage/description")
+    check(#give.subcommands == 6 and give.subcommands[3].name == "list items" and give.subcommands[3].usage == "<filter>", "subcommands")
+    check(give.subcommands[1].handler == nil, "handler in the file")
+end)
+
+case("subcommands: names are trimmed and lowered, bad entries dropped", function()
+    local subs = Admin.normalizeSubcommands({ { name = "  Lapse   Stop " }, { name = "" }, "x", { usage = "no name" } })
+    check(subs and #subs == 1 and subs[1].name == "lapse stop" and #subs[1].words == 2, "normalize")
+    check(Admin.normalizeSubcommands({}) == nil, "empty list")
+end)
+Admin._commands, Admin._gameDir = savedCommands, savedGameDir
+
 -- ---------------------------------------------------------------- writer switches (main.lua)
 case("main: livemap.enabled / poiscan.enabled = false switch the writers off", function()
     local f = assert(io.open("WindrosePlus/Scripts/main.lua", "rb")); local text = f:read("a"); f:close()
@@ -243,6 +377,46 @@ case("main: livemap.enabled / poiscan.enabled = false switch the writers off", f
     check(w(function() return true end) == true, "true read as off")
     check(w(nil) == true, "a missing function is not on")
 end)
+
+-- ---------------------------------------------------------------- event bus
+local Bus = require("modules.eventbus")
+local loops = {}
+local realLoopAsync = _G.LoopAsync
+_G.LoopAsync = function(ms, fn) loops[#loops + 1] = { ms = ms, fn = fn } end
+Bus.configure(100, function() return false end)
+
+case("events: API.emit reaches handlers at once, without a source or a poll loop", function()
+    local got
+    local sub = Bus.on("test.ping", function(p, meta) got = { p = p, meta = meta } end)
+    Bus.emit("test.ping", { n = 1 }, "lua")
+    sub.cancel()
+    check(got and got.p.n == 1 and got.meta.source == "lua", "handler not called")
+    check(#loops == 0, "a poll loop started without a source")
+end)
+
+case("events: the first registered source starts the poll loop, once", function()
+    local queue = { { ev = "test.native", seq = 7, ts = 1, value = "x" } }
+    local seen
+    Bus.on("test.native", function(p, meta) seen = { p = p, meta = meta } end)
+    Bus.registerSource("TestSource", function() local q = queue; queue = {}; return q, 0 end, { version = "1.0" })
+    check(#loops == 1 and loops[1].ms == 100, "loop not started at the configured interval")
+    Bus.registerSource("TestSource", function() local q = queue; queue = {}; return q, 0 end)
+    check(#loops == 1, "registering the same name again started a second loop")
+    loops[1].fn()
+    check(seen and seen.p.value == "x" and seen.meta.source == "native" and seen.meta.seq == 7, "event not delivered")
+    check(seen.p.ev == nil and seen.p.seq == nil, "bookkeeping fields left in the payload")
+    local info = Bus.list()
+    check(#info.sources == 1 and info.sources[1].name == "TestSource", "source not listed once")
+end)
+
+case("events: a source's dropped count becomes events.dropped", function()
+    local dropped
+    Bus.on("events.dropped", function(p) dropped = p end)
+    Bus.registerSource("TestSource", function() return {}, 3 end)
+    loops[1].fn()
+    check(dropped and dropped.count == 3 and dropped.source == "TestSource", "events.dropped missing")
+end)
+_G.LoopAsync = realLoopAsync
 
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

@@ -21,6 +21,7 @@ WindrosePlus = {
 
 local Log = require("modules.log")
 local Events = require("modules.events")
+local EventBus = require("modules.eventbus")
 
 print("[Windrose+] v" .. WindrosePlus.VERSION .. " loaded\n")
 
@@ -183,6 +184,14 @@ if logLevel then Log.setLevel(logLevel) end
 
 local Admin = loadModule("Admin", function()
     local m = require("modules.admin"); m.init(Config, gameDir); return m
+end)
+
+-- Roles per account and per command for in-game channels (modules/permissions.lua); RCON keeps full access
+local Permissions = loadModule("Permissions", function()
+    local m = require("modules.permissions")
+    m.init(gameDir, Admin, function(ev, payload) EventBus.emit(ev, payload, "core") end)
+    if Admin and Admin.writeCommandsJson then Admin.writeCommandsJson() end
+    return m
 end)
 
 local Query = loadModule("Query", function()
@@ -447,17 +456,124 @@ WindrosePlus.API.isIdle = function()
     return WindrosePlus.isIdle()
 end
 
--- Command registration for mods
-WindrosePlus.API.registerCommand = function(name, handler, description, usage)
+-- Deferred answers for mod commands: a handler that has to wait (e.g. for a game-thread task of a native mod) returns
+-- { deferred = token [, timeout = seconds] [, timeout_message = text] } and answers later with
+-- API.completeDeferred(token, ok, message). Tokens are strings; prefix them with the mod name to keep them unique.
+-- Only RCON (dashboard, spool clients) can wait; check API.deferredSupported() first and answer directly otherwise.
+if Rcon and Admin then Admin.deferredSupported = true end
+WindrosePlus.API.deferredSupported = function()
+    return Admin ~= nil and Admin.deferredSupported == true
+end
+WindrosePlus.API.deferredMaxSeconds = function()
+    return Rcon and Rcon._deferredMaxSec or 0
+end
+WindrosePlus.API.completeDeferred = function(token, ok, message)
+    local sToken = tostring(token)
+    local handled = false
+    if Rcon and Rcon.completeDeferred then
+        handled = Rcon.completeDeferred(sToken, ok, message)
+    end
+    -- Other callers of API.executeCommand (e.g. an in-game console add-on) wait for their own tokens here
+    EventBus.emit("command.completed", { token = sToken, ok = ok == true or ok == "ok", message = message }, "core")
+    return handled
+end
+
+-- Command registration for mods. opts (optional): { hidden = true } keeps the command out of wp.help and
+-- commands.json (wp.help all shows it), { category = "debug" } groups it in wp.help (default "server"),
+-- { role = "member" } suggests a permission role (shown by wp.perms list unassigned, never applied by itself).
+-- { subcommands = { { name = "item", usage = "<player> <item> [count]", description = "...", handler = fn }, ... } }
+-- registers subcommands: a subcommand's handler(args, caller) gets the words after it; without a handler the
+-- command's own handler gets every call. A bare command answers its subcommand list, an unknown subcommand is an
+-- error. usage may then be nil (generated). handler may be nil when every subcommand has its own.
+-- { examples = { "line", ... } } adds lines under wp.help <command> (worked examples, notes).
+WindrosePlus.API.registerCommand = function(name, handler, description, usage, opts)
     if Admin then
-        Admin._commands[name] = {
-            description = description or "",
-            usage = usage or name,
-            handler = handler
-        }
+        Admin.register(name, handler, description, usage, opts)
         Log.info("API", "Mod command registered: " .. name)
         if Admin.writeCommandsJson then Admin.writeCommandsJson() end
     end
+end
+
+-- All registered commands (built-in and mods): { { name, usage, description, category, hidden, role, subcommands }, ... }
+-- by name (role = the suggested role from registerCommand, not the effective one: see API.requiredRole;
+-- subcommands = { { name, usage, description }, ... } or nil)
+WindrosePlus.API.listCommands = function()
+    local out = {}
+    if Admin then
+        for name, cmd in pairs(Admin._commands) do
+            out[#out + 1] = { name = name, usage = cmd.usage or name, description = cmd.description or "",
+                              category = cmd.category or "server", hidden = cmd.hidden == true, role = cmd.role,
+                              subcommands = cmd.subcommands and (function()
+                                  local subs = {}
+                                  for _, sub in ipairs(cmd.subcommands) do
+                                      subs[#subs + 1] = { name = sub.name, usage = sub.usage, description = sub.description }
+                                  end
+                                  return subs
+                              end)() or nil }
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+-- Run a command like RCON does. args: table or string. Returns status ("ok", "error" or "deferred"), message, opts.
+-- "deferred": message is the token; the answer arrives as event command.completed { token, ok, message }, or
+-- never (then give up after opts.timeout seconds, default 10). Access control is the caller's job (API.isAllowed).
+-- caller (optional): { accountId, name } of an in-game caller, handed to the command handler (wp.perms uses it for
+-- its limits); nil = RCON-level access.
+WindrosePlus.API.executeCommand = function(command, args, caller)
+    if not Admin then return "error", "Admin module not loaded" end
+    if type(args) == "string" then
+        local list = {}
+        for part in args:gmatch("%S+") do list[#list + 1] = part end
+        args = list
+    end
+    local ok, status, message, opts = pcall(Admin.execute, tostring(command), type(args) == "table" and args or {},
+                                            type(caller) == "table" and caller or nil)
+    if not ok then return "error", tostring(status) end
+    return status, message, opts
+end
+
+-- Permissions (modules/permissions.lua): roles public < member < admin < dev per AccountId, a role per command
+-- ("<command>" or "<command> <sub>"); a command without a rule is dev only. For channels that know the caller's
+-- AccountId; RCON and the dashboard are not checked. Changes emit permissions.changed { kind, id }.
+WindrosePlus.API.getRole = function(accountId)
+    return Permissions and Permissions.getRole(accountId) or "public"
+end
+WindrosePlus.API.requiredRole = function(command, args)
+    if not Permissions then return "dev", nil end
+    return Permissions.requiredRole(command, args)
+end
+-- ok, neededRole, rule
+WindrosePlus.API.isAllowed = function(accountId, command, args)
+    if not Permissions then return false, "dev", nil end
+    return Permissions.isAllowed(accountId, command, args)
+end
+WindrosePlus.API.setRole = function(accountId, role, note)
+    if not Permissions then return false, "Permissions module not loaded" end
+    return Permissions.setRole(accountId, role, note, nil)
+end
+WindrosePlus.API.setCommandRole = function(rule, role)
+    if not Permissions then return false, "Permissions module not loaded" end
+    return Permissions.setCommandRole(rule, role, nil)
+end
+-- A mod's defaults for its own commands: added only when the rule does not exist yet
+WindrosePlus.API.setDefaultCommandRole = function(rule, role)
+    return Permissions ~= nil and Permissions.setDefault(rule, role)
+end
+WindrosePlus.API.listPermissions = function()
+    return Permissions and Permissions.list() or { accounts = {}, commands = {}, unassigned = {}, stale = {} }
+end
+-- fn(nameOrId) -> AccountId: lets wp.perms accept online player names (a mod that can look players up sets it)
+WindrosePlus.API.setAccountResolver = function(fn)
+    if Permissions then Permissions.setAccountResolver(fn) end
+end
+
+-- Describe the subcommands of an existing command (e.g. a built-in one) for wp.help, commands.json and in-game
+-- consoles, without replacing its handler: subs = { { name, usage, description }, ... }. Returns true or false, reason.
+WindrosePlus.API.setSubcommands = function(name, subs)
+    if not Admin then return false, "Admin module not loaded" end
+    return Admin.setSubcommands(name, subs)
 end
 
 -- Tick callback registration for mods
@@ -547,6 +663,15 @@ WindrosePlus.API.registerHookWhenAvailable = function(path, preHook, postHook, o
     return handle
 end
 
+-- Event subscriptions (modules/eventbus.lua): add-ons call API.on("ship.captain", fn) etc.
+WindrosePlus.API.on = EventBus.on
+WindrosePlus.API.once = EventBus.once
+WindrosePlus.API.emit = function(ev, payload) EventBus.emit(ev, payload, "lua") end
+WindrosePlus.API.listEvents = EventBus.list
+WindrosePlus.API.registerEventSource = EventBus.registerSource
+-- Before the add-ons load: they register their sources while loading
+EventBus.configure((Config and Config.get("events", "poll_ms")) or 100, WindrosePlus.API.isIdle)
+
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
 local _playerLeaveCallbacks = {}
@@ -572,6 +697,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerJoinCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.join", player)
         end
     end
 
@@ -581,6 +707,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerLeaveCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.leave", player)
         end
     end
 
