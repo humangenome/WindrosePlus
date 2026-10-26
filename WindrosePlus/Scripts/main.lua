@@ -21,6 +21,7 @@ WindrosePlus = {
 
 local Log = require("modules.log")
 local Events = require("modules.events")
+local EventBus = require("modules.eventbus")
 
 print("[Windrose+] v" .. WindrosePlus.VERSION .. " loaded\n")
 
@@ -453,6 +454,24 @@ WindrosePlus.API.isIdle = function()
     return WindrosePlus.isIdle()
 end
 
+-- Deferred answers for mod commands: a handler that has to wait (e.g. for a game-thread task of a native mod) returns
+-- { deferred = token [, timeout = seconds] [, timeout_message = text] } and answers later with
+-- API.completeDeferred(token, ok, message). Tokens are strings; prefix them with the mod name to keep them unique.
+-- Only RCON (dashboard, spool clients) can wait; check API.deferredSupported() first and answer directly otherwise.
+if Rcon and Admin then Admin.deferredSupported = true end
+WindrosePlus.API.deferredSupported = function()
+    return Admin ~= nil and Admin.deferredSupported == true
+end
+WindrosePlus.API.deferredMaxSeconds = function()
+    return Rcon and Rcon._deferredMaxSec or 0
+end
+WindrosePlus.API.completeDeferred = function(token, ok, message)
+    if Rcon and Rcon.completeDeferred then
+        return Rcon.completeDeferred(tostring(token), ok, message)
+    end
+    return false
+end
+
 -- Command registration for mods
 WindrosePlus.API.registerCommand = function(name, handler, description, usage)
     if Admin then
@@ -553,6 +572,15 @@ WindrosePlus.API.registerHookWhenAvailable = function(path, preHook, postHook, o
     return handle
 end
 
+-- Event subscriptions (modules/eventbus.lua): add-ons call API.on("ship.captain", fn) etc.
+WindrosePlus.API.on = EventBus.on
+WindrosePlus.API.once = EventBus.once
+WindrosePlus.API.emit = function(ev, payload) EventBus.emit(ev, payload, "lua") end
+WindrosePlus.API.listEvents = EventBus.list
+WindrosePlus.API.registerEventSource = EventBus.registerSource
+-- Before the add-ons load: they register their sources while loading
+EventBus.configure((Config and Config.get("events", "poll_ms")) or 100, WindrosePlus.API.isIdle)
+
 -- Player join/leave event callbacks
 local _playerJoinCallbacks = {}
 local _playerLeaveCallbacks = {}
@@ -578,6 +606,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerJoinCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.join", player)
         end
     end
 
@@ -587,6 +616,7 @@ local function firePlayerEvents(currentPlayers)
             for _, cb in ipairs(_playerLeaveCallbacks) do
                 pcall(cb, player)
             end
+            EventBus.emit("player.leave", player)
         end
     end
 
