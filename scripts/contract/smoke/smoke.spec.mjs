@@ -79,3 +79,30 @@ for (let round = 1; round <= ROUNDS; round++) {
     }
   }
 }
+
+// The Items panel names stats in player words: by the label the catalog builder writes, and by the same rules for a
+// catalog built before labels (item 1 carries only the game's code names).
+test('items panel: readable stat names', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await logIn(context, baseURL);
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/livemap?embed=1', { waitUntil: 'load' });
+  await expect(page.locator('#map.leaflet-container')).toBeVisible({ timeout: 20000 });
+  const detail = page.locator('#wpitems-detail');
+  await page.evaluate(() => window.WindroseItems.open('Contract_Item_1'));
+  await expect(detail).toContainText('Ship range', { timeout: 20000 });
+  await expect(detail).toContainText('Ability cooldown');
+  await expect(detail).toContainText('2 min');
+  await expect(detail).not.toContainText('ShipFireRangeRANK');
+  await expect(detail).not.toContainText('Cutlass_Contract_AbilityCooldown');
+  await page.evaluate(() => window.WindroseItems.open('Contract_Item_2'));
+  await expect(detail).toContainText('Attack power', { timeout: 20000 });
+  await expect(detail).toContainText('Critical chance');
+  await expect(detail).toContainText('15%');
+  fs.mkdirSync('test-results/shots', { recursive: true });
+  await page.screenshot({ path: 'test-results/shots/items-panel-1440.png' });
+  expect(errors, 'script errors').toEqual([]);
+  await context.close();
+});
