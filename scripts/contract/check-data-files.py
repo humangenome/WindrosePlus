@@ -8,6 +8,7 @@ use), plus the counts a JSON Schema cannot express, and fails if any schema went
 
 Run: python3 scripts/contract/check-data-files.py <folder> [<folder> ...]
      python3 scripts/contract/check-data-files.py --self-test <samples folder>
+     python3 scripts/contract/check-data-files.py --partial <folder>   (some schemas may go unused, e.g. saved route answers)
 Needs: pip install jsonschema
 """
 import json
@@ -33,9 +34,10 @@ RULES = [
     (r"^rcon_status(\..+)?\.json$", "rcon_status.schema.json"),
     (r"^(activity(\..+)?|[0-9]{4}-[0-9]{2}-[0-9]{2})\.log$", "activity_log_line.schema.json"),
     (r"^windrose_plus(\..+)?\.json$", "windrose_plus_config.schema.json"),
+    (r"^map_coords(\..+)?\.json$", "map_coords.schema.json"),
 ]
 # files in a fixture game folder this check does not cover (built by PowerShell tools or the game itself)
-NOT_COVERED = re.compile(r"^(map_coords\.json|map_generation_status\.json|terrain_v17\.json|.+\.png|.+\.ini|.+\.txt|"
+NOT_COVERED = re.compile(r"^(map_generation_status\.json|terrain_v17\.json|.+\.png|.+\.ini|.+\.txt|"
                          r"[A-Za-z0-9_]+\.json\.tmp|dashboard_session\.key|items_full\.json|item_usage\.json|_summary\.json|"
                          r"build\.log|\.gitkeep)$")
 
@@ -153,6 +155,9 @@ def main(folders):
         return 2
     if folders[0] == "--self-test":
         return self_test(folders[1])
+    partial = folders[0] == "--partial"
+    if partial:
+        folders = folders[1:]
     validators = load_schemas()
     used = set()
     failed = 0
@@ -179,7 +184,7 @@ def main(folders):
                         print("       " + p)
                 else:
                     print("ok   %s (%s)" % (rel, schema_name))
-    for name in sorted(set(validators) - used):
+    for name in ([] if partial else sorted(set(validators) - used)):
         print("FAIL schema %s checked no file: a schema nothing is checked against stops meaning anything" % name)
         failed += 1
     print("%d file(s) checked, %d problem(s)" % (checked, failed))
