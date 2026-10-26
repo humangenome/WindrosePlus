@@ -4,7 +4,7 @@
   "world_max_x": 409600,
   "world_max_y": 409600,
   "tile_size": 256,
-  "max_zoom": 0,
+  "max_zoom": 2,
   "orientation": "game",
   "tileset_id": "20261026T120000Z",
   "total_components": 2,
