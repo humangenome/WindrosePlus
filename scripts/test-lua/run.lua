@@ -277,6 +277,26 @@ case("rcon: a timed-out deferred command gets its activity record", function()
 end)
 Events.record = realRecord
 
+-- ---------------------------------------------------------------- config reload hook
+case("config: listeners run after a changed file that parsed, not after a broken one", function()
+    local Config = require("modules.config")
+    local cfgDir = tempDir()
+    Config._path = cfgDir .. "\\windrose_plus.json"
+    Config._lastContent, Config._changeListeners = nil, {}
+    writeFile(Config._path, '{"rcon":{"enabled":true}}')
+    Config.reload()
+    local calls = 0
+    Config.onChange(function() calls = calls + 1 end)
+    writeFile(Config._path, '{"rcon":{"enabled":tr')
+    Config.reload()
+    check(calls == 0, "a broken file called the listeners")
+    writeFile(Config._path, '{"rcon":{"enabled":true},"query":{"enabled":true}}')
+    Config.reload()
+    check(calls == 1, "the next good save did not call them (" .. calls .. ")")
+    Config.reload()
+    check(calls == 1, "an unchanged reload called them again")
+end)
+
 -- ---------------------------------------------------------------- subcommands (admin.lua)
 -- Own command table for these cases; the built-in commands registered above are restored afterwards.
 local savedCommands, savedGameDir = Admin._commands, Admin._gameDir
