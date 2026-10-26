@@ -8,6 +8,26 @@ local Events = require("modules.events")
 local Config = {}
 Config._data = nil
 Config._path = nil
+Config._lastContent = nil
+Config._changeListeners = {}  -- fn() called after a reload that read different file content (API.onConfigReload)
+
+--- Registers fn() to run after a reload that changed the config. RCON reloads before every command, so listeners
+-- only run when the file content differs from the last good load (also after wp.reload with an edited file), and only
+-- when the file parsed.
+function Config.onChange(fn)
+    if type(fn) == "function" then table.insert(Config._changeListeners, fn) end
+end
+
+local function notifyChange(content)
+    if content == Config._lastContent then return end
+    local first = Config._lastContent == nil
+    Config._lastContent = content
+    if first then return end
+    for _, fn in ipairs(Config._changeListeners) do
+        local ok, err = pcall(fn)
+        if not ok then Log.warn("Config", "change listener failed: " .. tostring(err)) end
+    end
+end
 
 function Config.init(gameDir)
     Config._path = gameDir .. "\\windrose_plus.json"
@@ -45,6 +65,7 @@ function Config.reload()
             log_level = Config._data.debug and Config._data.debug.log_level,
             byte_size = #content,
         })
+        notifyChange(content)
     else
         Log.error("Config", "Failed to parse config: " .. tostring(data))
         Log.warn("Config", "Using defaults")
