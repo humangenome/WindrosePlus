@@ -107,10 +107,6 @@ sub.cancel()
 API.once("myaddon.ready", function(payload) end)  -- fires once, then unsubscribes
 API.emit("myaddon.ready", { value = 1 })           -- payload: plain table, no UObjects
 local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, sources = {...} }
-
--- A native mod's Lua side: poll(max) returns { {ev = "name", seq = n, ts = unix, <payload fields>}, ... } and the
--- number of events it had to drop since the last poll. The same name again replaces the source.
-API.registerEventSource("MyNativeMod", function(max) return MyNative.Poll(max) end, { version = "1.0" })
 ```
 
 - Handlers run on the async loop, never inside a game hook, one after the other; an error in one handler is logged
@@ -119,6 +115,43 @@ API.registerEventSource("MyNativeMod", function(max) return MyNative.Poll(max) e
   100 ms; every 500 ms while nobody is online); their `meta.source` is `"native"`.
 - Subscriptions are attributed to the add-on that made them (logs, `API.listEvents`). On hot reload the Lua state
   restarts, so add-ons subscribe again from scratch.
+
+#### Event sources
+
+Events that do not start in Lua reach the bus through a source: a function the bus calls from its own loop.
+`API.registerEventSource(name, poll[, { version = "…" }])` registers it; the same name again replaces it. `poll(max)`
+returns a list of at most `max` events and, optionally, the number of events it had to drop since the last call
+(reported as `events.dropped`). Each event is a table with `ev` (the event name), optionally `seq` and `ts` (Unix
+time, default now); all other fields are the payload.
+
+A native mod captures game events in its hooks, queues them, and its Lua side registers a function that hands over
+that queue. The same works in plain Lua, for example for lines another program appends to a file:
+
+```lua
+local INBOX = "windrose_plus_data\\inbox.txt"   -- lines like "announce Storm in ten minutes"
+local offset = 0
+
+API.registerEventSource("inbox", function(max)
+    local f = io.open(INBOX, "rb")
+    if not f then return nil end
+    if f:seek("end") < offset then offset = 0 end   -- the file was emptied: start over
+    f:seek("set", offset)
+    local events = {}
+    while #events < max do
+        local line = f:read("l")
+        if not line then break end
+        local name, text = line:match("^(%S+)%s*(.-)%s*$")
+        if name then events[#events + 1] = { ev = "inbox." .. name, text = text } end
+    end
+    offset = f:seek()
+    f:close()
+    return events, 0
+end, { version = "1.0" })
+
+API.on("inbox.announce", function(payload, meta)
+    API.log("info", "Inbox", payload.text)
+end)
+```
 
 ### Tick Callbacks
 
