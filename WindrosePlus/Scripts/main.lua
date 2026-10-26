@@ -466,23 +466,59 @@ WindrosePlus.API.deferredMaxSeconds = function()
     return Rcon and Rcon._deferredMaxSec or 0
 end
 WindrosePlus.API.completeDeferred = function(token, ok, message)
+    local sToken = tostring(token)
+    local handled = false
     if Rcon and Rcon.completeDeferred then
-        return Rcon.completeDeferred(tostring(token), ok, message)
+        handled = Rcon.completeDeferred(sToken, ok, message)
     end
-    return false
+    -- Other callers of API.executeCommand (e.g. an in-game console add-on) wait for their own tokens here
+    EventBus.emit("command.completed", { token = sToken, ok = ok == true or ok == "ok", message = message }, "core")
+    return handled
 end
 
--- Command registration for mods
-WindrosePlus.API.registerCommand = function(name, handler, description, usage)
+-- Command registration for mods. opts (optional): { hidden = true } keeps the command out of wp.help and
+-- commands.json (wp.help all shows it), { category = "debug" } groups it in wp.help (default "server").
+WindrosePlus.API.registerCommand = function(name, handler, description, usage, opts)
     if Admin then
+        opts = type(opts) == "table" and opts or {}
         Admin._commands[name] = {
             description = description or "",
             usage = usage or name,
-            handler = handler
+            handler = handler,
+            hidden = opts.hidden == true or nil,
+            category = opts.category
         }
         Log.info("API", "Mod command registered: " .. name)
         if Admin.writeCommandsJson then Admin.writeCommandsJson() end
     end
+end
+
+-- All registered commands (built-in and mods): { { name, usage, description, category, hidden }, ... } by name
+WindrosePlus.API.listCommands = function()
+    local out = {}
+    if Admin then
+        for name, cmd in pairs(Admin._commands) do
+            out[#out + 1] = { name = name, usage = cmd.usage or name, description = cmd.description or "",
+                              category = cmd.category or "server", hidden = cmd.hidden == true }
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+-- Run a command like RCON does. args: table or string. Returns status ("ok", "error" or "deferred"), message, opts.
+-- "deferred": message is the token; the answer arrives as event command.completed { token, ok, message }, or
+-- never (then give up after opts.timeout seconds, default 10). Access control is the caller's job.
+WindrosePlus.API.executeCommand = function(command, args)
+    if not Admin then return "error", "Admin module not loaded" end
+    if type(args) == "string" then
+        local list = {}
+        for part in args:gmatch("%S+") do list[#list + 1] = part end
+        args = list
+    end
+    local ok, status, message, opts = pcall(Admin.execute, tostring(command), type(args) == "table" and args or {})
+    if not ok then return "error", tostring(status) end
+    return status, message, opts
 end
 
 -- Tick callback registration for mods
