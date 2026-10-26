@@ -147,6 +147,12 @@ Query._collectAndWrite(); Query.flushPendingWrite()
 collect(data .. "\\server_status.json", "server_status.json")
 LiveMap._collectAndWrite(true, Query.getPlayers()); LiveMap.flushPendingWrite()
 collect(data .. "\\livemap_data.json", "livemap_data.json")
+do
+    local text = readFile(data .. "\\livemap_data.json") or ""
+    if not text:find('"name":"Crab"', 1, true) or not text:find('"name":"Skeleton"', 1, true) or text:find('/Game/', 1, true) then
+        fail("creature names are not the last word of their class (BP_Creature_Crab_C -> Crab, BP_Skeleton_C -> Skeleton)")
+    end
+end
 POIScan._scanAndWrite()
 collect(data .. "\\pois.json", "pois.json")
 collect(data .. "\\poi_discovered_classes.json", "poi_discovered_classes.json")
