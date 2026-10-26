@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/livemap_data.schema.json",
+  "title": "windrose_plus_data/livemap_data.json",
+  "description": "Written by the mod's position writer (modules/livemap.lua). Read by the Sea Chart (/api/livemap) and by host panels directly. Players without a position are left out.",
+  "type": "object",
+  "required": [
+    "players",
+    "mobs",
+    "nodes",
+    "player_count",
+    "mob_count",
+    "node_count",
+    "timestamp"
+  ],
+  "properties": {
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "alive"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The player's name, or 'Player <id>' / 'Player' when the game gave none."
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "player_id": {
+            "type": "integer"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^player:-?[0-9]+$"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "z": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "mobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "z": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "z": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "player_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "mob_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "node_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "integer"
+    },
+    "mode": {
+      "const": "degraded"
+    },
+    "degraded": {
+      "const": true
+    },
+    "degraded_reason": {
+      "type": "string"
+    },
+    "cache_age_sec": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

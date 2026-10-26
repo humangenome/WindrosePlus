@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/poi_discovered_classes.schema.json",
+  "title": "windrose_plus_data/poi_discovered_classes.json",
+  "description": "Written by the POI scanner when it sees a new POI-like class. The dashboard serves no route for it; host panels read it directly.",
+  "type": "object",
+  "required": [
+    "classes",
+    "last_updated"
+  ],
+  "properties": {
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "class",
+          "count"
+        ],
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "last_updated": {
+      "type": "integer"
+    }
+  }
+}

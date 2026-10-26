@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/rcon_response.schema.json",
+  "title": "windrose_plus_data/rcon/res_<id>.json",
+  "description": "The mod's answer to one command file, written next to it (a temp file, then renamed). The writer of the command reads it and removes it.",
+  "type": "object",
+  "required": [
+    "id",
+    "status",
+    "message",
+    "timestamp"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "error"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "integer"
+    }
+  }
+}

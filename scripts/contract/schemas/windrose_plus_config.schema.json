@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/windrose_plus_config.schema.json",
+  "title": "windrose_plus.json (game folder)",
+  "description": "The settings file. Written by install.ps1 or a host panel (a panel may rewrite it on every start), read by the mod and the dashboard server. Every key is optional to the readers; these are the types they accept.",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "object",
+      "properties": {
+        "http_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "game_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "bind_ip": {
+          "type": "string"
+        },
+        "trust_loopback": {
+          "type": "boolean"
+        },
+        "stop_with_game": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rcon": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "password": {
+          "type": "string"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval_ms": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "admin": {
+      "type": "object",
+      "properties": {
+        "steam_ids": {
+          "type": "array"
+        }
+      }
+    },
+    "multipliers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "livemap": {
+      "type": "object",
+      "properties": {
+        "public": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "token": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
