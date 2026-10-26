@@ -1,5 +1,5 @@
 {
-  "about": "What every route in server/routes.json answers, with and without a login, on the made-up game folder in scripts/contract/fixture/game. scripts/Test-RouteContract.ps1 runs it against the real server and fails on a route with no entry here. Placeholders: {password}, {token} (the public map token), {port}, {routes_version}. login: none, cookie (the dashboard session), header (X-RCON-Password). save: the answer is written under that name for scripts/contract/check-data-files.py.",
+  "about": "What every route in server/routes.json answers, with and without a login, on the made-up game folder in scripts/contract/fixture/game. scripts/Test-RouteContract.ps1 runs it against the real server and fails on a route with no entry here. Placeholders: {password}, {token} (the public map token), {port}, {routes_version}. login: none, cookie (the dashboard session), header (X-RCON-Password). values: fields that must have exactly these values. save: the answer is written under that name for scripts/contract/check-data-files.py.",
   "routes": {
     "/login": [
       {
@@ -38,6 +38,15 @@
     "/logout": [
       {
         "request": "GET /logout",
+        "login": "none",
+        "status": 302,
+        "location": "/login",
+        "headers_contain": {
+          "Set-Cookie": "Max-Age=0"
+        }
+      },
+      {
+        "request": "GET /logout",
         "login": "cookie",
         "status": 302,
         "location": "/login",
@@ -59,7 +68,7 @@
           "pak_builder_version",
           "timestamp"
         ],
-        "equals": {
+        "values": {
           "status": "ok",
           "routes_version": "{routes_version}"
         }

@@ -145,6 +145,32 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-TileBuild.ps1
 
+  page-smoke:
+    name: Page smoke test (five widths, twice)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: scripts/contract/smoke
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Playwright
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install chromium
+
+      - name: Dashboard, embedded Sea Chart and public map at 390, 768, 1024, 1440 and 1920 px
+        run: npx playwright test
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: page-smoke-screenshots
+          path: scripts/contract/smoke/test-results
+          retention-days: 14
+
   release-metadata:
     name: Route list, PAK builder version, curve table reader
     runs-on: ubuntu-latest

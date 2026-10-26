@@ -22,6 +22,13 @@ $passed = 0
 function Fail([string]$Msg) { $script:failed++; Write-Host "FAIL $Msg" }
 function Pass([string]$Msg) { $script:passed++; Write-Host "ok   $Msg" }
 
+# a field of a contract check as written in the JSON, or $null (never an object's own member, such as Equals)
+function Get-CheckValue($Check, [string]$Name) {
+    $p = $Check.PSObject.Properties[$Name]
+    if ($p -and $p.MemberType -eq 'NoteProperty') { return $p.Value }
+    return $null
+}
+
 function Get-FreePort {
     $l = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback, 0)
     $l.Start(); $p = $l.LocalEndpoint.Port; $l.Stop(); return $p
@@ -142,57 +149,58 @@ try {
         $route = $routes.routes | Where-Object { $_.path -eq $entry.Name } | Select-Object -First 1
         $sawAnonymous = $false
         foreach ($check in @($entry.Value)) {
-            $parts = ([string]$check.request) -split ' ', 2
+            $parts = ([string](Get-CheckValue $check 'request')) -split ' ', 2
             $method = $parts[0]; $target = & $fill $parts[1]
-            $label = "$($check.request) [$($check.login)]"
-            if ($route -and @($route.methods) -notcontains $method -and -not ($check.status -eq 405)) {
+            $label = "$((Get-CheckValue $check 'request')) [$((Get-CheckValue $check 'login'))]"
+            if ($route -and @($route.methods) -notcontains $method -and -not ((Get-CheckValue $check 'status') -eq 405)) {
                 Fail "$label uses $method, which routes.json does not list for $($entry.Name)"
             }
             $headers = @{}
-            switch ([string]$check.login) {
+            switch ([string](Get-CheckValue $check 'login')) {
                 'cookie' { $headers['Cookie'] = "$cookieName=$cookie" }
                 'header' { $headers['X-RCON-Password'] = $password }
                 default { $sawAnonymous = $true }
             }
-            $body = if ($check.body) { & $fill ([string]$check.body) } else { '' }
-            $r = Invoke-Http $method ($base + $target) $body ([string]$check.content_type) $headers
+            $body = if ((Get-CheckValue $check 'body')) { & $fill ([string](Get-CheckValue $check 'body')) } else { '' }
+            $r = Invoke-Http $method ($base + $target) $body ([string](Get-CheckValue $check 'content_type')) $headers
             $problems = New-Object System.Collections.Generic.List[string]
 
-            $wanted = @($check.status | ForEach-Object { [int]$_ })
+            $wanted = @((Get-CheckValue $check 'status') | ForEach-Object { [int]$_ })
             if ($wanted -notcontains $r.Status) { $problems.Add("status $($r.Status), expected $($wanted -join ' or ')") }
-            if ($check.type -and $r.Status -lt 300) {
-                if ($r.ContentType -notmatch $types[[string]$check.type]) { $problems.Add("content type '$($r.ContentType)', expected $($check.type)") }
+            if ((Get-CheckValue $check 'type') -and $r.Status -lt 300) {
+                if ($r.ContentType -notmatch $types[[string](Get-CheckValue $check 'type')]) { $problems.Add("content type '$($r.ContentType)', expected $((Get-CheckValue $check 'type'))") }
             }
-            if ($check.location) {
+            if ((Get-CheckValue $check 'location')) {
                 $loc = [string]$r.Headers['Location']
-                if ($loc -ne [string]$check.location -and -not $loc.EndsWith([string]$check.location)) { $problems.Add("redirects to '$loc', expected $($check.location)") }
+                if ($loc -ne [string](Get-CheckValue $check 'location') -and -not $loc.EndsWith([string](Get-CheckValue $check 'location'))) { $problems.Add("redirects to '$loc', expected $((Get-CheckValue $check 'location'))") }
             }
-            if ($check.headers_contain) {
-                foreach ($hp in $check.headers_contain.PSObject.Properties) {
+            if ((Get-CheckValue $check 'headers_contain')) {
+                foreach ($hp in (Get-CheckValue $check 'headers_contain').PSObject.Properties) {
                     $want = & $fill ([string]$hp.Value)
                     if (-not ([string]$r.Headers[$hp.Name]).Contains($want)) { $problems.Add("header $($hp.Name) '$($r.Headers[$hp.Name])' lacks '$want'") }
                 }
             }
-            if ($check.no_cookie -and $r.Headers['Set-Cookie']) { $problems.Add("set a cookie: $($r.Headers['Set-Cookie'])") }
-            foreach ($s in @($check.contains)) { if ($s -and -not $r.Body.Contains((& $fill ([string]$s)))) { $problems.Add("body lacks '$s'") } }
-            foreach ($s in @($check.absent)) { if ($s -and $r.Body.Contains((& $fill ([string]$s)))) { $problems.Add("body contains '$s'") } }
-            if ($check.type -eq 'json' -and $r.Status -ne 304) {
+            if ((Get-CheckValue $check 'no_cookie') -and $r.Headers['Set-Cookie']) { $problems.Add("set a cookie: $($r.Headers['Set-Cookie'])") }
+            foreach ($s in @((Get-CheckValue $check 'contains'))) { if ($s -and -not $r.Body.Contains((& $fill ([string]$s)))) { $problems.Add("body lacks '$s'") } }
+            foreach ($s in @((Get-CheckValue $check 'absent'))) { if ($s -and $r.Body.Contains((& $fill ([string]$s)))) { $problems.Add("body contains '$s'") } }
+            if ((Get-CheckValue $check 'type') -eq 'json' -and $r.Status -ne 304) {
                 $doc = $null
                 try { $doc = $r.Body | ConvertFrom-Json } catch { $problems.Add("body is not JSON: $($r.Body.Substring(0, [Math]::Min(120, $r.Body.Length)))") }
                 if ($null -ne $doc) {
-                    if ($check.array -and -not ($r.Body.TrimStart().StartsWith('['))) { $problems.Add("expected a JSON array") }
-                    foreach ($f in @($check.fields)) {
+                    if ((Get-CheckValue $check 'array') -and -not ($r.Body.TrimStart().StartsWith('['))) { $problems.Add("expected a JSON array") }
+                    foreach ($f in @((Get-CheckValue $check 'fields'))) {
                         if ($f -and -not ($doc.PSObject.Properties.Name -contains $f)) { $problems.Add("answer lacks field '$f'") }
                     }
-                    if ($check.equals) {
-                        foreach ($ep in $check.equals.PSObject.Properties) {
+                    # (not named "equals": every object answers .Equals, so a key by that name would never be empty)
+                    if ((Get-CheckValue $check 'values')) {
+                        foreach ($ep in (Get-CheckValue $check 'values').PSObject.Properties) {
                             if ([string]$doc.($ep.Name) -ne (& $fill ([string]$ep.Value))) { $problems.Add("$($ep.Name) is '$($doc.($ep.Name))', expected '$(& $fill ([string]$ep.Value))'") }
                         }
                     }
                 }
             }
-            if ($check.save -and $ResponsesDir -and $r.Status -eq 200) {
-                [System.IO.File]::WriteAllBytes((Join-Path $ResponsesDir ([string]$check.save)), $r.Bytes)
+            if ((Get-CheckValue $check 'save') -and $ResponsesDir -and $r.Status -eq 200) {
+                [System.IO.File]::WriteAllBytes((Join-Path $ResponsesDir ([string](Get-CheckValue $check 'save'))), $r.Bytes)
             }
             if ($problems.Count) { Fail ("$label : " + ($problems -join '; ')) } else { Pass $label }
         }
