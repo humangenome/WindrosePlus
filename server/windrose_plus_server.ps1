@@ -670,18 +670,20 @@ try {
 # is using the dashboard, so the tiles were only built once someone opened it.
 $tileGenTrigger = Join-Path $dataDir "generate_tiles_trigger"
 $tileGenStatus = Join-Path $dataDir "map_generation_status.json"
-# install.ps1 puts the tools in <game>\windrose_plus\tools; hosts that unpack
-# the release zip straight into ue4ss\Mods\WindrosePlus have them next to this
-# script's folder instead.
+# The tools that came with this script come first: the tools folder beside its
+# own folder (install.ps1's <game>\windrose_plus, the release zip unpacked into
+# ue4ss\Mods\WindrosePlus, or a copy a host keeps outside the game folder).
+# The game folder is only looked in when they are missing, so a file placed in
+# the game folder cannot take the place of a tool this script shipped with.
 $tileGenScript = $null
 foreach ($candidate in @(
-    (Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1"),
     (Join-Path $PSScriptRoot "..\tools\generateTiles.ps1"),
+    (Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1"),
     (Join-Path $gameDir "tools\generateTiles.ps1")
 )) {
     if (Test-Path -LiteralPath $candidate) { $tileGenScript = [System.IO.Path]::GetFullPath($candidate); break }
 }
-if (-not $tileGenScript) { $tileGenScript = Join-Path $gameDir "windrose_plus\tools\generateTiles.ps1" }
+if (-not $tileGenScript) { $tileGenScript = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\tools\generateTiles.ps1")) }
 function Write-TileGenStatus($data) {
     try {
         Write-AtomicUtf8Json $tileGenStatus $data
@@ -754,9 +756,10 @@ $catalogDataDir = Join-Path $dataDir "catalog\v1"
 $catalogBuildLog = Join-Path $dataDir "catalog\build.log"
 $script:CatalogBuildProcess = $null
 $catalogBuildScript = $null
+# Same order as the tile builder: the builder that came with this script first.
 foreach ($candidate in @(
-    (Join-Path $gameDir "windrose_plus\tools\WindrosePlus-BuildCatalog.ps1"),
     (Join-Path $PSScriptRoot "..\tools\WindrosePlus-BuildCatalog.ps1"),
+    (Join-Path $gameDir "windrose_plus\tools\WindrosePlus-BuildCatalog.ps1"),
     (Join-Path $gameDir "tools\WindrosePlus-BuildCatalog.ps1")
 )) {
     if (Test-Path -LiteralPath $candidate) { $catalogBuildScript = [System.IO.Path]::GetFullPath($candidate); break }
