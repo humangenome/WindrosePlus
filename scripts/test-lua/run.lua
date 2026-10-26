@@ -244,5 +244,45 @@ case("main: livemap.enabled / poiscan.enabled = false switch the writers off", f
     check(w(nil) == true, "a missing function is not on")
 end)
 
+-- ---------------------------------------------------------------- event bus
+local Bus = require("modules.eventbus")
+local loops = {}
+local realLoopAsync = _G.LoopAsync
+_G.LoopAsync = function(ms, fn) loops[#loops + 1] = { ms = ms, fn = fn } end
+Bus.configure(100, function() return false end)
+
+case("events: API.emit reaches handlers at once, without a source or a poll loop", function()
+    local got
+    local sub = Bus.on("test.ping", function(p, meta) got = { p = p, meta = meta } end)
+    Bus.emit("test.ping", { n = 1 }, "lua")
+    sub.cancel()
+    check(got and got.p.n == 1 and got.meta.source == "lua", "handler not called")
+    check(#loops == 0, "a poll loop started without a source")
+end)
+
+case("events: the first registered source starts the poll loop, once", function()
+    local queue = { { ev = "test.native", seq = 7, ts = 1, value = "x" } }
+    local seen
+    Bus.on("test.native", function(p, meta) seen = { p = p, meta = meta } end)
+    Bus.registerSource("TestSource", function() local q = queue; queue = {}; return q, 0 end, { version = "1.0" })
+    check(#loops == 1 and loops[1].ms == 100, "loop not started at the configured interval")
+    Bus.registerSource("TestSource", function() local q = queue; queue = {}; return q, 0 end)
+    check(#loops == 1, "registering the same name again started a second loop")
+    loops[1].fn()
+    check(seen and seen.p.value == "x" and seen.meta.source == "native" and seen.meta.seq == 7, "event not delivered")
+    check(seen.p.ev == nil and seen.p.seq == nil, "bookkeeping fields left in the payload")
+    local info = Bus.list()
+    check(#info.sources == 1 and info.sources[1].name == "TestSource", "source not listed once")
+end)
+
+case("events: a source's dropped count becomes events.dropped", function()
+    local dropped
+    Bus.on("events.dropped", function(p) dropped = p end)
+    Bus.registerSource("TestSource", function() return {}, 3 end)
+    loops[1].fn()
+    check(dropped and dropped.count == 3 and dropped.source == "TestSource", "events.dropped missing")
+end)
+_G.LoopAsync = realLoopAsync
+
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

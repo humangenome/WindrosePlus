@@ -90,6 +90,69 @@ end)
 
 Player events fire when the player list changes between tick polls. Join fires for new names; leave fires for names that disappeared. Multiple callbacks can be registered.
 
+#### Event bus
+
+`API.on` subscribes to any named event; `API.emit` publishes one. `player.join` and `player.leave` are emitted on the
+bus too (same payload as above). Add-ons can define their own events. An optional native (C++) mod can deliver game
+events from native hooks through the same bus: its Lua side registers a poll function with
+`API.registerEventSource`, and the bus drains it on its own loop. That loop only starts once a source is registered,
+so without one only Lua events exist and nothing extra runs.
+
+```lua
+local sub = API.on("player.join", function(payload, meta)
+    -- meta = { ev = "player.join", ts_unix = ..., seq = ..., source = "lua" | "native" }
+end, { key = "greeting" })  -- optional: re-subscribing with the same key replaces the old handler
+sub.cancel()
+
+API.once("myaddon.ready", function(payload) end)  -- fires once, then unsubscribes
+API.emit("myaddon.ready", { value = 1 })           -- payload: plain table, no UObjects
+local info = API.listEvents()                      -- { events = { name -> owners }, stats = {...}, sources = {...} }
+```
+
+- Handlers run on the async loop, never inside a game hook, one after the other; an error in one handler is logged
+  and does not affect the others. A handler that fails 10 times in a row is disabled.
+- `API.emit` calls the handlers right away. Events from a source arrive with the next poll (`events.poll_ms`, default
+  100 ms; every 500 ms while nobody is online); their `meta.source` is `"native"`.
+- Subscriptions are attributed to the add-on that made them (logs, `API.listEvents`). On hot reload the Lua state
+  restarts, so add-ons subscribe again from scratch.
+
+#### Event sources
+
+Events that do not start in Lua reach the bus through a source: a function the bus calls from its own loop.
+`API.registerEventSource(name, poll[, { version = "…" }])` registers it; the same name again replaces it. `poll(max)`
+returns a list of at most `max` events and, optionally, the number of events it had to drop since the last call
+(reported as `events.dropped`). Each event is a table with `ev` (the event name), optionally `seq` and `ts` (Unix
+time, default now); all other fields are the payload.
+
+A native mod captures game events in its hooks, queues them, and its Lua side registers a function that hands over
+that queue. The same works in plain Lua, for example for lines another program appends to a file:
+
+```lua
+local INBOX = "windrose_plus_data\\inbox.txt"   -- lines like "announce Storm in ten minutes"
+local offset = 0
+
+API.registerEventSource("inbox", function(max)
+    local f = io.open(INBOX, "rb")
+    if not f then return nil end
+    if f:seek("end") < offset then offset = 0 end   -- the file was emptied: start over
+    f:seek("set", offset)
+    local events = {}
+    while #events < max do
+        local line = f:read("l")
+        if not line then break end
+        local name, text = line:match("^(%S+)%s*(.-)%s*$")
+        if name then events[#events + 1] = { ev = "inbox." .. name, text = text } end
+    end
+    offset = f:seek()
+    f:close()
+    return events, 0
+end, { version = "1.0" })
+
+API.on("inbox.announce", function(payload, meta)
+    API.log("info", "Inbox", payload.text)
+end)
+```
+
 ### Tick Callbacks
 
 ```lua
