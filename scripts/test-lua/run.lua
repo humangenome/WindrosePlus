@@ -438,5 +438,75 @@ case("events: a source's dropped count becomes events.dropped", function()
 end)
 _G.LoopAsync = realLoopAsync
 
+-- ---------------------------------------------------------------- terrain guard (modules/terrain.lua)
+-- The HeightmapExporter rewrites terrain_v17.json on every export; one taken in the lobby
+-- (no world loaded) is 74 bytes with no landscape pieces. A test server lost its good
+-- terrain to one on 2026-10-12. The samples are the contract's own (scripts/contract/samples).
+local Terrain = require("modules.terrain")
+local function readFile(path)
+    local f = io.open(path, "rb"); if not f then return nil end
+    local t = f:read("a"); f:close(); return t
+end
+local GOOD_TERRAIN = assert(readFile("scripts/contract/samples/terrain_v17.json"))
+local EMPTY_TERRAIN = assert(readFile("scripts/contract/samples/terrain_v17.empty.json"))
+local GOOD_TERRAIN_2 = GOOD_TERRAIN:gsub('"maxZ":3120.25', '"maxZ":3333.5')
+
+case("terrain: the lobby export counts as no terrain, a real export counts", function()
+    check(#EMPTY_TERRAIN < 200 and not Terrain.textLooksValid(EMPTY_TERRAIN), "the empty export counted as terrain")
+    check(Terrain.textLooksValid(GOOD_TERRAIN), "a real export did not count")
+    check(not Terrain.looksValid(tempDir() .. "\\nothing.json"), "a missing file counted")
+end)
+
+case("terrain: an empty export never replaces a good terrain file", function()
+    local dir = tempDir()
+    writeFile(Terrain.path(dir), GOOD_TERRAIN)
+    check(Terrain.keepGood(dir), "no good copy kept before the export")
+    writeFile(Terrain.path(dir), EMPTY_TERRAIN)            -- the exporter, in the lobby
+    check(Terrain.restoreGood(dir), "the good terrain was not put back")
+    check(readFile(Terrain.path(dir)) == GOOD_TERRAIN, "the terrain file is not the good one")
+    check(readFile(Terrain.path(dir) .. ".tmp") == nil, "a .tmp file was left")
+end)
+
+case("terrain: an empty export never becomes the good copy", function()
+    local dir = tempDir()
+    writeFile(Terrain.path(dir), GOOD_TERRAIN)
+    Terrain.keepGood(dir)
+    writeFile(Terrain.path(dir), EMPTY_TERRAIN)
+    check(Terrain.keepGood(dir), "keepGood forgot the good copy")
+    check(readFile(Terrain.goodPath(dir)) == GOOD_TERRAIN, "the empty export was kept as the good copy")
+end)
+
+case("terrain: a new real export becomes the good copy and is left alone", function()
+    local dir = tempDir()
+    writeFile(Terrain.path(dir), GOOD_TERRAIN)
+    Terrain.keepGood(dir)
+    writeFile(Terrain.path(dir), GOOD_TERRAIN_2)
+    check(not Terrain.restoreGood(dir), "a real export was replaced")
+    check(readFile(Terrain.path(dir)) == GOOD_TERRAIN_2, "the new export was changed")
+    Terrain.keepGood(dir)
+    check(readFile(Terrain.goodPath(dir)) == GOOD_TERRAIN_2, "the good copy is still the old export")
+end)
+
+case("terrain: with no good copy an empty export stays until the next player's export", function()
+    local dir = tempDir()
+    writeFile(Terrain.path(dir), EMPTY_TERRAIN)
+    check(not Terrain.keepGood(dir), "a good copy appeared from nothing")
+    check(not Terrain.restoreGood(dir), "restoreGood claimed a restore")
+    check(readFile(Terrain.path(dir)) == EMPTY_TERRAIN, "the file was changed")
+end)
+
+case("terrain: main.lua keeps the good copy before every export and puts it back after an empty one", function()
+    local src = assert(readFile("WindrosePlus/Scripts/main.lua"))
+    local fn = src:match("local function requestTerrainExport%(reason%)(.-)\nend\n")
+    check(fn, "requestTerrainExport not found")
+    local keep, done = fn:find("Terrain.keepGood%(dir%)"), fn:find("export_heightmap_done")
+    check(keep and done and keep < done, "keepGood does not run before the old export is cleared")
+    check(fn:find('reason == "world%-changed"') and fn:find("os.remove%(Terrain.goodPath%(dir%)%)"), "a world change keeps the old world's terrain as the good copy")
+    local gen = src:match("local function checkAndTriggerTileGen%(%)(.-)\nend\n")
+    check(gen and select(2, gen:gsub("Terrain.restoreGood%(dir%)", "")) == 2, "restoreGood is not called after an export and at boot")
+    check(src:find('os.remove%(mapDataDir%(%) .. "\\\\export_heightmap_trigger"%)'), "a trigger left from before a restart is not removed at load")
+    check(not src:find('raw:find%(\'"h":1\''), "main.lua still has its own copy of the terrain check")
+end)
+
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

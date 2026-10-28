@@ -226,6 +226,13 @@ local function mapDataDir()
     return gameDir .. "windrose_plus_data"
 end
 
+local Terrain = require("modules.terrain")
+
+-- An export is only ever asked for while a player is online, in this session. A trigger
+-- left from before a restart would make the HeightmapExporter export the lobby map at
+-- boot, before any player, so it goes.
+os.remove(mapDataDir() .. "\\export_heightmap_trigger")
+
 local function fileExists(path)
     local f = io.open(path, "r")
     if f then f:close(); return true end
@@ -252,13 +259,9 @@ end
 
 -- An export taken while the server sits in its lobby map (no player online yet)
 -- has no landscape components, so treat a terrain file without a single
--- heightfield as missing.
+-- heightfield as missing (modules/terrain.lua).
 local function terrainLooksValid(path)
-    local f = io.open(path, "r")
-    if not f then return false end
-    local raw = f:read("*a")
-    f:close()
-    return raw ~= nil and #raw > 200 and raw:find('"h":1', 1, true) ~= nil
+    return Terrain.looksValid(path)
 end
 
 local function currentWorldId()
@@ -275,6 +278,14 @@ local _pendingTileGenAfterExport = false
 
 local function requestTerrainExport(reason)
     local dir = mapDataDir()
+    -- Keep the current terrain if it is good: an export that comes back empty is
+    -- replaced by it (checkAndTriggerTileGen). Not when the world changed: the old
+    -- world's islands are not a good copy for the new one.
+    if reason == "world-changed" then
+        os.remove(Terrain.goodPath(dir))
+    else
+        Terrain.keepGood(dir)
+    end
     -- Clear the old completion marker so the watcher waits for this export.
     os.remove(dir .. "\\export_heightmap_done")
     if not writeSmallFile(dir .. "\\export_heightmap_trigger", reason or "export") then
@@ -398,9 +409,14 @@ local function checkAndTriggerTileGen()
         _pendingTileGenAfterExport = false
         _initialTileCheckDone = true
         if not terrainLooksValid(dir .. "\\terrain_v17.json") then
-            Log.warn("Core", "Heightmap export finished with no terrain (world not loaded yet?); Sea Chart tiles left as they were")
+            if Terrain.restoreGood(dir) then
+                Log.warn("Core", "Heightmap export came back empty (world not loaded yet?); the previous terrain was put back and the Sea Chart tiles left as they were")
+            else
+                Log.warn("Core", "Heightmap export finished with no terrain (world not loaded yet?); Sea Chart tiles left as they were")
+            end
             return
         end
+        Terrain.keepGood(dir)
         local ok, err = requestTileGeneration()
         if ok then
             Log.info("Core", "Heightmap export complete; tile generation requested")
@@ -412,6 +428,13 @@ local function checkAndTriggerTileGen()
 
     if _initialTileCheckDone then return end
     _initialTileCheckDone = true
+    -- An empty export written before this boot's Lua loaded (a trigger consumed in the
+    -- lobby) is replaced by the good copy too.
+    if terrainLooksValid(dir .. "\\terrain_v17.json") then
+        Terrain.keepGood(dir)
+    elseif Terrain.restoreGood(dir) then
+        Log.warn("Core", "The terrain file was an empty export; the previous terrain was put back")
+    end
     if fileExists(dir .. "\\map_coords.json") then return end
     if not terrainLooksValid(dir .. "\\terrain_v17.json") then return end
     local ok, err = requestTileGeneration()
