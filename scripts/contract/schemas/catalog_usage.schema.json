@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/catalog_usage.schema.json",
+  "title": "windrose_plus_data/catalog/v1/item_usage.json",
+  "description": "Written by tools/WindrosePlus-BuildCatalog.ps1 next to items_full.json: for each item id, the recipes that make or use it, trader offers and building costs. The Sea Chart reads byItemId (an empty object when there are none).",
+  "type": "object",
+  "required": [
+    "meta",
+    "byItemId"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "itemCount",
+        "itemsWithUsage",
+        "recipeCount",
+        "generatedAt"
+      ],
+      "properties": {
+        "generatedFrom": {
+          "type": "string"
+        },
+        "itemCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "itemsWithUsage": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recipeCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "traderOfferCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "buildingCostCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "researchUnlockCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "byItemId": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "craftedBy",
+          "crafts",
+          "vendorTrades",
+          "construction"
+        ],
+        "properties": {
+          "craftedBy": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "crafts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "vendorTrades": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "construction": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

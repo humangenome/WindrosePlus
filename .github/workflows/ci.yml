@@ -85,11 +85,14 @@ jobs:
       - name: Write samples with the mod's own writers
         run: lua5.4 scripts/test-lua/contract.lua "$RUNNER_TEMP/contract-samples"
 
-      - name: Check the samples and the dashboard tests' game folder against the schemas
-        run: python3 scripts/contract/check-data-files.py "$RUNNER_TEMP/contract-samples" scripts/contract/fixture/game
+      - name: Check the samples, the hand-written samples and the dashboard tests' game folder against the schemas
+        run: python3 scripts/contract/check-data-files.py "$RUNNER_TEMP/contract-samples" scripts/contract/samples scripts/contract/fixture/game
 
       - name: Check that the schemas catch a broken file
-        run: python3 scripts/contract/check-data-files.py --self-test "$RUNNER_TEMP/contract-samples"
+        run: |
+          python3 scripts/contract/check-data-files.py --self-test "$RUNNER_TEMP/contract-samples"
+          python3 scripts/contract/check-data-files.py --self-test scripts/contract/samples
+          python3 scripts/contract/check-data-files.py --self-test scripts/contract/fixture/game/windrose_plus_data/catalog/v1
 
   windrose-heal-tests:
     name: windrose-heal tests

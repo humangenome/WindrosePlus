@@ -35,10 +35,15 @@ RULES = [
     (r"^(activity(\..+)?|[0-9]{4}-[0-9]{2}-[0-9]{2})\.log$", "activity_log_line.schema.json"),
     (r"^windrose_plus(\..+)?\.json$", "windrose_plus_config.schema.json"),
     (r"^map_coords(\..+)?\.json$", "map_coords.schema.json"),
+    (r"^map_generation_status(\..+)?\.json$", "map_generation_status.schema.json"),
+    (r"^terrain_v17(\..+)?\.json$", "terrain.schema.json"),
+    (r"^items_full(\..+)?\.json$", "catalog_items.schema.json"),
+    (r"^item_usage(\..+)?\.json$", "catalog_usage.schema.json"),
+    (r"^_summary(\..+)?\.json$", "catalog_summary.schema.json"),
 ]
 # files in a fixture game folder this check does not cover (built by PowerShell tools or the game itself)
-NOT_COVERED = re.compile(r"^(map_generation_status\.json|terrain_v17\.json|.+\.png|.+\.ini|.+\.txt|"
-                         r"[A-Za-z0-9_]+\.json\.tmp|dashboard_session\.key|items_full\.json|item_usage\.json|_summary\.json|"
+NOT_COVERED = re.compile(r"^(.+\.png|.+\.webp|.+\.ini|.+\.txt|.+\.md|"
+                         r"[A-Za-z0-9_]+\.json\.tmp|dashboard_session\.key|"
                          r"build\.log|\.gitkeep)$")
 
 
@@ -74,6 +79,18 @@ def extra_checks(schema_name, doc):
     elif schema_name == "pois.schema.json":
         if doc["total_pois"] != len(doc["pois"]):
             problems.append("total_pois %d but %d pois" % (doc["total_pois"], len(doc["pois"])))
+    elif schema_name == "terrain.schema.json":
+        for n, c in enumerate(doc["components"]):
+            if c["l"] >= len(doc["landscapes"]):
+                problems.append("component %d names landscape %d of %d" % (n, c["l"], len(doc["landscapes"])))
+                break
+    elif schema_name == "catalog_usage.schema.json":
+        if doc["meta"]["itemsWithUsage"] != len(doc["byItemId"]):
+            problems.append("itemsWithUsage %d but %d items in byItemId" % (doc["meta"]["itemsWithUsage"], len(doc["byItemId"])))
+    elif schema_name == "catalog_items.schema.json":
+        ids = [i["id"] for i in doc]
+        if len(ids) != len(set(ids)):
+            problems.append("an item id is listed twice")
     return problems
 
 
