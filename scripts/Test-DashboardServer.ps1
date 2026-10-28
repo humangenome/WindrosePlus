@@ -1,14 +1,24 @@
 # Live tests for the dashboard server (server/windrose_plus_server.ps1): login,
-# session cookie, request limits, file caching, background tile builds and the
-# public map info. Starts two copies of the real server on 127.0.0.1, each with
-# its own throwaway game folder, and talks to them over HTTP.
+# session cookie, request limits, file caching, background tile builds, which
+# tile builder runs, and the public map info. Starts two copies of the real
+# server on 127.0.0.1, each with its own throwaway game folder, and talks to
+# them over HTTP.
 # Windows only (the request limits use the Windows HTTP stack).
 # Run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-DashboardServer.ps1   (Windows PowerShell 5.1)
 #      pwsh -File scripts/Test-DashboardServer.ps1
 param([string]$Shell = "")
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$serverScript = Join-Path $root 'server\windrose_plus_server.ps1'
+# The server runs from a copy of server\ beside its own tools\ folder, outside the
+# game folders, the way a host runs it under a separate login. The copy's
+# tools\generateTiles.ps1 is a stand-in that takes 6 seconds.
+$app = Join-Path ([System.IO.Path]::GetTempPath()) ("wp-app-test-" + [guid]::NewGuid().ToString('N'))
+Copy-Item -LiteralPath (Join-Path $root 'server') -Destination (Join-Path $app 'server') -Recurse
+New-Item -ItemType Directory -Path (Join-Path $app 'tools') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'tools\lib') -Destination (Join-Path $app 'tools\lib') -Recurse
+Copy-Item -LiteralPath (Join-Path $root 'tools\PAK_BUILDER_VERSION') -Destination (Join-Path $app 'tools\PAK_BUILDER_VERSION')
+[System.IO.File]::WriteAllText((Join-Path $app 'tools\generateTiles.ps1'), "param([string]`$GameDir)`nStart-Sleep -Seconds 6`nWrite-Host 'stand-in build done'`n")
+$serverScript = Join-Path $app 'server\windrose_plus_server.ps1'
 $exe = if ($Shell) { $Shell } else { (Get-Process -Id $PID).Path }
 $password = 'Test-Pass-1234'
 
@@ -30,14 +40,17 @@ function New-GameDir([int]$Port, [switch]$PublicMap) {
     $public = if ($PublicMap) { ',"livemap":{"public":{"enabled":true}}' } else { '' }
     $cfg = '{"server":{"http_port":' + $Port + ',"bind_ip":"127.0.0.1"},"rcon":{"enabled":true,"password":"' + $password + '"},"catalog":{"build":false}' + $public + '}'
     [System.IO.File]::WriteAllText((Join-Path $dir 'windrose_plus.json'), $cfg)
-    # A map tile, a stand-in tile builder that takes 6 seconds, and a build status
-    # with the fields the public map must not show.
+    # A map tile, a tile builder planted in the game folder that must never run
+    # (the server's own tools come first), and a build status with the fields
+    # the public map must not show.
     $data = Join-Path $dir 'windrose_plus_data'
     New-Item -ItemType Directory -Path (Join-Path $data 'map_tiles\0') -Force | Out-Null
     [System.IO.File]::WriteAllBytes((Join-Path $data 'map_tiles\0\0-0.png'), [byte[]](137, 80, 78, 71, 1, 2, 3))
-    $tools = Join-Path $dir 'windrose_plus\tools'
-    New-Item -ItemType Directory -Path $tools -Force | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $tools 'generateTiles.ps1'), "param([string]`$GameDir)`nStart-Sleep -Seconds 6`nWrite-Host 'stand-in build done'`n")
+    foreach ($planted in @('windrose_plus\tools', 'tools')) {
+        $tools = Join-Path $dir $planted
+        New-Item -ItemType Directory -Path $tools -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $tools 'generateTiles.ps1'), "param([string]`$GameDir)`n[System.IO.File]::WriteAllText((Join-Path `$GameDir 'planted-ran.txt'), 'ran')`nWrite-Host 'planted build done'`n")
+    }
     [System.IO.File]::WriteAllText((Join-Path $data 'map_generation_status.json'), '{"state":"error","ts":1,"script":"C:\\secret\\path\\generateTiles.ps1","error":"boom at C:\\secret","output":"tool output"}')
     return $dir
 }
@@ -297,6 +310,10 @@ try {
         $st = (Read-Shared $statusPath)
         Assert ($st -match '"complete"' -and $st -match 'stand-in build done') "status: $st"
     }
+    Case 'the tile builder that came with the server runs, never one placed in the game folder' {
+        Assert (-not (Test-Path -LiteralPath (Join-Path $dirA 'planted-ran.txt'))) 'the tile builder planted in the game folder ran'
+        Assert (-not ((Read-Shared (Join-Path $dirA 'windrose_plus_data\map_generation_status.json')) -match 'planted build')) 'the build status names the planted builder'
+    }
     Case 'the console audit feed lists the commands from the activity log' {
         $logDir = Join-Path $dirA 'windrose_plus_data\logs'
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -365,6 +382,7 @@ try {
         }
         try { Remove-Item -LiteralPath $d.Dir -Recurse -Force } catch {}
     }
+    try { Remove-Item -LiteralPath $app -Recurse -Force } catch {}
 }
 
 if ($failed) { Write-Host "$failed test(s) failed"; exit 1 }
