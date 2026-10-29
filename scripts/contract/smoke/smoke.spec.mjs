@@ -79,3 +79,47 @@ for (let round = 1; round <= ROUNDS; round++) {
     }
   }
 }
+
+// Every stat key in a real catalog (scripts/contract/stat-labels.json) gets its listed label from the page's own
+// rules too (readableStatName, used for catalogs built before the builder wrote labels). No browser needed.
+test('items panel: every stat key in a real catalog gets its listed label', async () => {
+  const repo = new URL('../../../', import.meta.url);
+  const html = fs.readFileSync(new URL('server/web/livemap/index.html', repo), 'utf8');
+  const start = html.indexOf('var STAT_NAMES'), end = html.indexOf('function formatStatEntry');
+  expect(start, 'STAT_NAMES found').toBeGreaterThan(0);
+  expect(end, 'formatStatEntry found').toBeGreaterThan(start);
+  const mod = { exports: null };
+  new Function('module', html.slice(start, end) + '\nmodule.exports = readableStatName;')(mod);
+  const list = JSON.parse(fs.readFileSync(new URL('scripts/contract/stat-labels.json', repo), 'utf8'));
+  expect(list.keys.length).toBeGreaterThan(250);
+  const wrong = list.keys.filter((k) => mod.exports(k.stat, k.row) !== k.label)
+    .map((k) => `${k.stat} ${k.row} -> ${mod.exports(k.stat, k.row)} (listed ${k.label})`);
+  expect(wrong).toEqual([]);
+});
+
+// The Items panel names stats in player words: by the label the catalog builder writes, and by the same rules for a
+// catalog built before labels (item 1 carries only the game's code names).
+test('items panel: readable stat names', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await logIn(context, baseURL);
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/livemap?embed=1', { waitUntil: 'load' });
+  await expect(page.locator('#map.leaflet-container')).toBeVisible({ timeout: 20000 });
+  const detail = page.locator('#wpitems-detail');
+  await page.evaluate(() => window.WindroseItems.open('Contract_Item_1'));
+  await expect(detail).toContainText('Ship range', { timeout: 20000 });
+  await expect(detail).toContainText('Ability cooldown');
+  await expect(detail).toContainText('2 min');
+  await expect(detail).not.toContainText('ShipFireRangeRANK');
+  await expect(detail).not.toContainText('Cutlass_Contract_AbilityCooldown');
+  await page.evaluate(() => window.WindroseItems.open('Contract_Item_2'));
+  await expect(detail).toContainText('Attack power', { timeout: 20000 });
+  await expect(detail).toContainText('Critical chance');
+  await expect(detail).toContainText('15%');
+  fs.mkdirSync('test-results/shots', { recursive: true });
+  await page.screenshot({ path: 'test-results/shots/items-panel-1440.png' });
+  expect(errors, 'script errors').toEqual([]);
+  await context.close();
+});

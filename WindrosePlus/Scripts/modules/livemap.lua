@@ -134,12 +134,11 @@ function LiveMap._collectAndWrite(collectEntities, prefetchedPlayers)
                     if not fn:find("R5Character") and not fn:find("PlayerController") then
                         local m = {}
                         pcall(function()
-                            local parts = fn:match("BP_[^_]+_([^_]+)")
-                            if parts then
-                                m.name = parts
-                            else
-                                m.name = fn:match("BP_([^_]+)") or "Mob"
-                            end
+                            -- The last word of the class name: BP_Creature_Crab_C -> Crab, BP_Skeleton_C -> Skeleton.
+                            -- Up to v1.3.25 a one-word class took the rest of the object path as its name
+                            -- ("C /Game/Maps/...").
+                            local cls = (fn:match("^([%w_]+)") or ""):gsub("^BP_", ""):gsub("_C$", "")
+                            m.name = cls:match("([^_]+)$") or "Mob"
                         end)
                         -- K2_GetActorLocation() walks attachment hierarchy and returns
                         -- true world coords; ReplicatedMovement.Location reads (0,0,0)

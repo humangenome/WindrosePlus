@@ -209,6 +209,10 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-IniNumbers.ps1
 
+      - name: Item catalog stat labels
+        shell: pwsh
+        run: ./scripts/Test-StatLabels.ps1
+
       - name: Dashboard game-watch tests
         shell: pwsh
         run: ./scripts/Test-DashboardGameWatch.ps1
