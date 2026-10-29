@@ -80,6 +80,23 @@ for (let round = 1; round <= ROUNDS; round++) {
   }
 }
 
+// Every stat key in a real catalog (scripts/contract/stat-labels.json) gets its listed label from the page's own
+// rules too (readableStatName, used for catalogs built before the builder wrote labels). No browser needed.
+test('items panel: every stat key in a real catalog gets its listed label', async () => {
+  const repo = new URL('../../../', import.meta.url);
+  const html = fs.readFileSync(new URL('server/web/livemap/index.html', repo), 'utf8');
+  const start = html.indexOf('var STAT_NAMES'), end = html.indexOf('function formatStatEntry');
+  expect(start, 'STAT_NAMES found').toBeGreaterThan(0);
+  expect(end, 'formatStatEntry found').toBeGreaterThan(start);
+  const mod = { exports: null };
+  new Function('module', html.slice(start, end) + '\nmodule.exports = readableStatName;')(mod);
+  const list = JSON.parse(fs.readFileSync(new URL('scripts/contract/stat-labels.json', repo), 'utf8'));
+  expect(list.keys.length).toBeGreaterThan(250);
+  const wrong = list.keys.filter((k) => mod.exports(k.stat, k.row) !== k.label)
+    .map((k) => `${k.stat} ${k.row} -> ${mod.exports(k.stat, k.row)} (listed ${k.label})`);
+  expect(wrong).toEqual([]);
+});
+
 // The Items panel names stats in player words: by the label the catalog builder writes, and by the same rules for a
 // catalog built before labels (item 1 carries only the game's code names).
 test('items panel: readable stat names', async ({ browser, baseURL }) => {

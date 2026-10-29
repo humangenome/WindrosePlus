@@ -40,5 +40,19 @@ foreach ($c in $cases) {
     else { $failed++; Write-Host "FAIL '$($c[0])' '$($c[1])' -> '$got', expected '$($c[2])'" }
     if ($got -match '_' -or $got -cnotmatch '^[A-Z]') { $failed++; Write-Host "FAIL '$got' has an underscore or no capital first letter" }
 }
+# Every stat key in a real catalog, with the label it must get (scripts/contract/stat-labels.json).
+$list = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\contract\stat-labels.json') | ConvertFrom-Json
+$checked = 0
+foreach ($k in $list.keys) {
+    $got = Get-WindroseStatLabel ([string]$k.stat) ([string]$k.row)
+    $checked++
+    if ($got -cne [string]$k.label) { $failed++; Write-Host "FAIL catalog key '$($k.stat)' '$($k.row)' -> '$got', listed '$($k.label)'" }
+    $raw = @([string]$k.stat, [string]$k.row) | Where-Object { $_ }
+    if ($got -match '_' -or $got -cnotmatch '^[A-Z]' -or $got -cmatch '[a-z][A-Z]' -or ($raw -ccontains $got -and $got -cmatch '[A-Z].*[A-Z]')) {
+        $failed++; Write-Host "FAIL catalog key '$($k.stat)' '$($k.row)' -> '$got' still reads as a code name"
+    }
+}
+if ($checked -lt 250) { $failed++; Write-Host "FAIL only $checked catalog keys listed" }
+Write-Host "$checked catalog keys checked"
 if ($failed) { Write-Host "$failed failed"; exit 1 }
 Write-Host "All stat label tests passed."
