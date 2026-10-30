@@ -1,5 +1,6 @@
 # Tests for the dashboard's server.stop_with_game watch (server/windrose_plus_server.ps1):
 # the decision function is taken out of the script as written and run on fixed times.
+# Also the quoting of the paths it hands to the tile and catalog builders.
 # Run: pwsh scripts/Test-DashboardGameWatch.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -42,6 +43,26 @@ Case 'game gone 12 minutes after running for hours: exits' {
 Case 'game state unknown (path unreadable), last seen long ago: stays' {
     $d = Get-GameWatchDecision -Now $t0.AddDays(2) -Started $t0 -LastSeen $t0 -GameState 'unknown'
     Assert (-not $d.Exit) 'exited on an unknown state'
+}
+
+Case 'the path quoting function is in the dashboard' { Assert ($functions.ContainsKey('Format-ProcessPathArg')) 'Format-ProcessPathArg is missing' }
+. ([scriptblock]::Create($functions['Format-ProcessPathArg'].Extent.Text))
+Case 'a game folder at a drive root reaches a child process whole, and so does the next argument' {
+    $probe = Join-Path ([System.IO.Path]::GetTempPath()) ("wp-arg-probe-" + [guid]::NewGuid().ToString('N') + ".ps1")
+    [System.IO.File]::WriteAllText($probe, 'param([string]$GameDir, [string]$Next) [Console]::Out.Write($GameDir + "|" + $Next)')
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = (Get-Process -Id $PID).Path
+        $psi.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + (Format-ProcessPathArg $probe) + ' -GameDir ' + (Format-ProcessPathArg 'D:\') + ' -Next ' + (Format-ProcessPathArg 'C:\a b')
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $out = $p.StandardOutput.ReadToEnd()
+        [void]$p.WaitForExit(30000)
+        Assert ($out -eq 'D:\|C:\a b') "the child got '$out'"
+    } finally {
+        [System.IO.File]::Delete($probe)
+    }
 }
 
 $text = [System.IO.File]::ReadAllText($serverPath)
