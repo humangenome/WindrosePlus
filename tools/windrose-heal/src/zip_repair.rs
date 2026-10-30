@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 use crate::audit;
 use crate::heal::{self, Strategy};
@@ -169,10 +169,9 @@ fn extract_safe_with_limits(
     let mut extracted_total = 0u64;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let enclosed = file
-            .enclosed_name()
-            .ok_or_else(|| anyhow::anyhow!("unsafe zip entry path: {}", file.name()))?
-            .to_owned();
+        let enclosed = file.enclosed_name().ok_or_else(|| {
+            anyhow::anyhow!("unsafe zip entry path: {}", String::from_utf8_lossy(file.name_raw()))
+        })?;
         let out_path = output_dir.join(enclosed);
 
         if file.is_dir() {
@@ -289,7 +288,7 @@ fn cleanup_profile_backups(profile_dirs: &[PathBuf]) -> Result<()> {
 fn write_zip_from_dir(root: &Path, output_zip: &Path) -> Result<()> {
     let file = File::create(output_zip).with_context(|| format!("create {:?}", output_zip))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     add_dir_to_zip(root, root, &mut zip, options)?;
     zip.finish()?;
@@ -300,7 +299,7 @@ fn add_dir_to_zip(
     root: &Path,
     dir: &Path,
     zip: &mut zip::ZipWriter<File>,
-    options: FileOptions,
+    options: SimpleFileOptions,
 ) -> Result<()> {
     let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|entry| entry.ok()).collect();
     entries.sort_by_key(|entry| entry.path());
@@ -432,7 +431,7 @@ mod tests {
         let mut archive = ZipArchive::new(file)?;
         let mut names = Vec::new();
         for i in 0..archive.len() {
-            names.push(archive.by_index(i)?.name().to_string());
+            names.push(archive.by_index(i)?.name()?.to_string());
         }
         Ok(names)
     }
@@ -440,7 +439,7 @@ mod tests {
     fn zip_single_file(zip_path: &Path, name: &str, bytes: &[u8]) -> Result<()> {
         let file = File::create(zip_path)?;
         let mut zip = zip::ZipWriter::new(file);
-        let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         zip.start_file(name, options)?;
         zip.write_all(bytes)?;
         zip.finish()?;
