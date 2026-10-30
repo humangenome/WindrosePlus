@@ -438,5 +438,39 @@ case("events: a source's dropped count becomes events.dropped", function()
 end)
 _G.LoopAsync = realLoopAsync
 
+-- ---------------------------------------------------------------- idle cost
+do
+    local LiveMap = require("modules.livemap")
+    local realTime, savedIdle, savedQuery = os.time, WindrosePlus.isIdle, WindrosePlus._modules.Query
+    local savedUpdate = WindrosePlus.updatePlayerCount
+    local now, reads, list, idle = 1000000, 0, {}, true
+    os.time = function() return now end
+    WindrosePlus.isIdle = function() return idle end
+    WindrosePlus.updatePlayerCount = function(count) if count > 0 then idle = false end end
+    WindrosePlus._modules.Query = { getPlayers = function() reads = reads + 1; return list end }
+    LiveMap._wroteEmpty = true
+    LiveMap._lastIdlePoll = 0
+    LiveMap._collectAndWrite = function() end
+
+    case("livemap: with nobody online the player list is read every 10 seconds, not on every tick", function()
+        for _ = 1, 30 do now = now + 2; LiveMap.writeIfDue() end
+        check(reads == 6, "read " .. reads .. " times in 60 s")
+    end)
+    case("livemap: a player joining an idle server is seen within 10 seconds", function()
+        list = { { name = "Alice", x = 1, y = 2, z = 3 } }
+        local ticks = 0
+        repeat now = now + 2; LiveMap.writeIfDue(); ticks = ticks + 1 until not idle or ticks > 10
+        check(not idle and ticks <= 5, "seen after " .. ticks .. " ticks")
+    end)
+    case("livemap: with someone online the list is read on every tick", function()
+        reads = 0
+        for _ = 1, 5 do now = now + 2; LiveMap.writeIfDue() end
+        check(reads == 5, "read " .. reads .. " times in 5 ticks")
+    end)
+
+    os.time, WindrosePlus.isIdle, WindrosePlus._modules.Query = realTime, savedIdle, savedQuery
+    WindrosePlus.updatePlayerCount = savedUpdate
+end
+
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

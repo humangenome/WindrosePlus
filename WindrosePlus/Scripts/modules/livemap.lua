@@ -21,6 +21,8 @@ LiveMap._lastSnapshot = nil
 LiveMap._lastSnapshotTs = 0
 LiveMap._pendingContent = nil
 LiveMap._forceRequested = false  -- consumed by writeIfDue on the game-thread dispatch path
+LiveMap._idlePollSeconds = 10    -- how often the player list is read with nobody online
+LiveMap._lastIdlePoll = 0
 
 local function cloneTable(t)
     if type(t) ~= "table" then return t end
@@ -47,6 +49,15 @@ function LiveMap.init(gameDir, config)
 end
 
 function LiveMap.writeIfDue()
+    -- With nobody online the player list is all there is to watch, and each read
+    -- walks the engine's whole object list twice (FindAllOf), so read it every
+    -- 10 seconds then instead of on every 2-second tick.
+    if WindrosePlus and WindrosePlus.isIdle and WindrosePlus.isIdle() then
+        local nowIdle = os.time()
+        if nowIdle - (LiveMap._lastIdlePoll or 0) < LiveMap._idlePollSeconds then return end
+        LiveMap._lastIdlePoll = nowIdle
+    end
+
     -- Always refresh the player snapshot first. Reading the cached
     -- WindrosePlus.state.playerCount here would self-deadlock when the Query
     -- writer is disabled — Query is what normally updates it, so a stale 0
