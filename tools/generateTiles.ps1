@@ -49,7 +49,7 @@ if (-not (Test-Path -LiteralPath $hfDir)) {
 }
 
 Write-Host "Loading terrain metadata..."
-$meta = Get-Content $terrainJson -Raw | ConvertFrom-Json
+$meta = Get-Content -LiteralPath $terrainJson -Raw -Encoding UTF8 | ConvertFrom-Json
 $comps = $meta.components
 $lands = $meta.landscapes
 $withH = @($comps | Where-Object { $_.h -eq 1 })

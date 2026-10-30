@@ -162,11 +162,11 @@ function Get-RetocEngineVersion {
 if (-not $ServerDir) {
     if ($ConfigPath -and (Test-Path -LiteralPath $ConfigPath)) {
         $configParent = Split-Path -Parent $ConfigPath
-        $ServerDir = if ($configParent) { (Resolve-Path $configParent).Path } else { (Resolve-Path ".").Path }
+        $ServerDir = if ($configParent) { (Resolve-Path -LiteralPath $configParent).Path } else { (Resolve-Path ".").Path }
     } else {
         foreach ($c in @(".", "..", "..\..")) {
             if (Test-Path -LiteralPath (Join-Path $c "R5\Content\Paks")) {
-                $ServerDir = (Resolve-Path $c).Path
+                $ServerDir = (Resolve-Path -LiteralPath $c).Path
                 break
             }
         }
@@ -520,7 +520,7 @@ if (-not $hasMultipliers -and -not $hasCT) {
     if ($RemoveStalePak -and -not $DryRun) {
         $stale = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
         if (Test-Path -LiteralPath $stale) {
-            Remove-Item $stale -Force
+            Remove-Item -LiteralPath $stale -Force
             Write-Host "Removed stale $stale"
         }
         $null = Remove-CurveTableContainer -PaksDir $paksDir -Announce
@@ -557,7 +557,7 @@ function Get-BuildInputHash {
 
     $gamePak = Join-Path $ServerDir "R5\Content\Paks\pakchunk0-WindowsServer.pak"
     if (Test-Path -LiteralPath $gamePak) {
-        $mtime = (Get-Item $gamePak).LastWriteTimeUtc.Ticks
+        $mtime = (Get-Item -LiteralPath $gamePak).LastWriteTimeUtc.Ticks
         $chunks.Add([System.Text.Encoding]::UTF8.GetBytes("GAMEPAK_TICKS:$mtime`n"))
     }
 
@@ -701,22 +701,22 @@ if ($hasCT) {
     $cacheExtractedThisRun = $false
 
     if ((Test-Path -LiteralPath $retocDir) -and (Test-Path -LiteralPath $gamePak)) {
-        $cacheTime = (Get-Item $retocDir).LastWriteTime
-        $pakTime = (Get-Item $gamePak).LastWriteTime
+        $cacheTime = (Get-Item -LiteralPath $retocDir).LastWriteTime
+        $pakTime = (Get-Item -LiteralPath $gamePak).LastWriteTime
         if ($pakTime -gt $cacheTime) {
             Write-Host "  Game pak is newer than cache — re-extracting..." -ForegroundColor Yellow
-            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
     if ($ForceExtract -and (Test-Path -LiteralPath $retocDir)) {
         Write-Host "  Force extract requested — clearing cache..." -ForegroundColor Yellow
-        Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $retocDir) {
-        $cachedCtFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
+        $cachedCtFiles = @(Get-ChildItem -LiteralPath $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
         if ($cachedCtFiles.Count -eq 0) {
             Write-Host "  CurveTable cache is empty — re-extracting..." -ForegroundColor Yellow
-            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -751,19 +751,19 @@ if ($hasCT) {
         $retocExit = $LASTEXITCODE
         $cacheExtractedThisRun = $true
 
-        $extractedFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
+        $extractedFiles = @(Get-ChildItem -LiteralPath $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
         if ($retocExit -ne 0 -or -not $extractedFiles -or $extractedFiles.Count -eq 0) {
             $retocDetails = ($retocOutput | Select-Object -Last 8 | ForEach-Object { $_.ToString() }) -join "`n"
             $errorMessage = "retoc extraction failed (exit $retocExit, $($extractedFiles.Count) CT assets found). Check AES key, game files, and retoc compatibility with this Windrose build."
             if ($retocDetails) { $errorMessage += "`nretoc output:`n$retocDetails" }
             Write-Error $errorMessage
-            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
             exit 3
         }
         Write-Host "  Extracted $($extractedFiles.Count) CurveTable assets to cache"
     }
 
-    $ctFiles = @(Get-ChildItem -Path $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
+    $ctFiles = @(Get-ChildItem -LiteralPath $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
     if ($ctFiles.Count -eq 0) {
         Write-Error "CurveTable cache contains no CT_*.uasset files. Rerun with -ForceExtract; if it repeats, retoc is not compatible with this Windrose build."
         exit 3
@@ -848,8 +848,8 @@ if ($hasCT) {
             $srcUexp = $ctFile.FullName -replace '\.uasset$', '.uexp'
 
             New-Item -ItemType Directory -Force -Path (Split-Path $stageUasset) | Out-Null
-            Copy-Item $ctFile.FullName $stageUasset
-            Copy-Item $srcUexp $stageUexp
+            Copy-Item -LiteralPath $ctFile.FullName -Destination $stageUasset
+            Copy-Item -LiteralPath $srcUexp -Destination $stageUexp
 
             $patchResult = Invoke-CurveTablePatch -Manifest $manifest -Config $configHT -UExpPath $stageUexp
             if ($patchResult.Error) {
@@ -857,15 +857,15 @@ if ($hasCT) {
                 exit 3
             }
             if ($patchResult.ChangesApplied -eq 0) {
-                Remove-Item $stageUasset -Force -ErrorAction SilentlyContinue
-                Remove-Item $stageUexp -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $stageUasset -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $stageUexp -Force -ErrorAction SilentlyContinue
                 Write-Host "    No changes needed"
                 continue
             }
             if (-not $patchResult.VerificationPassed) {
                 Write-Error "CurveTable verification failed for $basename"
-                Remove-Item $stageUasset -Force -ErrorAction SilentlyContinue
-                Remove-Item $stageUexp -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $stageUasset -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $stageUexp -Force -ErrorAction SilentlyContinue
                 exit 3
             }
 
@@ -944,9 +944,9 @@ if ($hasCT) {
                     Move-Item -LiteralPath (Join-Path $zenDir $part) -Destination (Join-Path $paksDir $part) -Force
                 }
             } finally {
-                Remove-Item -Recurse -Force $zenDir -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $zenDir -Recurse -Force -ErrorAction SilentlyContinue
             }
-            $size = (Get-Item $outUcas).Length + (Get-Item $outUtoc).Length + (Get-Item $outPak).Length
+            $size = (Get-Item -LiteralPath $outUcas).Length + (Get-Item -LiteralPath $outUtoc).Length + (Get-Item -LiteralPath $outPak).Length
             if ($ctPatchManifest.Count -gt 0) {
                 $manifest = @{
                     built_at_utc = [DateTimeOffset]::UtcNow.ToString("o")
@@ -973,7 +973,7 @@ if ($hasCT) {
             # a cache extracted while a previous override was still in Paks.
             # Building from it would produce an override that does nothing, so
             # drop the cache and stop rather than repeat the silent failure.
-            Remove-Item -Recurse -Force $retocDir -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
             $null = Remove-CurveTableContainer -PaksDir $paksDir
             Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
             Write-Error "The CurveTable cache already contained the configured values, which means it was extracted from a server that still had an override in place. The cache has been cleared — run this again (or start the server through StartWindrosePlusServer.bat) to rebuild it from the game's own assets."
@@ -984,7 +984,7 @@ if ($hasCT) {
             Remove-Item -LiteralPath $curvetableManifestFile -Force -ErrorAction SilentlyContinue
         }
     } finally {
-        Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -1018,7 +1018,7 @@ if ($RemoveStalePak -and -not $DryRun) {
     if (-not $hasMultipliers) {
         $stale = Join-Path $paksDir "WindrosePlus_Multipliers_P.pak"
         if (Test-Path -LiteralPath $stale) {
-            Remove-Item $stale -Force
+            Remove-Item -LiteralPath $stale -Force
             Write-Host "Removed stale $stale"
         }
     }
