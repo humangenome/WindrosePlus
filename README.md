@@ -165,6 +165,8 @@ Recorded events:
 | `player.leave`      | A player disconnects                                   |
 | `admin.command`     | Any `wp.*` command runs (caller, args, result, ms)     |
 | `heartbeat`         | Every 5 minutes: uptime, mode, player count, config    |
+| `tick.beat`         | Every 30 seconds: uptime, mode, player count           |
+| `module.load.fail`  | A Windrose+ module fails to load                       |
 
 Each line carries a fixed envelope: `ts` (UTC ISO-8601), `ts_unix`, `sid` (per-boot session id), `ev`, and `payload`. External tools (and mods, via `WindrosePlus.API.logEvent(ev, payload)`) can tail the current day's file or read past days for replay.
 
@@ -175,7 +177,7 @@ Quick queries with `jq`:
 jq 'select(.ev=="heartbeat") | {ts, mult: .payload.multipliers}' logs/2026-04-27.log
 
 # Who ran which admin commands?
-jq 'select(.ev=="admin.command") | {ts, admin_user, command, status}' logs/2026-04-27.log
+jq 'select(.ev=="admin.command") | {ts, admin_user: .payload.admin_user, command: .payload.command, status: .payload.status}' logs/2026-04-27.log
 ```
 
 ## Installation
@@ -222,7 +224,7 @@ To start the web dashboard, open a second terminal in your game server folder an
 windrose_plus\start_dashboard.bat
 ```
 
-The dashboard URL and RCON password are shown in the console. On first run, a `windrose_plus.json` config file is created with defaults.
+The console shows the dashboard URL. The server's first start creates `windrose_plus.json` with the password `changeme`, which the dashboard refuses: set a real `rcon.password` there and restart the server, because the console only starts with a real password.
 
 By default the dashboard listens on all interfaces when PowerShell is elevated, then falls back to localhost if Windows blocks the wildcard listener. Multi-IP hosts can bind it to one address:
 
@@ -337,7 +339,7 @@ See [docs/scripting-guide.md](docs/scripting-guide.md) for the API and examples.
 <summary><strong>Troubleshooting</strong></summary>
 
 - **Server crashes on startup** - Check `UE4SS-settings.ini`. The current Windrose-safe defaults keep `HookProcessInternal = 1`, `HookEngineTick = 0`, `HookUObjectProcessEvent = 0`, and `DefaultExecuteInGameThreadMethod = EngineTick`. Older guidance to enable `HookEngineTick` or switch the dispatcher to `ProcessEvent` is no longer correct.
-- **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`).
+- **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`) and restart the server.
 - **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
 - **No map data** - Windrose loads the world when the first player joins, so the terrain export runs then. The dashboard must be running to draw the tiles. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item catalog can load before terrain is ready, but "show on map" source links need the POI scanner's markers, which appear after the first player joins.
 - **Items panel says the catalog is not built** - The dashboard builds it from the game files when it starts; the log is `windrose_plus_data\catalog\build.log`. It needs `tools\bin\repak.exe` (and `retoc.exe` for stat values), which antivirus sometimes quarantines. Rebuild by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.

@@ -311,6 +311,12 @@ API.log("info", "MyMod", "Something happened")
 
 Levels: `debug`, `info`, `warn`, `error`. Logs go to the UE4SS console and log file.
 
+```lua
+API.logEvent("mymod.reward", { player = name, item = id })
+```
+
+`API.logEvent` adds a line to the server activity log (`windrose_plus_data\logs\YYYY-MM-DD.log`), under the event name you give it.
+
 ---
 
 ## Hot Reload
