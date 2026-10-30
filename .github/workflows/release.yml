@@ -40,6 +40,10 @@ jobs:
         shell: powershell
         run: ./scripts/Test-TileBuild.ps1
 
+      - name: Installer tests
+        shell: powershell
+        run: ./scripts/Test-Installer.ps1
+
       - name: Build windrose-heal
         run: cargo build --release --locked --manifest-path tools/windrose-heal/Cargo.toml
 

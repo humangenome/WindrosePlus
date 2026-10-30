@@ -342,6 +342,32 @@ try {
         $got = ($body | ConvertFrom-Json).players[0].name
         Assert ($got -eq $name) "got '$got'"
     }
+    Case 'terrain height follows a new export without a dashboard restart' {
+        $hdr = @{ 'X-RCON-Password' = $password }
+        $url = "$baseB/api/terrain_height?x=100&y=100"
+        $dataB = Join-Path $dirB 'windrose_plus_data'
+        $terrain = Join-Path $dataB 'terrain_v17.json'
+        # The empty export a server writes before anyone is online.
+        [System.IO.File]::WriteAllText($terrain, '{"version":17,"landscapes":[{"x":0,"y":0,"sx":128}],"components":[]}')
+        $r = Invoke-Http GET $url -Headers $hdr
+        Assert (($r.Body | ConvertFrom-Json).reason -eq 'no_land_data') "empty export: $($r.Body)"
+        # The first join's export: one piece of land, every height at the top of its range.
+        $maps = Join-Path $dataB 'heightmaps'
+        New-Item -ItemType Directory -Path $maps -Force | Out-Null
+        $hf = New-Object byte[] 12
+        [BitConverter]::GetBytes([int]2).CopyTo($hf, 0)
+        for ($i = 4; $i -lt 12; $i++) { $hf[$i] = 255 }
+        [System.IO.File]::WriteAllBytes((Join-Path $maps 'c0.bin'), $hf)
+        $export = '{"version":17,"landscapes":[{"x":0,"y":0,"sx":100}],"components":[{"l":0,"sx":0,"wx":0,"wy":0,"res":2,"h":1,"minZ":100,"maxZ":MAXZ,"f":"c0.bin"}]}'
+        [System.IO.File]::WriteAllText($terrain, $export.Replace('MAXZ', '1100'))
+        $r = Invoke-Http GET $url -Headers $hdr
+        Assert ([double]($r.Body | ConvertFrom-Json).z -eq 1100) "first export: $($r.Body)"
+        # A later export of the same size (a new world): the new heights, not the remembered ones.
+        [System.IO.File]::WriteAllText($terrain, $export.Replace('MAXZ', '2100'))
+        [System.IO.File]::SetLastWriteTimeUtc($terrain, [DateTime]::UtcNow.AddSeconds(5))
+        $r = Invoke-Http GET $url -Headers $hdr
+        Assert ([double]($r.Body | ConvertFrom-Json).z -eq 2100) "later export: $($r.Body)"
+    }
     Case 'with rcon.enabled off a console command is refused at once' {
         $cfgPath = Join-Path $dirB 'windrose_plus.json'
         $saved = [System.IO.File]::ReadAllText($cfgPath)
