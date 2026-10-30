@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/terrain.schema.json",
+  "title": "windrose_plus_data/terrain_v17.json",
+  "description": "Written by the HeightmapExporter C++ mod when an export is triggered (with a player online): the landscapes and one entry per landscape piece, with its heightfield file in heightmaps\\ when h is 1. Read by tools/generateTiles.ps1 and /api/terrain_height. A file with no piece where h is 1 is an empty export (taken before the world loaded); the mod treats it as no terrain (terrainLooksValid in main.lua) and exports again when the next player joins.",
+  "type": "object",
+  "required": [
+    "version",
+    "landscapes",
+    "components"
+  ],
+  "properties": {
+    "version": {
+      "const": 17
+    },
+    "landscapes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "sx"
+        ],
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "sx": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "l",
+          "sx",
+          "sy",
+          "wx",
+          "wy",
+          "h",
+          "f"
+        ],
+        "properties": {
+          "l": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sx": {
+            "type": "integer"
+          },
+          "sy": {
+            "type": "integer"
+          },
+          "wx": {
+            "type": "number"
+          },
+          "wy": {
+            "type": "number"
+          },
+          "h": {
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "minZ": {
+            "type": "number"
+          },
+          "maxZ": {
+            "type": "number"
+          },
+          "res": {
+            "type": "integer",
+            "minimum": 2
+          },
+          "f": {
+            "type": "string",
+            "pattern": "^hf_l[0-9]+_s-?[0-9]+_-?[0-9]+\\.bin$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "h": {
+                  "const": 1
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "minZ",
+                "maxZ",
+                "res"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/rcon_command.schema.json",
+  "title": "windrose_plus_data/rcon/cmd_<id>.json",
+  "description": "A console command handed to the mod: written by the dashboard server (cmd_ps_*), by host panels (cmd_api_*), then listed by name in rcon/pending_commands.txt (CRLF lines, a UTF-8 byte order mark is tolerated). Only names matching cmd_[A-Za-z0-9_-]+.json are read. A command older than 30 seconds is answered as expired.",
+  "type": "object",
+  "required": [
+    "id",
+    "command",
+    "password"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "password": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "integer"
+    },
+    "admin_user": {
+      "type": "string"
+    }
+  }
+}

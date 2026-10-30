@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/map_coords.schema.json",
+  "title": "windrose_plus_data/map_coords.json",
+  "description": "Written by tools/generateTiles.ps1 with each tile build. Read by /api/mapinfo, /api/public/mapinfo and host panels. A tile set without orientation (before v1.3.16) is drawn as \"game\"; \"north-up\" tile sets (v1.3.16-v1.3.21) are turned back by the viewers.",
+  "type": "object",
+  "required": [
+    "world_min_x",
+    "world_min_y",
+    "world_max_x",
+    "world_max_y",
+    "tile_size",
+    "max_zoom"
+  ],
+  "properties": {
+    "world_min_x": {
+      "type": "number"
+    },
+    "world_min_y": {
+      "type": "number"
+    },
+    "world_max_x": {
+      "type": "number"
+    },
+    "world_max_y": {
+      "type": "number"
+    },
+    "tile_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_zoom": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "orientation": {
+      "enum": [
+        "game",
+        "north-up"
+      ]
+    },
+    "tileset_id": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z$"
+    },
+    "total_components": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "island_bounds": {
+      "type": "object",
+      "required": [
+        "min_x",
+        "min_y",
+        "max_x",
+        "max_y"
+      ],
+      "properties": {
+        "min_x": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_y": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_x": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_y": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

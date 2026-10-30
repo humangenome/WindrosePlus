@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/map_generation_status.schema.json",
+  "title": "windrose_plus_data/map_generation_status.json",
+  "description": "Written by the dashboard server (Write-TileGenStatus) when a Sea Chart tile build starts, finishes or fails. /api/mapinfo returns it while there is no map yet; public viewers get state and ts only. Files from before v1.3.25 have no state, only ts, error and script.",
+  "type": "object",
+  "required": [
+    "ts"
+  ],
+  "properties": {
+    "state": {
+      "enum": [
+        "running",
+        "complete",
+        "error"
+      ]
+    },
+    "ts": {
+      "type": "integer"
+    },
+    "started_ts": {
+      "type": "integer"
+    },
+    "script": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "output": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "error"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    }
+  ]
+}

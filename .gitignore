@@ -49,3 +49,8 @@ server/web/livemap/map_manifest.json
 server/web/logo.png
 node_modules/
 test-results/
+
+# Contract tests (scripts/contract): a made-up game folder uses the runtime file names above
+!scripts/contract/fixture/game/windrose_plus.json
+!scripts/contract/fixture/game/windrose_plus_data/server_status.json
+!scripts/contract/fixture/game/windrose_plus_data/livemap_data.json

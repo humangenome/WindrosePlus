@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/pois.schema.json",
+  "title": "windrose_plus_data/pois.json",
+  "description": "Written by the mod's POI scanner (modules/poiscan.lua) about every 4 hours. Read by the Sea Chart (/api/pois) and by host panels directly.",
+  "type": "object",
+  "required": [
+    "pois",
+    "kind_counts",
+    "class_counts",
+    "island_counts",
+    "sub_type_counts",
+    "total_pois",
+    "actors_scanned",
+    "actors_matched",
+    "missing_position",
+    "timestamp"
+  ],
+  "properties": {
+    "pois": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "class",
+          "poiId"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "overlap",
+              "audio",
+              "marker_scenario",
+              "marker_quest",
+              "marker_simple"
+            ]
+          },
+          "class": {
+            "type": "string"
+          },
+          "poiId": {
+            "type": "string"
+          },
+          "islandId": {
+            "type": "integer"
+          },
+          "poiSubType": {
+            "type": "integer"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "z": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "localX": {
+            "type": "integer"
+          },
+          "localY": {
+            "type": "integer"
+          },
+          "localZ": {
+            "type": "integer"
+          },
+          "seed": {
+            "type": "integer"
+          },
+          "osaIndex": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "kind_counts": {
+      "description": "A map of names to counts. The mod's JSON writer has no empty object, so an empty map is written as [].",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    },
+    "class_counts": {
+      "description": "A map of names to counts. The mod's JSON writer has no empty object, so an empty map is written as [].",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    },
+    "island_counts": {
+      "description": "A map of names to counts. The mod's JSON writer has no empty object, so an empty map is written as [].",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    },
+    "sub_type_counts": {
+      "description": "A map of names to counts. The mod's JSON writer has no empty object, so an empty map is written as [].",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    },
+    "total_pois": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "actors_scanned": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "actors_matched": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "missing_position": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "integer"
+    }
+  }
+}

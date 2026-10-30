@@ -1,0 +1,40 @@
+{
+  "server": {
+    "http_port": 8780,
+    "game_port": 7777,
+    "bind_ip": "127.0.0.1",
+    "stop_with_game": false
+  },
+  "rcon": {
+    "enabled": true,
+    "password": "contract-pass-123"
+  },
+  "query": {
+    "enabled": true,
+    "interval_ms": 5000
+  },
+  "admin": {
+    "steam_ids": []
+  },
+  "multipliers": {
+    "xp": 2,
+    "loot": 1.5,
+    "stack_size": 1,
+    "craft_efficiency": 1,
+    "crop_speed": 1,
+    "weight": 1,
+    "inventory_size": 1,
+    "points_per_level": 1,
+    "cooking_speed": 2,
+    "harvest_yield": 1
+  },
+  "livemap": {
+    "public": {
+      "enabled": true,
+      "token": "contract-map-token"
+    }
+  },
+  "catalog": {
+    "build": false
+  }
+}
