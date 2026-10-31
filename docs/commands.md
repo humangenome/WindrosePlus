@@ -826,6 +826,38 @@ Logging in (`POST /login` with a form field `password`) sets a cookie named `wp_
 | POST | `/api/rcon` | Yes | Execute an RCON command |
 | POST | `/api/character-repair` | Yes | Upload a local SaveProfiles zip and download a repaired zip for known progression drift |
 
+### GET /api/status
+
+Windrose dedicated servers don't answer standard server queries, so external tools can't read player counts or status. Windrose+ writes the server's status to `windrose_plus_data\server_status.json` every 5 seconds (every 30 with nobody online), and the dashboard serves it at `/api/status` (login or `X-RCON-Password` required). It does not make the server answer server-browser queries.
+
+```json
+{
+  "server": {
+    "name": "My Windrose Server",
+    "game": "Windrose",
+    "version": "0.10.0.9.32",
+    "windrose_plus": "1.3.22",
+    "invite_code": "a1b2c3d4",
+    "password_protected": false,
+    "max_players": 10,
+    "player_count": 2,
+    "game_port": 7777
+  },
+  "players": [
+    { "name": "HumanGenome", "player_id": 12, "session_id": "player:12", "actor_id": "BP_R5Character_C_2147418445", "alive": true, "x": 14520, "y": -8340 },
+    { "name": "CaptainMorgan", "player_id": 17, "session_id": "player:17", "actor_id": "BP_R5Character_C_2147418362", "alive": true, "x": 6200, "y": 1100 }
+  ],
+  "perf": { "world_time": 1834.5 },
+  "multipliers": {
+    "xp": 3.0, "loot": 2.0,
+    "craft_efficiency": 2.0, "cooking_speed": 2.0, "harvest_yield": 2.0
+  },
+  "timestamp": 1792000000
+}
+```
+
+`player_id` / `session_id` are server-local live-session identifiers from Windrose's `PlayerState.PlayerId`. They are useful for disambiguating two online players with the same display name, but they are not persistent Steam IDs and should not be used for permanent bans.
+
 ### POST /api/rcon
 
 Execute a command via the RCON interface.

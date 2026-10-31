@@ -47,6 +47,9 @@ Save-safety notes:
 - To keep Windrose+ runtime features but disable generated multiplier PAKs, set `WINDROSEPLUS_DISABLE_MULTIPLIER_PAK=1` before `StartWindrosePlusServer.bat`. This removes/skips `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and `windrose_plus_data\.windroseplus_multiplier_history.json`. JSON and harvest multipliers will not apply while the switch is set.
 - To fully disable Windrose+ during recovery testing, stop the server, rename `R5\Binaries\Win64\dwmapi.dll`, delete or move `R5\Content\Paks\WindrosePlus_Multipliers_P.pak` and all three parts of the CurveTable container (`WindrosePlus_CurveTables_P.pak`, `.utoc`, `.ucas`), then delete `windrose_plus_data\.windroseplus_build.hash`.
 
+- Another installed PAK that edits inventory assets: Windrose+ refuses to build a high-risk multiplier PAK beside it and removes the existing generated one on that failure, unless `WINDROSEPLUS_ALLOW_PAK_CONFLICTS=1` is set.
+- After a bad inventory-affecting PAK: restore a save backup from before the change, confirm the character can join, then re-enable PAK overrides one at a time. Removing settings from `windrose_plus.json` alone is not enough, because UE4SS and existing PAK overrides can still load.
+
 Example:
 
 ```json

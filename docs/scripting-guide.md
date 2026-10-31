@@ -319,6 +319,36 @@ API.logEvent("mymod.reward", { player = name, item = id })
 
 ---
 
+## Activity log
+
+Windrose+ records server-side activity to `windrose_plus_data\logs\YYYY-MM-DD.log` for review and external tooling. Files are line-delimited JSON, append-only, and rolled daily; they survive server restarts and crashes.
+
+| `ev`                | Fires on                                              |
+|---------------------|--------------------------------------------------------|
+| `mod.boot`          | Windrose+ initializes (version, game dir, hook avail.) |
+| `config.load`       | `windrose_plus.json` is loaded or reloaded             |
+| `config.load.fail`  | Config parse fails, defaults are used                  |
+| `player.join`       | A player connects                                      |
+| `player.leave`      | A player disconnects                                   |
+| `admin.command`     | Any `wp.*` command runs (caller, args, result, ms)     |
+| `heartbeat`         | Every 5 minutes: uptime, mode, player count, config    |
+| `tick.beat`         | Every 30 seconds: uptime, mode, player count           |
+| `module.load.fail`  | A Windrose+ module fails to load                       |
+
+Each line carries a fixed envelope: `ts` (UTC ISO-8601), `ts_unix`, `sid` (per-boot session id), `ev`, and `payload`. External tools can tail the current day's file or read past days.
+
+Quick queries with `jq`:
+
+```bash
+# What multipliers were active during the corruption window?
+jq 'select(.ev=="heartbeat") | {ts, mult: .payload.multipliers}' logs/2026-04-27.log
+
+# Who ran which admin commands?
+jq 'select(.ev=="admin.command") | {ts, admin_user: .payload.admin_user, command: .payload.command, status: .payload.status}' logs/2026-04-27.log
+```
+
+---
+
 ## Hot Reload
 
 Every 30 seconds WindrosePlus checks `Mods/mods_registry.json` and, for each loaded mod, its `mod.json`, `init.lua`, `main.lua` and the main file named in `mod.json`. Any change to their contents counts. When one changes, the entire WindrosePlus mod restarts through UE4SS's `RestartMod()`. Changes to other files in a mod folder are not noticed; touch `init.lua` or run `wp.modreload`.
