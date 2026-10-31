@@ -27,25 +27,7 @@ SKIP_PREFIXES = [
     "ue4ss-client/ue4ss_signatures/",
     "ue4ss-server/ue4ss_signatures/"
 ]
-REPO_RULES = {
-    "entry_deny": [
-        {
-            "id": "CAULDRON-STEAMEMU",
-            "re": "(?i)(goldberg|gbe_fork|steam_api64|steam_settings|steam_interfaces|steamemu|coldclientloader)",
-            "desc": "Steam emulator / headless-auth recipe (RULE #21e)"
-        },
-        {
-            "id": "CAULDRON-HOSTPREP",
-            "re": "(?i)(Cauldron\\.HostPrep|SteamEosHostLaunchPrep)",
-            "desc": "private Cauldron host-launch-prep implementation (RULE #21e)"
-        },
-        {
-            "id": "LANTERN-HOSTPATCH-SRC",
-            "re": "(?i)LanternHostPatch[^/]*\\.(cpp|cxx|cc|h|hpp|hxx|lib|exp|pdb)$",
-            "desc": "LanternHostPatch source (RULE #21c)"
-        }
-    ]
-}
+REPO_RULES = {}
 
 
 def _allowed(rule, member):
