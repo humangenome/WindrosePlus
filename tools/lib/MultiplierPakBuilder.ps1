@@ -873,7 +873,7 @@ function Build-MultiplierPak {
         Write-Host "  Packed $modifiedCount files into $outPakPath"
 
     } finally {
-        Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     return $result

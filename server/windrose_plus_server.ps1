@@ -684,6 +684,13 @@ foreach ($candidate in @(
     if (Test-Path -LiteralPath $candidate) { $tileGenScript = [System.IO.Path]::GetFullPath($candidate); break }
 }
 if (-not $tileGenScript) { $tileGenScript = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\tools\generateTiles.ps1")) }
+# One quoted path for a command line. A closing backslash is doubled, or the game
+# folder D:\ would come out as "D:\" and swallow the closing quote.
+function Format-ProcessPathArg([string]$Path) {
+    if ($Path.EndsWith("\")) { $Path += "\" }
+    return '"' + $Path + '"'
+}
+
 function Write-TileGenStatus($data) {
     try {
         Write-AtomicUtf8Json $tileGenStatus $data
@@ -730,7 +737,7 @@ function Invoke-TileGenerationWatch {
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = (Get-Process -Id $PID).Path
-        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -GameDir "{1}"' -f $tileGenScript, $gameDir)
+        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0} -GameDir {1}' -f (Format-ProcessPathArg $tileGenScript), (Format-ProcessPathArg $gameDir))
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
         $psi.RedirectStandardOutput = $true
@@ -773,7 +780,7 @@ function Start-CatalogBuild {
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = (Get-Process -Id $PID).Path
-        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -GameDir "{1}" -OutputDir "{2}" -LogFile "{3}"' -f $catalogBuildScript, $gameDir, $catalogDataDir, $catalogBuildLog)
+        $psi.Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File {0} -GameDir {1} -OutputDir {2} -LogFile {3}' -f (Format-ProcessPathArg $catalogBuildScript), (Format-ProcessPathArg $gameDir), (Format-ProcessPathArg $catalogDataDir), (Format-ProcessPathArg $catalogBuildLog))
         $psi.UseShellExecute = $false
         $psi.CreateNoWindow = $true
         $proc = [System.Diagnostics.Process]::Start($psi)
@@ -883,11 +890,21 @@ function Write-AtomicUtf8Json($path, $data) {
 # teleporting the player to the sea floor.
 $script:TerrainCacheReady = $false
 $script:TerrainLandComps = $null
+$script:TerrainCacheStamp = ""
 
+# The list is read again whenever terrain_v17.json changes. Up to v1.3.26 it was
+# kept until the dashboard restarted, so a server that started with an empty
+# export (nobody online yet) answered "no land" after the first join's export too.
 function Initialize-TerrainCache($DataDir) {
-    if ($script:TerrainCacheReady) { return $true }
     $jsonPath = Join-Path $DataDir "terrain_v17.json"
-    if (-not (Test-Path -LiteralPath $jsonPath)) { return $false }
+    $info = Get-Item -LiteralPath $jsonPath -ErrorAction SilentlyContinue
+    if ($null -eq $info) {
+        $script:TerrainCacheReady = $false
+        return $false
+    }
+    $stamp = "$($info.Length)-$($info.LastWriteTimeUtc.Ticks)"
+    if ($script:TerrainCacheReady -and $script:TerrainCacheStamp -eq $stamp) { return $true }
+    $script:TerrainCacheReady = $false
     try {
         $meta = Read-TextUtf8 $jsonPath | ConvertFrom-Json
     } catch { return $false }
@@ -929,6 +946,7 @@ function Initialize-TerrainCache($DataDir) {
         }) | Out-Null
     }
     $script:TerrainLandComps = $comps
+    $script:TerrainCacheStamp = $stamp
     $script:TerrainCacheReady = $true
     return $true
 }

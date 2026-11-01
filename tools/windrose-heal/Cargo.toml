@@ -19,7 +19,7 @@ chrono = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tempfile = "3"
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+zip = { version = "9.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [profile.release]
 lto = "thin"

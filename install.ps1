@@ -48,7 +48,7 @@ if ($GameDir) {
     if (-not $gameDir) { $gameDir = $PWD.Path }
 }
 
-$gameDir = (Resolve-Path $gameDir).Path
+$gameDir = (Resolve-Path -LiteralPath $gameDir).Path
 
 # Verify this is a Windrose server folder (check for R5/ directory)
 $r5Dir = Join-Path $gameDir "R5"
@@ -138,7 +138,7 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
             # Upgrade or downgrade in place: swap the loader, leave Mods\ and settings alone.
             Copy-Item -LiteralPath $extractedDll -Destination $ue4ssDir -Force
         } else {
-            Copy-Item "$extractedUe4ss\*" $ue4ssDir -Recurse -Force
+            Get-ChildItem -LiteralPath $extractedUe4ss | Copy-Item -Destination $ue4ssDir -Recurse -Force
         }
 
         if (-not (Test-Path -LiteralPath $modsDir)) { New-Item -ItemType Directory -Path $modsDir -Force | Out-Null }
@@ -157,7 +157,13 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
 # Copy UE4SS-settings.ini
 $settingsSource = Join-Path $scriptDir "UE4SS-settings.ini"
 if (Test-Path -LiteralPath $settingsSource) {
-    try { Copy-Item $settingsSource (Join-Path $ue4ssDir "UE4SS-settings.ini") -Force } catch {}
+    # These settings are what keep Windrose from crashing at start, so say so if they did not land.
+    try {
+        Copy-Item -LiteralPath $settingsSource -Destination (Join-Path $ue4ssDir "UE4SS-settings.ini") -Force
+    } catch {
+        Write-Host "  WARNING: could not write ue4ss\UE4SS-settings.ini: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "           Stop the server and run the installer again." -ForegroundColor Yellow
+    }
 }
 
 # Step 2: Install Windrose+ mod
@@ -180,7 +186,7 @@ if (-not (Test-Path -LiteralPath $logsDir)) { New-Item -ItemType Directory -Path
 # join-timeout failures under load and is gone for good as of v1.0.15.
 $legacyIdleMod = Join-Path $modsDir "IdleCpuLimiter"
 if (Test-Path -LiteralPath $legacyIdleMod) {
-    try { Remove-Item $legacyIdleMod -Recurse -Force } catch {}
+    try { Remove-Item -LiteralPath $legacyIdleMod -Recurse -Force } catch {}
 }
 foreach ($legacyFile in @(
     (Join-Path $dataDir "idle_cpu_limiter_disabled"),
@@ -189,21 +195,21 @@ foreach ($legacyFile in @(
     (Join-Path $dataDir "idle_cpu_limiter_cpu_rate_override.txt"),
     (Join-Path $dataDir "idle_cpu_limiter_status.txt")
 )) {
-    if (Test-Path -LiteralPath $legacyFile) { try { Remove-Item $legacyFile -Force } catch {} }
+    if (Test-Path -LiteralPath $legacyFile) { try { Remove-Item -LiteralPath $legacyFile -Force } catch {} }
 }
 
 if (Test-Path -LiteralPath $modSource) {
     try {
         if (-not (Test-Path -LiteralPath $modDest)) {
-            Copy-Item $modSource $modDest -Recurse -Force
+            Copy-Item -LiteralPath $modSource -Destination $modDest -Recurse -Force
         } else {
             # Reinstall: overwrite Scripts/ but preserve user Mods/
             $scriptsDst = Join-Path $modDest "Scripts"
-            if (Test-Path -LiteralPath $scriptsDst) { Remove-Item $scriptsDst -Recurse -Force }
-            Copy-Item (Join-Path $modSource "Scripts") $scriptsDst -Recurse -Force
+            if (Test-Path -LiteralPath $scriptsDst) { Remove-Item -LiteralPath $scriptsDst -Recurse -Force }
+            Copy-Item -LiteralPath (Join-Path $modSource "Scripts") -Destination $scriptsDst -Recurse -Force
 
-            Get-ChildItem $modSource -File | ForEach-Object {
-                Copy-Item $_.FullName (Join-Path $modDest $_.Name) -Force
+            Get-ChildItem -LiteralPath $modSource -File | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $modDest $_.Name) -Force
             }
         }
         # Install bundled C++ mods if included. WindroseNativeProbe is
@@ -216,10 +222,10 @@ if (Test-Path -LiteralPath $modSource) {
             if (Test-Path -LiteralPath $dllSrc) {
                 $dllDest = Join-Path $modsDir "$($cppMod.Name)\dlls"
                 if (-not (Test-Path -LiteralPath $dllDest)) { New-Item -ItemType Directory -Path $dllDest -Force | Out-Null }
-                Copy-Item $dllSrc (Join-Path $dllDest "main.dll") -Force
+                Copy-Item -LiteralPath $dllSrc -Destination (Join-Path $dllDest "main.dll") -Force
                 $enabledPath = Join-Path $modsDir "$($cppMod.Name)\enabled.txt"
                 if (-not (Test-Path -LiteralPath $enabledPath)) {
-                    Set-Content $enabledPath "1"
+                    Set-Content -LiteralPath $enabledPath -Value "1"
                 }
             }
         }
@@ -271,14 +277,14 @@ if (Test-Path -LiteralPath $luaModsDir) {
 # Add to mods.txt
 $modsTxt = Join-Path $modsDir "mods.txt"
 if (Test-Path -LiteralPath $modsTxt) {
-    $content = Get-Content $modsTxt -Raw
+    $content = Get-Content -LiteralPath $modsTxt -Raw
     # Strip legacy/diagnostic entries that should not auto-load.
     if ($content -match "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe|MapMaterializerExporter|MappingsDumperMod|WindrosePlusNative)\s*:") {
         $content = [regex]::Replace($content, "(?mi)^\s*(IdleCpuLimiter|WindroseNativeProbe|MapMaterializerExporter|MappingsDumperMod|WindrosePlusNative)\s*:\s*\d+\s*\r?\n?", "")
-        Set-Content $modsTxt $content
+        Set-Content -LiteralPath $modsTxt -Value $content
     }
     if ($content -notmatch "WindrosePlus") {
-        Add-Content $modsTxt "`nWindrosePlus : 1`n"
+        Add-Content -LiteralPath $modsTxt -Value "`nWindrosePlus : 1`n"
         $content += "`nWindrosePlus : 1`n"
     }
     foreach ($cppModName in @("HeightmapExporter")) {
@@ -286,9 +292,9 @@ if (Test-Path -LiteralPath $modsTxt) {
         if (Test-Path -LiteralPath $cppMainDll) {
             if ($content -match "(?m)^\s*$cppModName\s*:") {
                 $content = [regex]::Replace($content, "(?m)^\s*$cppModName\s*:\s*\d+\s*$", "$cppModName : 1")
-                Set-Content $modsTxt $content
+                Set-Content -LiteralPath $modsTxt -Value $content
             } else {
-                Add-Content $modsTxt "$cppModName : 1`n"
+                Add-Content -LiteralPath $modsTxt -Value "$cppModName : 1`n"
                 $content += "`n$cppModName : 1`n"
             }
         }
@@ -301,7 +307,7 @@ if (Test-Path -LiteralPath $modsTxt) {
             $modsContent += "$cppModName : 1`n"
         }
     }
-    Set-Content $modsTxt $modsContent
+    Set-Content -LiteralPath $modsTxt -Value $modsContent
 }
 
 # UE4SS ships sample Lua mods (console and cheat-manager enablers, keybinds,
@@ -311,7 +317,7 @@ if (Test-Path -LiteralPath $modsTxt) {
 # use them. Switch them off; set a line back to 1 in mods.txt to use one.
 $ue4ssSampleMods = @("CheatManagerEnablerMod", "ConsoleCommandsMod", "ConsoleEnablerMod", "SplitScreenMod", "LineTraceMod", "BPML_GenericFunctions", "BPModLoaderMod", "Keybinds")
 if (Test-Path -LiteralPath $modsTxt) {
-    $content = Get-Content $modsTxt -Raw
+    $content = Get-Content -LiteralPath $modsTxt -Raw
     $turnedOff = @()
     foreach ($sample in $ue4ssSampleMods) {
         $pattern = "(?m)^[ \t]*$sample[ \t]*:[ \t]*1[ \t]*(?=\r?$)"
@@ -321,7 +327,7 @@ if (Test-Path -LiteralPath $modsTxt) {
         }
     }
     if ($turnedOff.Count -gt 0) {
-        Set-Content $modsTxt $content
+        Set-Content -LiteralPath $modsTxt -Value $content
         Write-Host "    Switched off UE4SS sample mods: $($turnedOff -join ', ')" -ForegroundColor DarkGray
     }
 }
@@ -336,8 +342,8 @@ try {
         $src = Join-Path $scriptDir $folder
         $dst = Join-Path $wpDir $folder
         if (Test-Path -LiteralPath $src) {
-            if (Test-Path -LiteralPath $dst) { Remove-Item $dst -Recurse -Force }
-            Copy-Item $src $dst -Recurse -Force
+            if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
+            Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
         }
     }
 
@@ -346,14 +352,15 @@ try {
     $configDst = Join-Path $wpDir "config"
     if (Test-Path -LiteralPath $configSrc) {
         if (-not (Test-Path -LiteralPath $configDst)) { New-Item -ItemType Directory -Path $configDst -Force | Out-Null }
-        Get-ChildItem $configSrc -Filter "*.default.ini" | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $configDst $_.Name) -Force
+        Get-ChildItem -LiteralPath $configSrc -Filter "*.default.ini" | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $configDst $_.Name) -Force
         }
     }
 
-    # Create dashboard launcher
+    # Create dashboard launcher. It finds the game folder from where it sits, so a
+    # % or a non-English letter in the folder name cannot break the batch file.
     $dashBat = Join-Path $wpDir "start_dashboard.bat"
-    Set-Content $dashBat "@echo off`npowershell -ExecutionPolicy Bypass -File `"%~dp0server\windrose_plus_server.ps1`" -GameDir `"$gameDir`" %*"
+    Set-Content -LiteralPath $dashBat -Value "@echo off`npowershell -ExecutionPolicy Bypass -File `"%~dp0server\windrose_plus_server.ps1`" -GameDir `"%~dp0..`" %*"
 
     Write-Host " done" -ForegroundColor Green
 } catch {

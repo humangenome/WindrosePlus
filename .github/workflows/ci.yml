@@ -112,6 +112,14 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-TileBuild.ps1
 
+      - name: Installer (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./scripts/Test-Installer.ps1
+
+      - name: Installer (PowerShell 7)
+        shell: pwsh
+        run: ./scripts/Test-Installer.ps1
+
   release-metadata:
     name: Route list, PAK builder version, curve table reader
     runs-on: ubuntu-latest
