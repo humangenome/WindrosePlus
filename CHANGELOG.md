@@ -2,6 +2,12 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.27] - 2026-11-01
+
+### Removed
+
+- `WindroseNativeProbe.dll`, a research tool no server loads, is no longer in the zip because one antivirus engine flagged it. It is still on the release page as its own download, and nothing else changes in this release.
+
 ## [1.3.26] - 2026-10-29
 
 ### Removed
