@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/activity_log_line.schema.json",
+  "title": "windrose_plus_data/logs/YYYY-MM-DD.log, one line",
+  "description": "The activity log (modules/events.lua): one JSON object per line, a new file each UTC day. Read by the console audit feed (/api/rcon/log).",
+  "type": "object",
+  "required": [
+    "ts",
+    "ts_unix",
+    "sid",
+    "ev",
+    "payload"
+  ],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "ts_unix": {
+      "type": "integer"
+    },
+    "sid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{6}$"
+    },
+    "ev": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/console_history.schema.json",
+  "title": "windrose_plus_data/console_history.json",
+  "description": "The shared console log, newest last, kept to a set length; reset at each server start (the old one goes to console_history.json.pre_session with archive_request.txt). The dashboard serves no route for it; host panels read it directly.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "timestamp",
+      "command",
+      "status",
+      "message",
+      "admin"
+    ],
+    "properties": {
+      "timestamp": {
+        "type": "integer"
+      },
+      "command": {
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "ok",
+          "error"
+        ]
+      },
+      "message": {
+        "type": "string",
+        "maxLength": 503
+      },
+      "admin": {
+        "type": "string"
+      }
+    }
+  }
+}

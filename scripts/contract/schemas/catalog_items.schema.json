@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/catalog_items.schema.json",
+  "title": "windrose_plus_data/catalog/v1/items_full.json",
+  "description": "Written by tools/WindrosePlus-BuildCatalog.ps1 from the server's own game files (one entry per player item). Served at /catalog/v1/items_full.json and read by the Sea Chart's items panel and by host panels.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "sourceId",
+      "name",
+      "description",
+      "rarity",
+      "tier",
+      "stack",
+      "sourceCategory",
+      "topLevelCategoryId",
+      "topLevelCategoryLabel",
+      "categoryId",
+      "tooltip",
+      "drops"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "sourceId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "name": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "description": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "rarity": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tier": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "stack": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "sourceCategory": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceCategoryLabel": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "topLevelCategoryId": {
+        "type": "string"
+      },
+      "topLevelCategoryLabel": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "categoryId": {
+        "type": "string"
+      },
+      "itemTag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "itemTypeTag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tooltip": {
+        "type": "object",
+        "required": [
+          "category",
+          "description",
+          "mainStat",
+          "secondaryStats",
+          "additionalStats"
+        ],
+        "properties": {
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "secondaryStats": {
+            "type": "array"
+          },
+          "additionalStats": {
+            "type": "array"
+          },
+          "descriptionData": {
+            "type": "array"
+          },
+          "effectsDescriptions": {
+            "type": "array"
+          },
+          "setEffectsDescriptions": {
+            "type": "array"
+          },
+          "vanityText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "drops": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "npcName",
+            "sourceType",
+            "chance",
+            "minQuantity",
+            "maxQuantity",
+            "sourceTableId"
+          ],
+          "properties": {
+            "npcId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "npcSourceId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "npcName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sourceType": {
+              "type": "string"
+            },
+            "sourceTypeLabel": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "minQuantity": {
+              "type": "number"
+            },
+            "maxQuantity": {
+              "type": "number"
+            },
+            "sourceTableId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "weaponStatLabel": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "weaponGrade": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "shipWeaponDamage": {
+        "type": "number"
+      },
+      "shipWeaponReloadTime": {
+        "type": "number"
+      },
+      "foodDurationSeconds": {
+        "type": "number"
+      }
+    }
+  }
+}

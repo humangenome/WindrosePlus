@@ -1,0 +1,12 @@
+{
+  "name": "windroseplus-page-smoke",
+  "private": true,
+  "description": "Page smoke test for the Windrose+ dashboard and Sea Chart (scripts/contract/smoke). Not part of the release.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.57.0"
+  }
+}

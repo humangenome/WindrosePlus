@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/catalog_summary.schema.json",
+  "title": "windrose_plus_data/catalog/v1/_summary.json",
+  "description": "Written last by tools/WindrosePlus-BuildCatalog.ps1. The builder skips a rebuild when fingerprint is unchanged; host panels read the counts and builder_version.",
+  "type": "object",
+  "required": [
+    "source",
+    "builder_version",
+    "fingerprint",
+    "built_at",
+    "items_total",
+    "items_with_drop_records",
+    "items_with_usage",
+    "recipes",
+    "categories",
+    "rarities",
+    "stat_values"
+  ],
+  "properties": {
+    "source": {
+      "type": "string"
+    },
+    "builder_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "built_at": {
+      "type": "string"
+    },
+    "items_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items_with_drop_records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items_with_usage": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "recipes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "trader_offers": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "building_costs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stations": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "traders": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "categories": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "rarities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "stat_values": {
+      "type": "boolean"
+    },
+    "stat_values_from": {
+      "type": "string"
+    },
+    "not_in_game_data": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

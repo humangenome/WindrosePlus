@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/server_status.schema.json",
+  "title": "windrose_plus_data/server_status.json",
+  "description": "Written by the mod's status writer (modules/query.lua) every few seconds. Read by the dashboard server (/api/status) and by host panels directly. Add fields; never rename or remove one.",
+  "type": "object",
+  "required": [
+    "server",
+    "players",
+    "perf",
+    "multipliers",
+    "timestamp"
+  ],
+  "properties": {
+    "server": {
+      "type": "object",
+      "required": [
+        "name",
+        "game",
+        "version",
+        "windrose_plus",
+        "invite_code",
+        "password_protected",
+        "max_players",
+        "player_count"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "game": {
+          "const": "Windrose"
+        },
+        "version": {
+          "type": "string"
+        },
+        "windrose_plus": {
+          "type": "string"
+        },
+        "invite_code": {
+          "type": "string"
+        },
+        "password_protected": {
+          "type": "boolean"
+        },
+        "max_players": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "player_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "game_port": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "alive"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The player's name, or 'Player <id>' / 'Player' when the game gave none."
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "player_id": {
+            "type": "integer"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^player:-?[0-9]+$"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "z": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "perf": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "world_time": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "array",
+          "maxItems": 0
+        }
+      ]
+    },
+    "multipliers": {
+      "type": "object",
+      "required": [
+        "xp",
+        "loot",
+        "stack_size",
+        "craft_efficiency",
+        "crop_speed",
+        "weight",
+        "inventory_size",
+        "cooking_speed",
+        "harvest_yield"
+      ],
+      "additionalProperties": {
+        "type": "number"
+      },
+      "properties": {
+        "craft_cost": {
+          "type": "number",
+          "description": "Old name of craft_efficiency, still written for old dashboards."
+        }
+      }
+    },
+    "timestamp": {
+      "type": "integer"
+    },
+    "mode": {
+      "const": "degraded"
+    },
+    "degraded": {
+      "const": true
+    },
+    "degraded_reason": {
+      "type": "string"
+    },
+    "cache_age_sec": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/commands.schema.json",
+  "title": "windrose_plus_data/commands.json",
+  "description": "The live command list, written by modules/admin.lua at start and whenever a mod registers a command. Served by /api/commands. Hidden commands are left out.",
+  "type": "object",
+  "required": [
+    "generatedAt",
+    "count",
+    "commands"
+  ],
+  "properties": {
+    "generatedAt": {
+      "type": "integer"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "usage",
+          "description",
+          "category"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "usage": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "subcommands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "usage": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

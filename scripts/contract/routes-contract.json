@@ -1,0 +1,630 @@
+{
+  "about": "What every route in server/routes.json answers, with and without a login, on the made-up game folder in scripts/contract/fixture/game. scripts/Test-RouteContract.ps1 runs it against the real server and fails on a route with no entry here. Placeholders: {password}, {token} (the public map token), {port}, {routes_version}. login: none, cookie (the dashboard session), header (X-RCON-Password). values: fields that must have exactly these values. save: the answer is written under that name for scripts/contract/check-data-files.py.",
+  "routes": {
+    "/login": [
+      {
+        "request": "GET /login",
+        "login": "none",
+        "status": 200,
+        "type": "html",
+        "contains": [
+          "name=\"password\""
+        ]
+      },
+      {
+        "request": "POST /login",
+        "login": "none",
+        "body": "password=wrong-pass",
+        "content_type": "application/x-www-form-urlencoded",
+        "status": 200,
+        "type": "html",
+        "contains": [
+          "Invalid password"
+        ],
+        "no_cookie": true
+      },
+      {
+        "request": "POST /login",
+        "login": "none",
+        "body": "password={password}",
+        "content_type": "application/x-www-form-urlencoded",
+        "status": 302,
+        "location": "/",
+        "headers_contain": {
+          "Set-Cookie": "wp_session_{port}="
+        }
+      }
+    ],
+    "/logout": [
+      {
+        "request": "GET /logout",
+        "login": "none",
+        "status": 302,
+        "location": "/login",
+        "headers_contain": {
+          "Set-Cookie": "Max-Age=0"
+        }
+      },
+      {
+        "request": "GET /logout",
+        "login": "cookie",
+        "status": 302,
+        "location": "/login",
+        "headers_contain": {
+          "Set-Cookie": "Max-Age=0"
+        }
+      }
+    ],
+    "/api/health": [
+      {
+        "request": "GET /api/health",
+        "login": "none",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "status",
+          "version",
+          "routes_version",
+          "pak_builder_version",
+          "timestamp"
+        ],
+        "values": {
+          "status": "ok",
+          "routes_version": "{routes_version}"
+        }
+      }
+    ],
+    "/vendor/{file}": [
+      {
+        "request": "GET /vendor/leaflet/leaflet.js",
+        "login": "none",
+        "status": 200,
+        "type": "js",
+        "headers_contain": {
+          "ETag": "\""
+        }
+      },
+      {
+        "request": "GET /vendor/leaflet/leaflet.css",
+        "login": "none",
+        "status": 200,
+        "type": "css"
+      },
+      {
+        "request": "GET /vendor/leaflet/no-such-file.js",
+        "login": "none",
+        "status": 404
+      }
+    ],
+    "/catalog/v1/{name}.json": [
+      {
+        "request": "GET /catalog/v1/items_full.json",
+        "login": "none",
+        "status": 200,
+        "type": "json",
+        "contains": [
+          "Test Plank"
+        ]
+      },
+      {
+        "request": "GET /catalog/v1/no_such_file.json",
+        "login": "none",
+        "status": 404,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      }
+    ],
+    "/catalog/{file}": [
+      {
+        "request": "GET /catalog/v1/icons/items/food.webp",
+        "login": "none",
+        "status": 200,
+        "type": "webp"
+      }
+    ],
+    "/public-map": [
+      {
+        "request": "GET /public-map",
+        "login": "none",
+        "status": 401,
+        "type": "html"
+      },
+      {
+        "request": "GET /public-map?token={token}",
+        "login": "none",
+        "status": 200,
+        "type": "html"
+      }
+    ],
+    "/api/public/livemap": [
+      {
+        "request": "GET /api/public/livemap",
+        "login": "none",
+        "status": 401,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/public/livemap?token={token}",
+        "login": "none",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "players",
+          "mobs",
+          "nodes",
+          "player_count",
+          "mob_count",
+          "node_count",
+          "timestamp"
+        ],
+        "absent": [
+          "session_id",
+          "player_id",
+          "actor_id"
+        ]
+      }
+    ],
+    "/api/public/pois": [
+      {
+        "request": "GET /api/public/pois",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/public/pois?token={token}",
+        "login": "none",
+        "status": 200,
+        "type": "json",
+        "save": "pois.public-route.json"
+      }
+    ],
+    "/api/public/runtime-overlay": [
+      {
+        "request": "GET /api/public/runtime-overlay?token={token}",
+        "login": "none",
+        "status": 404,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      }
+    ],
+    "/api/public/mapinfo": [
+      {
+        "request": "GET /api/public/mapinfo",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/public/mapinfo?token={token}",
+        "login": "none",
+        "status": 200,
+        "type": "json",
+        "save": "map_coords.public-route.json"
+      }
+    ],
+    "/public-map/tiles/{z}/{x}-{y}.png": [
+      {
+        "request": "GET /public-map/tiles/0/0-0.png",
+        "login": "none",
+        "status": 401
+      },
+      {
+        "request": "GET /public-map/tiles/0/0-0.png?token={token}&v=20261026T120000Z",
+        "login": "none",
+        "status": 200,
+        "type": "png",
+        "headers_contain": {
+          "Cache-Control": "max-age=86400",
+          "ETag": "\""
+        }
+      },
+      {
+        "request": "GET /public-map/tiles/0/9-9.png?token={token}",
+        "login": "none",
+        "status": 404
+      }
+    ],
+    "/api/status": [
+      {
+        "request": "GET /api/status",
+        "login": "none",
+        "status": 401,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/status",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "save": "server_status.route.json"
+      },
+      {
+        "request": "GET /api/status",
+        "login": "cookie",
+        "status": 200,
+        "type": "json"
+      }
+    ],
+    "/api/livemap": [
+      {
+        "request": "GET /api/livemap",
+        "login": "none",
+        "status": 401,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/livemap",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "save": "livemap_data.route.json"
+      },
+      {
+        "request": "GET /api/livemap",
+        "login": "cookie",
+        "status": 200,
+        "type": "json"
+      }
+    ],
+    "/api/pois": [
+      {
+        "request": "GET /api/pois",
+        "login": "none",
+        "status": 401,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/pois",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "save": "pois.route.json"
+      },
+      {
+        "request": "GET /api/pois",
+        "login": "cookie",
+        "status": 200,
+        "type": "json"
+      }
+    ],
+    "/api/mapinfo": [
+      {
+        "request": "GET /api/mapinfo",
+        "login": "none",
+        "status": 401,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/mapinfo",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "save": "map_coords.route.json"
+      },
+      {
+        "request": "GET /api/mapinfo",
+        "login": "cookie",
+        "status": 200,
+        "type": "json"
+      }
+    ],
+    "/api/runtime-overlay": [
+      {
+        "request": "GET /api/runtime-overlay",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/runtime-overlay",
+        "login": "header",
+        "status": 404,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      }
+    ],
+    "/api/config": [
+      {
+        "request": "GET /api/config",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/config",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "server",
+          "rcon",
+          "multipliers"
+        ],
+        "contains": [
+          "\"***\""
+        ],
+        "absent": [
+          "{password}"
+        ],
+        "save": "windrose_plus.config-route.json"
+      }
+    ],
+    "/api/pak-status": [
+      {
+        "request": "GET /api/pak-status",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/pak-status",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "wrapper_present",
+          "multipliers_pak_present",
+          "curvetables_pak_present",
+          "json_present",
+          "ini_present",
+          "ct_config_present",
+          "multiplier_pak_disabled",
+          "multiplier_config_present",
+          "stale",
+          "stale_reason"
+        ]
+      }
+    ],
+    "/api/commands": [
+      {
+        "request": "GET /api/commands",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/commands",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "commands",
+          "generatedAt"
+        ],
+        "contains": [
+          "\"wp.version\""
+        ]
+      }
+    ],
+    "/api/terrain_height?x={x}&y={y}": [
+      {
+        "request": "GET /api/terrain_height?x=100&y=200",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/terrain_height?x=100.5&y=-200",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      {
+        "request": "GET /api/terrain_height",
+        "login": "header",
+        "status": 400,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      }
+    ],
+    "/api/rcon/log": [
+      {
+        "request": "GET /api/rcon/log",
+        "login": "none",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/rcon/log",
+        "login": "header",
+        "status": 200,
+        "type": "json",
+        "array": true,
+        "contains": [
+          "\"command\""
+        ]
+      }
+    ],
+    "/api/rcon": [
+      {
+        "request": "POST /api/rcon",
+        "login": "none",
+        "body": "{\"command\":\"wp.version\"}",
+        "content_type": "application/json",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "POST /api/rcon",
+        "login": "header",
+        "body": "{\"command\":\"wp.version\",\"args\":[]}",
+        "content_type": "application/json",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "id",
+          "status",
+          "message"
+        ],
+        "save": "rcon_response.route.json"
+      },
+      {
+        "request": "POST /api/rcon",
+        "login": "none",
+        "body": "{\"command\":\"wp.version\",\"password\":\"{password}\"}",
+        "content_type": "application/json",
+        "status": 200,
+        "type": "json",
+        "fields": [
+          "id",
+          "status",
+          "message"
+        ]
+      },
+      {
+        "request": "POST /api/rcon",
+        "login": "cookie",
+        "body": "{\"command\":\"wp.version\"}",
+        "content_type": "text/plain",
+        "status": 415,
+        "type": "json"
+      },
+      {
+        "request": "POST /api/rcon",
+        "login": "header",
+        "body": "{}",
+        "content_type": "application/json",
+        "status": 400,
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      },
+      {
+        "request": "GET /api/rcon",
+        "login": "header",
+        "status": 405,
+        "type": "json"
+      }
+    ],
+    "/api/character-repair": [
+      {
+        "request": "POST /api/character-repair",
+        "login": "none",
+        "body": "PK",
+        "content_type": "application/zip",
+        "status": 401,
+        "type": "json"
+      },
+      {
+        "request": "GET /api/character-repair",
+        "login": "header",
+        "status": 405,
+        "type": "json"
+      },
+      {
+        "request": "POST /api/character-repair",
+        "login": "header",
+        "body": "not a zip file",
+        "content_type": "application/zip",
+        "status": [
+          422,
+          503
+        ],
+        "type": "json",
+        "fields": [
+          "error"
+        ]
+      }
+    ],
+    "/": [
+      {
+        "request": "GET /",
+        "login": "none",
+        "status": 302,
+        "location": "/login"
+      },
+      {
+        "request": "GET /",
+        "login": "cookie",
+        "status": 200,
+        "type": "html"
+      }
+    ],
+    "/livemap": [
+      {
+        "request": "GET /livemap",
+        "login": "none",
+        "status": 302,
+        "location": "/login"
+      },
+      {
+        "request": "GET /livemap",
+        "login": "cookie",
+        "status": 200,
+        "type": "html"
+      },
+      {
+        "request": "GET /livemap?embed=1",
+        "login": "cookie",
+        "status": 200,
+        "type": "html"
+      }
+    ],
+    "/livemap/tiles/{z}/{x}-{y}.png": [
+      {
+        "request": "GET /livemap/tiles/0/0-0.png",
+        "login": "none",
+        "status": 302,
+        "location": "/login"
+      },
+      {
+        "request": "GET /livemap/tiles/0/0-0.png?v=20261026T120000Z",
+        "login": "cookie",
+        "status": 200,
+        "type": "png",
+        "headers_contain": {
+          "Cache-Control": "max-age=86400"
+        }
+      }
+    ],
+    "/{file}": [
+      {
+        "request": "GET /index.html",
+        "login": "none",
+        "status": 302,
+        "location": "/login"
+      },
+      {
+        "request": "GET /index.html",
+        "login": "cookie",
+        "status": 200,
+        "type": "html"
+      },
+      {
+        "request": "GET /no-such-file.txt",
+        "login": "cookie",
+        "status": 404
+      }
+    ]
+  }
+}

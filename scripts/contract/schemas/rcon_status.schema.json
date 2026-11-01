@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HumanGenome/WindrosePlus/scripts/contract/schemas/rcon_status.schema.json",
+  "title": "windrose_plus_data/rcon_status.json",
+  "description": "The console worker's heartbeat (modules/rcon.lua). Host panels read it to tell a live console from a stuck one.",
+  "type": "object",
+  "required": [
+    "ts",
+    "version",
+    "state",
+    "detail",
+    "last_error",
+    "last_error_ts",
+    "spool_dir"
+  ],
+  "properties": {
+    "ts": {
+      "type": "integer"
+    },
+    "version": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "starting",
+        "running",
+        "error"
+      ]
+    },
+    "detail": {
+      "type": "string"
+    },
+    "last_error": {
+      "type": "string"
+    },
+    "last_error_ts": {
+      "type": "integer"
+    },
+    "spool_dir": {
+      "type": "string"
+    }
+  }
+}

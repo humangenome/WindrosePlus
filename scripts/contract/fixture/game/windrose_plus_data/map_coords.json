@@ -1,0 +1,17 @@
+{
+  "world_min_x": -409600,
+  "world_min_y": -409600,
+  "world_max_x": 409600,
+  "world_max_y": 409600,
+  "tile_size": 256,
+  "max_zoom": 2,
+  "orientation": "game",
+  "tileset_id": "20261026T120000Z",
+  "total_components": 2,
+  "island_bounds": {
+    "min_x": -120000,
+    "min_y": -90000,
+    "max_x": 150000,
+    "max_y": 110000
+  }
+}
