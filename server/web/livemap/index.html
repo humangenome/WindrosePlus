@@ -1839,11 +1839,44 @@ var STATIC_CATALOG='/catalog/v1';
         if (seconds >= 60 && seconds % 60 === 0) return (seconds / 60) + ' min';
         return seconds + ' sec';
     }
+    // Readable stat names, by the same rules as tools/lib/StatLabels.ps1 (the catalog builder writes them as
+    // "label"; catalogs built before that carry only the game's code names, such as ShipFireRangeRANK or
+    // Greatsword_Souldrinker_AbilityCooldown).
+    var STAT_NAMES = { AttackPower: 'Attack power', ShipCannonDamage: 'Ship damage', ShipCannonReloadTime: 'Ship reload',
+        ShipFireAccuracyRANK: 'Ship accuracy', ShipFireRangeRANK: 'Ship range' };
+    var STAT_WORDS = { Dmg: 'damage', HP: 'health', Cons: 'use', Crit: 'critical', Add: 'bonus', Resist: 'resistance',
+        Wpn: 'weapon', Stmn: 'stamina', Crpt: 'corruption', Coeff: 'coefficient', Eff: 'effect', Resotre: 'restore' };
+    function statWords(name) {
+        var s = String(name).replace(/RANK$/, '').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+        var out = [];
+        s.split(/[\s_]+/).forEach(function(w) {
+            w = w.replace(/([A-Za-z])\d+$/, '$1');
+            if (!w) return;
+            if (Object.prototype.hasOwnProperty.call(STAT_WORDS, w)) w = STAT_WORDS[w];
+            else if (!/^[A-Z0-9]{2,}$/.test(w)) w = w.toLowerCase();
+            if (out.length && out[out.length - 1] === w) return;
+            out.push(w);
+        });
+        if (!out.length) return 'Value';
+        var text = out.join(' ');
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    function readableStatName(stat, rowName) {
+        if (stat && stat !== 'None') return Object.prototype.hasOwnProperty.call(STAT_NAMES, stat) ? STAT_NAMES[stat] : statWords(stat);
+        if (!rowName || rowName === 'None' || /^-?\d+(\.\d+)?$/.test(String(rowName))) return 'Value';
+        var r = String(rowName).replace(/_(UI|StatValue)$/, '');
+        var m = r.match(/_SetEffect_(.+)$/);
+        if (m) r = m[1];
+        else { var parts = r.split('_').filter(function(x) { return x; }); r = parts[parts.length - 1] || r; }
+        return statWords(r);
+    }
     function formatStatEntry(s) {
         if (!s || typeof s !== 'object') return '';
         var value = isKnown(s.valueLevel1) ? s.valueLevel1 : '';
-        if (isKnown(value) && String(s.displayType || '').toLowerCase().indexOf('percent') >= 0) value = value + '%';
-        var label = s.stat || s.rowName || s.curveTable || 'Stat';
+        var kind = String(s.displayType || '').toLowerCase();
+        if (isKnown(value) && kind.indexOf('percent') >= 0) value = value + '%';
+        else if (isKnown(value) && kind === 'secondsasminutes') value = value + ' min';
+        var label = s.label || readableStatName(s.stat, s.rowName);
         return detailRow(label, isKnown(value) ? value : 'set');
     }
     function effectsHtml(title, list) {

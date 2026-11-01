@@ -59,7 +59,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$BuilderVersion = "1"
+# 2: every stat entry carries a readable "label" (tools/lib/StatLabels.ps1)
+$BuilderVersion = "2"
 
 if ($LogFile) {
     $logDir = Split-Path -Parent $LogFile
@@ -334,6 +335,7 @@ function Get-CurveValue($tablePath, [string]$row, $level) {
     }
     return [double]$best.Value
 }
+. (Join-Path $PSScriptRoot "lib\StatLabels.ps1")
 function Get-StatEntry($e) {
     # One stat reference from an item's UI data, with its value at level 1.
     if ($null -eq $e) { return $null }
@@ -341,7 +343,7 @@ function Get-StatEntry($e) {
     if (-not $stat -or $stat -eq "None") { return $null }
     $table = [string](Get-Prop $e "CurveTable")
     $row = [string](Get-Prop $e "RowName")
-    $entry = [ordered]@{ stat = $stat; curveTable = $table; rowName = $row; curveLevel = (Get-Prop $e "CurveLevel") }
+    $entry = [ordered]@{ stat = $stat; label = (Get-WindroseStatLabel $stat $row); curveTable = $table; rowName = $row; curveLevel = (Get-Prop $e "CurveLevel") }
     if ($row -match '^[A-Z][+-]?$') {
         $entry.grade = $row; $entry.valueLevel1 = $row
     } elseif (-not $table -or $table -eq "None") {
@@ -365,7 +367,7 @@ function Get-DescriptionEntry($e) {
     } else {
         $raw = Get-CurveValue $table $row (Get-Prop $e "CurveLevel")
     }
-    $entry = [ordered]@{ curveTable = $table; rowName = $row; curveLevel = (Get-Prop $e "CurveLevel"); displayType = $dtype; inverse = $inverse }
+    $entry = [ordered]@{ label = (Get-WindroseStatLabel "" $row); curveTable = $table; rowName = $row; curveLevel = (Get-Prop $e "CurveLevel"); displayType = $dtype; inverse = $inverse }
     if ($null -ne $raw) {
         $shown = $raw
         switch ($dtype) {

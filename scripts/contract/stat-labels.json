@@ -1,0 +1,1505 @@
+{
+ "source": "Every stat entry and every number in an item's text (tooltip mainStat, secondaryStats, additionalStats, descriptionData) in a catalog built from the Windrose 0.10.0.9.32 dedicated server's game files on 2026-10-23 (1161 items). Test-StatLabels.ps1 checks that tools/lib/StatLabels.ps1 gives each exactly this label, and the page smoke test checks the dashboard page's readableStatName does too. After a game update, rebuild the list with a fresh catalog and look over the new labels before committing.",
+ "keys": [
+  {
+   "stat": "",
+   "row": "",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "10",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "130",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "15",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "2",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "20",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "200",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "22",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "25",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "3",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "30",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "4",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "40",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "5",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "50",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "60",
+   "label": "Value"
+  },
+  {
+   "stat": "",
+   "row": "Adventurer_SetEffect_AttackStaminaCons",
+   "label": "Attack stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Adventurer_SetEffect_MeleeDmgBonus",
+   "label": "Melee damage bonus"
+  },
+  {
+   "stat": "Agility",
+   "row": "A",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "B",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "C",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "D",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_Bean_T03_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_BrothWithPotato_T02_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_Chowder_T02_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_Coconut_T01_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_Gazpacho_T03_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Food_Soup_TomatoCrab_T02_Agility",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "Necklace_Agility_BaseStatValue",
+   "label": "Agility"
+  },
+  {
+   "stat": "Agility",
+   "row": "S",
+   "label": "Agility"
+  },
+  {
+   "stat": "",
+   "row": "Alchemy_Bandages_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Alchemy_Bandages_T01_TotalHealthResotre",
+   "label": "Total health restore"
+  },
+  {
+   "stat": "",
+   "row": "Alchemy_Potion_Healing_Base_HealthRestoreRatio",
+   "label": "Health restore ratio"
+  },
+  {
+   "stat": "",
+   "row": "Alchemy_Potion_Healing_Enhanced_HealthRestoreRatio",
+   "label": "Health restore ratio"
+  },
+  {
+   "stat": "",
+   "row": "Alchemy_Potion_Healing_Great_HealthRestoreRatio",
+   "label": "Health restore ratio"
+  },
+  {
+   "stat": "",
+   "row": "Ammo_FirearmProjectile_AncientMetal_T03_UI_Effect1",
+   "label": "Effect"
+  },
+  {
+   "stat": "",
+   "row": "Ammo_FirearmProjectile_FineMetal_T02_UI_Effect1",
+   "label": "Effect"
+  },
+  {
+   "stat": "",
+   "row": "Ammo_FirearmProjectile_StoneBullet_T01_UI_Effect1",
+   "label": "Effect"
+  },
+  {
+   "stat": "AttackPower",
+   "row": "power_craftable",
+   "label": "Attack power"
+  },
+  {
+   "stat": "AttackPower",
+   "row": "power_starter",
+   "label": "Attack power"
+  },
+  {
+   "stat": "AttackPower",
+   "row": "power_T01",
+   "label": "Attack power"
+  },
+  {
+   "stat": "AttackPower",
+   "row": "power_T02",
+   "label": "Attack power"
+  },
+  {
+   "stat": "AttackPower",
+   "row": "power_T03",
+   "label": "Attack power"
+  },
+  {
+   "stat": "",
+   "row": "Bandit_SetEffect_DmgResist",
+   "label": "Damage resistance"
+  },
+  {
+   "stat": "",
+   "row": "Bandit_SetEffect_HealModifier",
+   "label": "Heal modifier"
+  },
+  {
+   "stat": "",
+   "row": "Blunderbuss_Dragonbreath_FireBlastProcChance",
+   "label": "Fire blast proc chance"
+  },
+  {
+   "stat": "",
+   "row": "Blunderbuss_Dragonbreath_FireDamageAdd",
+   "label": "Fire damage bonus"
+  },
+  {
+   "stat": "",
+   "row": "Blunderbuss_Dragonbreath_FireTouchProcChance",
+   "label": "Fire touch proc chance"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Blunderbuss_Blank_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Blunderbuss_Dragonbreath_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Blunderbuss_Reliable_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Musket_Blank_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Musket_Infantry_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Musket_Reliable_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Musket_Sniper_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Pistol_Blank_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Pistol_Corrupted_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Pistol_DrakesDoom_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "Blunt",
+   "row": "Pistol_Reliable_BaseDamage",
+   "label": "Blunt"
+  },
+  {
+   "stat": "",
+   "row": "Club_Forceful_DamageForOutlawAdd_UI",
+   "label": "Damage for outlaw bonus"
+  },
+  {
+   "stat": "",
+   "row": "Club_Massive_WpnCritChanceAdd",
+   "label": "Weapon critical chance bonus"
+  },
+  {
+   "stat": "",
+   "row": "Club_Reliable_PostureAddBonus_UI",
+   "label": "Posture bonus"
+  },
+  {
+   "stat": "",
+   "row": "Club_Reliable_StmnCons",
+   "label": "Stamina use"
+  },
+  {
+   "stat": "",
+   "row": "ColdBarrels_Advanced_Weakspot",
+   "label": "Weakspot"
+  },
+  {
+   "stat": "",
+   "row": "ColdBarrels_Bonus",
+   "label": "Bonus"
+  },
+  {
+   "stat": "",
+   "row": "ColdBarrels_Delay",
+   "label": "Delay"
+  },
+  {
+   "stat": "",
+   "row": "Conquistador_SetEffect_DmgResist",
+   "label": "Damage resistance"
+  },
+  {
+   "stat": "Crude",
+   "row": "Axe_T00_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Axe_T01_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Axe_T02_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Axe_T03_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Blank_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Corrupted_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Fish_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Forceful_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Massive_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Club_Reliable_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Blank_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Corrupted_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Executioner_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Reliable_Advanced_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Reliable_Base_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Halberd_Reliable_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Pickaxe_T00_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Pickaxe_T01_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Pickaxe_T02_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Pickaxe_T03_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Saber_Corrupted_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Crude",
+   "row": "Shovel_T01_BaseDamage",
+   "label": "Crude"
+  },
+  {
+   "stat": "Defence",
+   "row": "power_craftable",
+   "label": "Defence"
+  },
+  {
+   "stat": "Defence",
+   "row": "power_starter",
+   "label": "Defence"
+  },
+  {
+   "stat": "Defence",
+   "row": "power_T01",
+   "label": "Defence"
+  },
+  {
+   "stat": "Defence",
+   "row": "power_T03",
+   "label": "Defence"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_CritDamage_Default_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_CritDamage_Default_EffectValue",
+   "label": "Effect value"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_CritDamage_ExtraDuration_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_DamageResist_Default_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_DamageResist_Default_EffectValue",
+   "label": "Effect value"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_GlobalDamage_Default_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_GlobalDamage_Default_EffectValue",
+   "label": "Effect value"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_GlobalDamage_ExtraDuration_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_MeleeDamage_Default_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_MeleeDamage_Default_EffectValue",
+   "label": "Effect value"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_MeleeDamage_ExtraDuration_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_RangeDamage_Default_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_RangeDamage_Default_EffectValue",
+   "label": "Effect value"
+  },
+  {
+   "stat": "",
+   "row": "Elixir_RangeDamage_ExtraDuration_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_Coconana_T01_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_CocoPeanut_T02_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_Coffee_T03_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_CoffeeBanana_T03_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_IcacoCoco_T03_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_SourTomato_T02_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Food_Drink_SweetLime_T02_Endurance",
+   "label": "Endurance"
+  },
+  {
+   "stat": "Endurance",
+   "row": "Necklace_Endurance_BaseStatValue",
+   "label": "Endurance"
+  },
+  {
+   "stat": "",
+   "row": "Flibustier_SetEffect_AttackStaminaCons",
+   "label": "Attack stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Flibustier_SetEffect_MeleeDmgBonus",
+   "label": "Melee damage bonus"
+  },
+  {
+   "stat": "",
+   "row": "Food_Dough_BurritoBeans_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Dough_BurritoMeat_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Dough_CornCasabe_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Dough_Pastechi_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Dough_Tamale_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_Coconana_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_CocoPeanut_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_Coffee_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_CoffeeBanana_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_IcacoCoco_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_SourTomato_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Drink_SweetLime_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Banana_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Coconut_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Corn_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Icaco_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Lime_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Pepper_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_Tomato_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Raw_UmbraFruit_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_BaconAndEggs_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_BirdOnPotato_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_Crab_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_FishAndTostones_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_MeatSalad_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_Potatoshrooms_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_ReptileInSwampSauce_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Second_SeafoodPlatter_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_Bird_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_Meat_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_Meatshrooms_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_Reptile_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_SeafoodHarpoon_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_SpicyCrab_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Skewer_SpicyReptile_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_Bean_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_BirdBroth_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_BrothWithPotato_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_Chowder_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_Coconut_T01_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_Gazpacho_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Soup_TomatoCrab_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Sweet_CakeIcaco_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Sweet_CakePeanut_T03_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Sweet_CornRoll_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Food_Sweet_CupcakeBanana_T02_Duration",
+   "label": "Duration"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Parrying_HPRatioRegenOnFullStack",
+   "label": "Health ratio regen on full stack"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Parrying_MeleeDamageModPerStack",
+   "label": "Melee damage mod per stack"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Parrying_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Reliable_PostureAddBonus_UI",
+   "label": "Posture bonus"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Reliable_WpnCritDamageMod",
+   "label": "Weapon critical damage mod"
+  },
+  {
+   "stat": "",
+   "row": "Greatsword_Souldrinker_AbilityCooldown",
+   "label": "Ability cooldown"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Corrupted_CumulativeDmgToAddEff",
+   "label": "Cumulative damage to bonus effect"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Corrupted_InstantHeal",
+   "label": "Instant heal"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Corrupted_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Executioner_StackCritChanceAdd",
+   "label": "Stack critical chance bonus"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Executioner_StackCritChanceMax_UI",
+   "label": "Stack critical chance max"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Executioner_StatusDamageResist",
+   "label": "Status damage resistance"
+  },
+  {
+   "stat": "",
+   "row": "Halberd_Reliable_WpnCritChanceAdd",
+   "label": "Weapon critical chance bonus"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Food_Dough_BurritoBeans_T03_Mastery",
+   "label": "Mastery"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Food_Dough_BurritoMeat_T02_mastery",
+   "label": "Mastery"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Food_Dough_BurritoMeat_T02_Mastery",
+   "label": "Mastery"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Food_Dough_Pastechi_T02_Mastery",
+   "label": "Mastery"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Food_Dough_Tamale_T03_Mastery",
+   "label": "Mastery"
+  },
+  {
+   "stat": "Mastery",
+   "row": "Necklace_Mastery_BaseStatValue",
+   "label": "Mastery"
+  },
+  {
+   "stat": "",
+   "row": "Mercenary_SetEffect_MovementStaminaCons",
+   "label": "Movement stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Mercenary_SetEffect_RangeDamage",
+   "label": "Range damage"
+  },
+  {
+   "stat": "",
+   "row": "Musket_Reliable_ReloadSpeedMod_UI",
+   "label": "Reload speed mod"
+  },
+  {
+   "stat": "",
+   "row": "Musket_Reliable_WpnCritDamageMod",
+   "label": "Weapon critical damage mod"
+  },
+  {
+   "stat": "",
+   "row": "Musket_Sniper_DamageForOutlawAdd_UI",
+   "label": "Damage for outlaw bonus"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Blunderbuss_Blank_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Blunderbuss_Dragonbreath_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Blunderbuss_Reliable_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Musket_Blank_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Musket_Infantry_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Musket_Reliable_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Musket_Sniper_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Pistol_Blank_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Pistol_Corrupted_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Pistol_DrakesDoom_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Pistol_Reliable_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Pistol_Rusty_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Rapier_Blank_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Rapier_Bleeding_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Rapier_Eviscerate_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "Pierce",
+   "row": "Rapier_Reliable_BaseDamage",
+   "label": "Pierce"
+  },
+  {
+   "stat": "",
+   "row": "Pikeman_SetEffect_ExtraHP",
+   "label": "Extra health"
+  },
+  {
+   "stat": "",
+   "row": "Pikeman_SetEffect_MeleeDmgBonus",
+   "label": "Melee damage bonus"
+  },
+  {
+   "stat": "",
+   "row": "Pistol_Corrupted_InstantHeal_UI",
+   "label": "Instant heal"
+  },
+  {
+   "stat": "",
+   "row": "Pistol_DrakesDoom_DmgWeaknessValue",
+   "label": "Damage weakness value"
+  },
+  {
+   "stat": "",
+   "row": "Pistol_Reliable_DamageForOutlawAdd_UI",
+   "label": "Damage for outlaw bonus"
+  },
+  {
+   "stat": "",
+   "row": "Pistol_Reliable_ShotCount_UI",
+   "label": "Shot count"
+  },
+  {
+   "stat": "Precision",
+   "row": "A",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "B",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "C",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "Food_Sweet_CakeIcaco_T03_Precision",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "Food_Sweet_CakePeanut_T03_Precision",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "Food_Sweet_CornRoll_T02_Precision",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "Food_Sweet_CupcakeBanana_T02_Precision",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "Necklace_Precision_BaseStatValue",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "S",
+   "label": "Precision"
+  },
+  {
+   "stat": "Precision",
+   "row": "С",
+   "label": "Precision"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Bleeding_BleedTickDamage",
+   "label": "Bleed tick damage"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Bleeding_StackLimitCount",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Eviscerate_HealCoeffFromMaxHealth",
+   "label": "Heal coefficient from max health"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Eviscerate_StackCountToActivateAbility",
+   "label": "Stack count to activate ability"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Eviscerate_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Reliable_PerfectBlockTimeBonus",
+   "label": "Perfect block time bonus"
+  },
+  {
+   "stat": "",
+   "row": "Rapier_Reliable_WpnCritDamageMod",
+   "label": "Weapon critical damage mod"
+  },
+  {
+   "stat": "",
+   "row": "Ring_CritChance_StatValue",
+   "label": "Critical chance"
+  },
+  {
+   "stat": "",
+   "row": "Ring_CritDamage_StatValue",
+   "label": "Critical damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_CrptTickResist_StatValue",
+   "label": "Corruption tick resistance"
+  },
+  {
+   "stat": "",
+   "row": "Ring_CrudeDmg_StatValue",
+   "label": "Crude damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_DmgResist_StatValue",
+   "label": "Damage resistance"
+  },
+  {
+   "stat": "",
+   "row": "Ring_FeintDmg_StatValue",
+   "label": "Feint damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_Fisherman_StatValue",
+   "label": "Fisherman"
+  },
+  {
+   "stat": "",
+   "row": "Ring_MeleeDmg_StatValue",
+   "label": "Melee damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_PierceDmg_StatValue",
+   "label": "Pierce damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_Posture_StatValue",
+   "label": "Posture"
+  },
+  {
+   "stat": "",
+   "row": "Ring_RangeDmg_StatValue",
+   "label": "Range damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_ResStmnCons_StatValue",
+   "label": "Res stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Ring_SlashDmg_StatValue",
+   "label": "Slash damage"
+  },
+  {
+   "stat": "",
+   "row": "Ring_WpnStmnCons_StatValue",
+   "label": "Weapon stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Boarding_RangeDamageModPerStack",
+   "label": "Range damage mod per stack"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Boarding_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Boarding_StmnCons",
+   "label": "Stamina use"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Corrupted_CumulativeDmgToAddEff",
+   "label": "Cumulative damage to bonus effect"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Corrupted_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Flawless_PerfectBlockTimeBonus",
+   "label": "Perfect block time bonus"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Flawless_WpnCritChanceAdd",
+   "label": "Weapon critical chance bonus"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Parrying_MeleeDamageModPerStack",
+   "label": "Melee damage mod per stack"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Parrying_StackLimitCount_UI",
+   "label": "Stack limit count"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Parrying_WpnCritChanceAdd",
+   "label": "Weapon critical chance bonus"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Reliable_PostureAddBonus_UI",
+   "label": "Posture bonus"
+  },
+  {
+   "stat": "",
+   "row": "Saber_Reliable_StmnCons",
+   "label": "Stamina use"
+  },
+  {
+   "stat": "ShipCannonDamage",
+   "row": "2000",
+   "label": "Ship damage"
+  },
+  {
+   "stat": "ShipCannonDamage",
+   "row": "2500",
+   "label": "Ship damage"
+  },
+  {
+   "stat": "ShipCannonDamage",
+   "row": "Base_Damage_12",
+   "label": "Ship damage"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "11",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "12",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "13",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "14",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "15",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipCannonReloadTime",
+   "row": "16",
+   "label": "Ship reload"
+  },
+  {
+   "stat": "ShipFireAccuracyRANK",
+   "row": "A",
+   "label": "Ship accuracy"
+  },
+  {
+   "stat": "ShipFireAccuracyRANK",
+   "row": "B",
+   "label": "Ship accuracy"
+  },
+  {
+   "stat": "ShipFireAccuracyRANK",
+   "row": "S",
+   "label": "Ship accuracy"
+  },
+  {
+   "stat": "ShipFireRangeRANK",
+   "row": "A",
+   "label": "Ship range"
+  },
+  {
+   "stat": "ShipFireRangeRANK",
+   "row": "B",
+   "label": "Ship range"
+  },
+  {
+   "stat": "ShipFireRangeRANK",
+   "row": "S",
+   "label": "Ship range"
+  },
+  {
+   "stat": "Slash",
+   "row": "Greatsword_Blank_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Greatsword_Parrying_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Greatsword_Reliable_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Greatsword_Souldrinker_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Blank_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Boarding_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Broken_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Flawless_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Parrying_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Slash",
+   "row": "Saber_Reliable_BaseDamage",
+   "label": "Slash"
+  },
+  {
+   "stat": "Strength",
+   "row": "A",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "B",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "C",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Food_Skewer_Bird_T01_Strength",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Food_Skewer_Meatshrooms_T03_Strength",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Food_Skewer_SeafoodHarpoon_T02_Strength",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Food_Skewer_SpicyCrab_T01_Strength",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Food_Skewer_SpicyReptile_T03_Strength",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "Necklace_Strength_BaseStatValue",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "S",
+   "label": "Strength"
+  },
+  {
+   "stat": "Strength",
+   "row": "С",
+   "label": "Strength"
+  },
+  {
+   "stat": "",
+   "row": "Vanilla_SetEffect_CritChance",
+   "label": "Critical chance"
+  },
+  {
+   "stat": "",
+   "row": "Vanilla_SetEffect_CritDamageAdd",
+   "label": "Critical damage bonus"
+  },
+  {
+   "stat": "",
+   "row": "Vanilla_SetEffect_CritDamageMax_UI",
+   "label": "Critical damage max"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_BaconAndEggs_T01_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_BirdOnPotato_T01_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_FishAndTostones_T02_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_MeatSalad_T02_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_Potatoshrooms_T03_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_ReptileInSwampSauce_T03_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Food_Second_SeafoodPlatter_T03_Vitality",
+   "label": "Vitality"
+  },
+  {
+   "stat": "Vitality",
+   "row": "Necklace_Vitality_BaseStatValue",
+   "label": "Vitality"
+  },
+  {
+   "stat": "",
+   "row": "Weapon_Shared_Bleed_DPS",
+   "label": "DPS"
+  }
+ ]
+}
