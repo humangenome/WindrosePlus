@@ -2,6 +2,29 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.28] - 2026-11-04
+
+### Added
+
+- **Add-ons can listen for events, answer commands later and run other commands** (#128 to #132, by Lycano). `API.on`, `API.once` and `API.emit` are an event bus; `player.join` and `player.leave` are on it. `API.registerEventSource` lets a native mod's Lua side feed it; polling starts only when a source is registered, so a server without one does no extra work (`events.poll_ms` sets the rate). A command handler can return `{ deferred = token }` and answer within 10 seconds with `API.completeDeferred`. `API.onConfigReload` runs after `windrose_plus.json` changes and still parses, so a half-saved file never hands an add-on the defaults. `API.listCommands` and `API.executeCommand` list and run commands; they do no access check, so the add-on decides who may run what. Commands can have subcommands, each with its own line in `wp.help <command>`. The [scripting guide](docs/scripting-guide.md) has examples.
+
+### Fixed
+
+- **The Sea Chart's terrain survives a restart.** An export taken in the lobby, before the world loads, replaced the terrain file with an empty one, and every map rebuild failed with "No components with heightfield data" until a player joined. The last good terrain file is now kept before each export and put back when an export has no land, and an export left waiting from before a restart no longer runs in the lobby (#138).
+- **Click-to-teleport finds land after the first player joins.** The dashboard read the terrain heights once and kept them until it restarted, so a server that started before anyone was online sent teleports to the sea floor until the dashboard restarted (#139).
+- **The Items panel shows readable stat names.** Some stats were listed under the game's code names, such as `ShipFireRangeRANK` or `Greatsword_Souldrinker_AbilityCooldown`. The catalog builder now writes a `label` for every stat and every number in an item's text, and the page uses it (#137).
+- **Creatures with a one-word class name are named on the Sea Chart.** `BP_Skeleton_C` showed as part of an object path; it now shows as Skeleton (#138).
+- **Folder names with `[` or `]` work.** The installer stopped at its first line in a folder such as `Windrose [EU]`, and the PAK builder had the same problem. `start_dashboard.bat` now finds the game folder from where it sits, so a `%` sign or a non-English letter in the path cannot break it. A failed copy of `UE4SS-settings.ini` now says so (#139).
+- **A game folder at the root of a drive works with the map and catalog builders.** `D:\` reached them as `"D:\"`, which hid the closing quote (#139).
+
+### Changed
+
+- **Less work on an empty server.** With nobody online, the Sea Chart writer reads the player list every 10 seconds instead of every 2, so it walks the game's object list 16 times a minute instead of 64. A player joining an idle server appears within 10 seconds (#139).
+- **The dashboard runs the map and catalog builders that ship beside it.** It used to look in the game folder's `windrose_plus\tools` first. That is the same folder for an `install.ps1` install, but where a host keeps the dashboard outside the game folder, a file placed in the game folder ran instead of the shipped tool (#135).
+- **windrose-heal uses version 9 of the zip library.** This clears two advisories against the old version (GHSA-m665-v7pm-7grj, GHSA-8hxf-qr8p-62x4). Neither affected windrose-heal, but the old version no longer gets fixes (#139).
+- **More tests run on every change:** every data file the mod writes and every dashboard route are checked against a written contract, the dashboard and maps are opened at five screen widths, and the installer is tested on a first install and a reinstall (#136, #139).
+- **The README is shorter.** The status file, activity log and PAK safety notes moved to `docs/`, and repak, retoc and Leaflet are credited.
+
 ## [1.3.27] - 2026-11-01
 
 ### Removed
