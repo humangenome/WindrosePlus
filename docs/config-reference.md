@@ -180,10 +180,11 @@ Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `log_level` | `"info"` | How much the mod writes to the UE4SS log: `debug`, `info`, `warn` or `error`. Read when the server starts. |
+| `show_player_ids` | `false` | Shows players' network addresses and account IDs in the answers of `wp.probe_player`, `wp.peek` and `wp.gm`. Leave it off unless you are debugging: anyone who can use the console would see them. Takes effect from the next console command. |
 
 ```json
 {
-    "debug": { "log_level": "info" }
+    "debug": { "log_level": "info", "show_player_ids": false }
 }
 ```
 

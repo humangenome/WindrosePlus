@@ -89,6 +89,17 @@
           "type": "boolean"
         }
       }
+    },
+    "debug": {
+      "type": "object",
+      "properties": {
+        "log_level": {
+          "type": "string"
+        },
+        "show_player_ids": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }
