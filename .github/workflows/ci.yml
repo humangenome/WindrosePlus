@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -110,6 +111,26 @@ jobs:
 
       - name: Test windrose-heal
         run: cargo test --locked --manifest-path tools/windrose-heal/Cargo.toml
+
+  wrong-password-limit:
+    name: Wrong-password limit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: PowerShell 7
+        shell: pwsh
+        run: ./scripts/Test-AuthThrottle.ps1
+
+      - name: Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/Test-AuthThrottle.ps1
 
   dashboard-auth:
     name: Dashboard server and map tiles
