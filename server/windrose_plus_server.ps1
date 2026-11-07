@@ -564,12 +564,24 @@ function Get-ClientKey($request) {
 # Failed-password throttle: 10 wrong passwords from one address inside 5 minutes
 # blocks that address for the rest of the window. The listener is single-threaded,
 # so this answers 429 instead of sleeping.
+# The table makes room at AuthFailureTableLimit addresses (Invoke-AuthFailureRoom). It
+# grows past that only while every address in it is blocked, and never past
+# AuthFailureTableCeiling.
 $script:AuthFailures = @{}
 $script:AuthFailureLimit = 10
 $script:AuthFailureWindowSeconds = 300
+$script:AuthFailureTableLimit = 5000
+$script:AuthFailureTableCeiling = 65536
+$script:AuthFailureLookAgainAt = 0
+$script:AuthFailureLookAgainTime = [long]::MaxValue
+$script:AuthFailureAllBlockedNoted = $false
+
+function Get-AuthNowSeconds {
+    return [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+}
 
 function Get-RecentAuthFailures([string]$ClientKey) {
-    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $now = Get-AuthNowSeconds
     if (-not $script:AuthFailures.ContainsKey($ClientKey)) { return @() }
     $recent = @($script:AuthFailures[$ClientKey] | Where-Object { ($now - $_) -lt $script:AuthFailureWindowSeconds })
     if ($recent.Count -eq 0) { $script:AuthFailures.Remove($ClientKey) } else { $script:AuthFailures[$ClientKey] = $recent }
@@ -581,10 +593,74 @@ function Test-AuthThrottled([string]$ClientKey) {
 }
 
 function Add-AuthFailure([string]$ClientKey) {
-    $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $now = Get-AuthNowSeconds
+    $count = $script:AuthFailures.Count
+    if (-not $script:AuthFailures.ContainsKey($ClientKey) -and $count -ge $script:AuthFailureTableLimit -and
+        ($count -ge $script:AuthFailureLookAgainAt -or $now -ge $script:AuthFailureLookAgainTime)) {
+        Invoke-AuthFailureRoom $now
+    }
     $recent = @(Get-RecentAuthFailures $ClientKey)
     $script:AuthFailures[$ClientKey] = @($recent + $now)
-    if ($script:AuthFailures.Count -gt 5000) { $script:AuthFailures.Clear() }
+}
+
+# Makes room in a full wrong-password table for a new address. First go the addresses
+# with no wrong password inside the window, then the longest-quiet addresses that are
+# not blocked, a batch at a time. A blocked address is never dropped to make room: when
+# every address left is blocked, the table keeps them all and grows (one log line, no
+# addresses), up to AuthFailureTableCeiling. Only there does the block nearest to
+# running out make way. Runs once per batch of new addresses or when the next block
+# runs out, not on every wrong password.
+function Invoke-AuthFailureRoom([long]$Now) {
+    $limit = $script:AuthFailureLimit
+    $window = $script:AuthFailureWindowSeconds
+    $batch = [int][Math]::Max(1, [Math]::Floor($script:AuthFailureTableLimit / 16))
+    $quiet = New-Object System.Collections.Generic.List[string]
+    $openKeys = New-Object System.Collections.Generic.List[string]
+    $openLast = New-Object System.Collections.Generic.List[long]
+    $soonest = $null
+    $soonestEase = [long]::MaxValue
+    foreach ($entry in $script:AuthFailures.GetEnumerator()) {
+        $recent = New-Object System.Collections.Generic.List[long]
+        foreach ($t in $entry.Value) { if (($Now - $t) -lt $window) { $recent.Add([long]$t) } }
+        if ($recent.Count -eq 0) {
+            $quiet.Add([string]$entry.Key)
+        } elseif ($recent.Count -ge $limit) {
+            $ease = $recent[$recent.Count - $limit] + $window
+            if ($ease -lt $soonestEase) { $soonestEase = $ease; $soonest = [string]$entry.Key }
+        } else {
+            $openKeys.Add([string]$entry.Key)
+            $openLast.Add($recent[$recent.Count - 1])
+        }
+    }
+    foreach ($key in $quiet) { $script:AuthFailures.Remove($key) }
+
+    $excess = $script:AuthFailures.Count - ($script:AuthFailureTableLimit - $batch)
+    if ($excess -gt 0 -and $openKeys.Count -gt 0) {
+        $lasts = $openLast.ToArray()
+        $names = $openKeys.ToArray()
+        [Array]::Sort($lasts, $names)
+        for ($i = 0; $i -lt $excess -and $i -lt $names.Length; $i++) { $script:AuthFailures.Remove($names[$i]) }
+    }
+
+    if ($script:AuthFailures.Count -lt $script:AuthFailureTableLimit) {
+        $script:AuthFailureLookAgainAt = 0
+        $script:AuthFailureLookAgainTime = [long]::MaxValue
+        $script:AuthFailureAllBlockedNoted = $false
+        return
+    }
+
+    # Every address left is blocked.
+    if (-not $script:AuthFailureAllBlockedNoted) {
+        $script:AuthFailureAllBlockedNoted = $true
+        Write-Host ("WARN: auth table full: all {0} tracked addresses are blocked; every block is kept (up to {1})" -f $script:AuthFailures.Count, $script:AuthFailureTableCeiling)
+    }
+    if ($script:AuthFailures.Count -ge $script:AuthFailureTableCeiling -and $null -ne $soonest) {
+        $script:AuthFailures.Remove($soonest)
+        $script:AuthFailureLookAgainAt = $script:AuthFailureTableCeiling
+    } else {
+        $script:AuthFailureLookAgainAt = [Math]::Min($script:AuthFailureTableCeiling, $script:AuthFailures.Count + $batch)
+    }
+    $script:AuthFailureLookAgainTime = $soonestEase
 }
 
 # Login page HTML
