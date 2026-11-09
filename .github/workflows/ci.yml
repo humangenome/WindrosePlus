@@ -132,6 +132,46 @@ jobs:
         shell: powershell
         run: ./scripts/Test-AuthThrottle.ps1
 
+  dashboard-console:
+    name: Dashboard console privacy (real dashboard and the mod's console code)
+    runs-on: windows-latest
+    env:
+      LUA_VERSION: "5.4.7"
+      LUA_SHA256: "9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build Lua from the lua.org source
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'lua'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $tgz = Join-Path $dir "lua-$env:LUA_VERSION.tar.gz"
+          Invoke-WebRequest -Uri "https://www.lua.org/ftp/lua-$env:LUA_VERSION.tar.gz" -OutFile $tgz
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $tgz).Hash.ToLowerInvariant()
+          if ($sha -ne $env:LUA_SHA256) { throw "lua-$env:LUA_VERSION.tar.gz has sha256 $sha, expected $env:LUA_SHA256" }
+          & "$env:SystemRoot\System32\tar.exe" -xzf $tgz -C $dir
+          if ($LASTEXITCODE) { throw "tar exit $LASTEXITCODE" }
+          $gcc = (Get-Command gcc -ErrorAction SilentlyContinue).Source
+          if (-not $gcc) { $gcc = @('C:\mingw64\bin\gcc.exe', 'C:\Strawberry\c\bin\gcc.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1 }
+          if (-not $gcc) { throw "no gcc on this runner" }
+          $src = Join-Path $dir "lua-$env:LUA_VERSION\src"
+          $files = Get-ChildItem -LiteralPath $src -Filter '*.c' | Where-Object { $_.Name -ne 'luac.c' } | ForEach-Object { $_.FullName }
+          $exe = Join-Path $dir 'lua.exe'
+          & $gcc -O2 -std=gnu99 -o $exe @files
+          if ($LASTEXITCODE) { throw "gcc exit $LASTEXITCODE" }
+          & $exe -v
+          "LUA_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/Test-DashboardConsole.ps1 -Lua $env:LUA_EXE
+
+      - name: PowerShell 7
+        shell: pwsh
+        run: ./scripts/Test-DashboardConsole.ps1 -Lua $env:LUA_EXE
+
   dashboard-auth:
     name: Dashboard server and map tiles
     runs-on: windows-latest

@@ -1056,6 +1056,25 @@ function Get-TerrainHeightAt($DataDir, [double]$WorldX, [double]$WorldY) {
     return $null
 }
 
+# Debug commands the dashboard does not run. Both can read players' account IDs
+# and any raw game value, and the dashboard can be reached from other computers.
+# A tool on the server itself can still run them through the command files in
+# windrose_plus_data\rcon. The mod refuses them too when a command file carries
+# the dashboard's id (ps_...), so an older copy of this script cannot run them.
+$script:DashboardRefusedCommands = @('wp.peek', 'wp.probe_player')
+
+# The answer for a console command the dashboard refuses, or $null. Reads the
+# command the way the mod does (its first word, with or without "wp."), in any
+# case, so "PEEK R5PlayerState UniqueId" is refused as well.
+function Get-DashboardRefusal($Command) {
+    $first = @(([string]$Command).Trim() -split '\s+')[0]
+    if (-not $first) { return $null }
+    $name = $first.ToLowerInvariant()
+    if (-not $name.StartsWith('wp.')) { $name = 'wp.' + $name }
+    if ($script:DashboardRefusedCommands -notcontains $name) { return $null }
+    return "$name is not available from the web dashboard. It can read players' account IDs, so it runs only from a tool on the server itself."
+}
+
 function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
     $statusPath = Join-Path $dataDir "rcon_status.json"
     $now = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -1927,6 +1946,12 @@ try {
                     try { $body = $rawBody | ConvertFrom-Json } catch {}
                     if (-not $body -or -not $body.command) {
                         Send-Json $context @{ error = "JSON body with a command field required" } 400
+                        continue
+                    }
+                    # Refused before any command file is written, so the mod never sees it.
+                    $refusal = Get-DashboardRefusal $body.command
+                    if ($refusal) {
+                        Send-Json $context @{ status = "error"; error = $refusal; message = $refusal } 403
                         continue
                     }
 

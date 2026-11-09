@@ -231,6 +231,32 @@ case("rcon: a command that is not text gets an error, not a retry loop", functio
     check(readFile(spool .. "\\pending_commands.txt") == nil, "it was queued again")
 end)
 
+case("rcon: wp.peek and wp.probe_player in a command file with the dashboard's id are refused, any spelling", function()
+    local n = 0
+    for _, c in ipairs({ "wp.peek", "wp.probe_player", "PEEK R5PlayerState UniqueId", "  Wp.Probe_Player", "probe_player" }) do
+        ran = {}
+        n = n + 1
+        local id = "ps_1700000000_" .. n
+        writeFile(spool .. "\\cmd_" .. id .. ".json", '{"id":"' .. id .. '","command":"' .. c .. '","password":"secret-pass","admin_user":"Dashboard"}')
+        queue({ "cmd_" .. id .. ".json" })
+        Rcon._processCommands()
+        local res = readFile(spool .. "\\res_" .. id .. ".json") or ""
+        check(#ran == 0, c .. ": the command ran")
+        check(res:find('"status":"error"', 1, true) and res:find("not available from the web dashboard", 1, true), c .. ": " .. res)
+    end
+end)
+
+case("rcon: the same commands from a tool on the server run, and other dashboard commands run", function()
+    for _, f in ipairs({ { "tool_1", "wp.probe_player" }, { "api_1", "wp.peek R5PlayerState PlayerNamePrivate" }, { "ps_1700000000_9", "wp.status" } }) do
+        ran = {}
+        writeFile(spool .. "\\cmd_" .. f[1] .. ".json", '{"id":"' .. f[1] .. '","command":"' .. f[2] .. '","password":"secret-pass"}')
+        queue({ "cmd_" .. f[1] .. ".json" })
+        Rcon._processCommands()
+        check(#ran == 1, f[1] .. " " .. f[2] .. ": did not run: " .. tostring(readFile(spool .. "\\res_" .. f[1] .. ".json")))
+    end
+    check(Rcon._dashboardRefusal("ps_1", "wp.peeks") == nil and Rcon._dashboardRefusal("ps_1", "wp.wp.peek") == nil, "refused a different command")
+end)
+
 -- deferred answers: the handler returns { deferred = token } and answers later through Rcon.completeDeferred
 local Events = require("modules.events")
 local records = {}

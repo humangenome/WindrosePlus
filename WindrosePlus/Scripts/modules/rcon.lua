@@ -376,6 +376,22 @@ function Rcon._processCommands()
     end
 end
 
+-- Debug commands the web dashboard does not run: both can read players' account IDs and any raw game value, and
+-- the dashboard can be reached from other computers. The dashboard refuses them before writing a command file; a
+-- command file with the dashboard's id (ps_...) is refused here too, so an older dashboard script cannot run them.
+-- Command files written by a tool on the server itself (any other id) still run them.
+Rcon._DASHBOARD_REFUSED = { ["wp.peek"] = true, ["wp.probe_player"] = true }
+
+-- The answer for a refused command, or nil. Reads the command's first word with or without "wp.", in any case.
+function Rcon._dashboardRefusal(id, command)
+    if tostring(id or ""):sub(1, 3) ~= "ps_" or type(command) ~= "string" then return nil end
+    local name = (command:match("^%s*(%S+)") or ""):lower()
+    if name == "" then return nil end
+    if name:sub(1, 3) ~= "wp." then name = "wp." .. name end
+    if not Rcon._DASHBOARD_REFUSED[name] then return nil end
+    return name .. " is not available from the web dashboard. It can read players' account IDs, so it runs only from a tool on the server itself."
+end
+
 function Rcon._processFile(filePath, filename)
     local fileId = tostring((filename or ""):match("^cmd_(.+)%.json$") or "unknown"):gsub("[^%w_%-]", "")
     if fileId == "" then fileId = "unknown" end
@@ -482,6 +498,12 @@ function Rcon._processFile(filePath, filename)
             command = parts[1]
             for i = 2, #parts do table.insert(args, parts[i]) end
         end
+    end
+    local refusal = Rcon._dashboardRefusal(id, command)
+    if refusal then
+        Rcon._recordCommand(id, originalCommand, command, args, adminUser, true, "error", refusal, 0)
+        finish("error", refusal, originalCommand, adminUser)
+        return
     end
     local startMs = (os.clock() * 1000)
     local ok, status, message, opts = pcall(Rcon._admin.execute, command, args)

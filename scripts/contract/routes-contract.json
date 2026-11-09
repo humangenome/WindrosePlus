@@ -476,6 +476,16 @@
       {
         "request": "POST /api/rcon",
         "login": "header",
+        "body": "{\"command\":\"wp.probe_player\"}",
+        "content_type": "application/json",
+        "status": 403,
+        "type": "json",
+        "fields": ["status", "error", "message"],
+        "values": {"status": "error"}
+      },
+      {
+        "request": "POST /api/rcon",
+        "login": "header",
         "body": "{\"command\":\"wp.version\",\"args\":[]}",
         "content_type": "application/json",
         "status": 200,
