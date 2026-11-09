@@ -542,5 +542,118 @@ case("terrain: main.lua keeps the good copy before every export and puts it back
     check(not src:find('raw:find%(\'"h":1\''), "main.lua still has its own copy of the terrain check")
 end)
 
+-- ---------------------------------------------------------------- players' addresses and account IDs
+-- wp.probe_player, wp.peek and wp.gm leave them out unless debug.show_player_ids is true.
+do
+    local Config = require("modules.config")
+    if not Admin._commands["wp.probe_player"] then Admin._registerCommands() end
+    local savedFind, savedConfig = _G.FindAllOf, Admin._config
+    local IP, STEAM, EPIC = "203.0.113.7", "76561198000000002", "0123456789abcdef0123456789abcdef"
+    local function idState(name)
+        return valid({
+            GetFullName = function() return "R5PlayerState /Game/Maps/Main.Main:PersistentLevel.R5PlayerState_1" end,
+            PlayerNamePrivate = fstr(name), PlayerId = 7,
+            SavedNetworkAddress = fstr(IP .. ":7777"), UniqueId = fstr("STEAM:" .. STEAM),
+            EpicAccountId = fstr(EPIC), Session = { Id = STEAM, Name = "Alice" },
+        })
+    end
+    local function idController()
+        return valid({ GetFullName = function() return "PlayerController_1" end, NetPlayerIndex = 0 })
+    end
+    local gameMode = valid({ XPMultiplier = 2, SavedNetworkAddress = IP })
+    _G.FindAllOf = function(class)
+        if class == "R5PlayerState" then return { idState("Alice") } end
+        if class == "PlayerController" then return { idController() } end
+        if class == "R5GameMode" then return { gameMode } end
+        return nil
+    end
+    local function setShow(on) Admin._config = { showPlayerIds = function() return on end } end
+    local function leaks(text) return text:find(IP, 1, true) or text:find(STEAM, 1, true) or text:find(EPIC, 1, true) end
+
+    case("player ids: the setting is off by default and on only when exactly true", function()
+        check(Config._defaults().debug.show_player_ids == false, "default is not false")
+        local saved = Config._data
+        for _, v in ipairs({ false, "true", 1, "yes" }) do
+            Config._data = Config._mergeDefaults({ debug = { show_player_ids = v } }, Config._defaults())
+            check(Config.showPlayerIds() == false, "on for " .. tostring(v))
+        end
+        Config._data = Config._mergeDefaults({}, Config._defaults())
+        check(Config.showPlayerIds() == false, "on when missing")
+        Config._data = Config._mergeDefaults({ debug = { show_player_ids = true } }, Config._defaults())
+        check(Config.showPlayerIds() == true, "off when true")
+        Config._data = saved
+    end)
+
+    case("player ids: wp.probe_player leaves out addresses and account IDs, keeps names", function()
+        setShow(false)
+        local st, msg = Admin.execute("wp.probe_player", {})
+        check(st == "ok", "status " .. tostring(st))
+        check(not leaks(msg), "an address or ID is in the answer:\n" .. msg)
+        check(msg:find("SavedNetworkAddress = " .. Admin._IDENTITY_HIDDEN, 1, true), "address line not marked hidden:\n" .. msg)
+        check(msg:find("UniqueId = " .. Admin._IDENTITY_HIDDEN, 1, true), "UniqueId line not marked hidden")
+        check(msg:find("PlayerNamePrivate = [str] Alice", 1, true), "the player's name is gone:\n" .. msg)
+    end)
+
+    case("player ids: a broken or missing setting reader counts as off", function()
+        Admin._config = nil
+        check(not leaks(answer("wp.probe_player", {})), "leaked with no config")
+        Admin._config = { showPlayerIds = function() error("boom") end }
+        check(not leaks(answer("wp.probe_player", {})), "leaked when the reader fails")
+        Admin._config = { showPlayerIds = function() return "true" end }
+        check(not leaks(answer("wp.probe_player", {})), "leaked for the string true")
+    end)
+
+    case("player ids: debug.show_player_ids true shows them", function()
+        setShow(true)
+        local msg = answer("wp.probe_player", {})
+        check(msg:find(IP, 1, true) and msg:find(STEAM, 1, true) and msg:find(EPIC, 1, true), "not shown when on:\n" .. msg)
+    end)
+
+    case("player ids: wp.peek refuses an address or ID property by name, any case", function()
+        setShow(false)
+        for _, prop in ipairs({ "UniqueId", "savednetworkaddress", "EpicAccountId", "Unique_Net_Id" }) do
+            local msg = answer("wp.peek", { "R5PlayerState", prop })
+            check(not leaks(msg) and msg:find(Admin._IDENTITY_HIDDEN, 1, true), prop .. ": " .. msg)
+        end
+        setShow(true)
+        check(answer("wp.peek", { "R5PlayerState", "UniqueId" }):find(STEAM, 1, true), "not shown when on")
+    end)
+
+    case("player ids: wp.peek masks an ID found inside another property", function()
+        setShow(false)
+        local msg = answer("wp.peek", { "R5PlayerState", "Session" })
+        check(not leaks(msg), "leaked through a sub-field:\n" .. msg)
+        check(msg:find(".Name = Alice", 1, true), "an ordinary sub-field was masked:\n" .. msg)
+    end)
+
+    case("player ids: wp.gm refuses an address by name and still reads other values", function()
+        setShow(false)
+        check(not leaks(answer("wp.gm", { "SavedNetworkAddress" })), "wp.gm leaked the address")
+        check(answer("wp.gm", { "XPMultiplier" }) == "XPMultiplier = 2", "wp.gm XPMultiplier: " .. answer("wp.gm", { "XPMultiplier" }))
+    end)
+
+    case("player ids: masking leaves versions, coordinates and file hashes alone", function()
+        local m = Admin._maskIdentityText
+        for _, t in ipairs({ "Windrose 0.10.0.9.32", "Windrose+ 1.3.28", "at 100000 200000 5000", string.rep("ab", 32),
+                             "999.1.1.1", "12:30:45", "BP_X_C /Game/Maps/Main.Main:PersistentLevel.BP_X_C_7" }) do
+            check(m(t) == t, "changed: " .. t .. " -> " .. m(t))
+        end
+        for _, t in ipairs({ "from " .. IP .. ".", IP .. ":7777", "fe80:0:0:0:200:f8ff:fe21:67cf", "id " .. STEAM, EPIC:upper() }) do
+            check(m(t):find(Admin._IDENTITY_HIDDEN, 1, true) and not leaks(m(t)) and not m(t):find("fe21", 1, true), "not masked: " .. t .. " -> " .. m(t))
+        end
+    end)
+
+    case("player ids: the guard wraps each command once", function()
+        local before = Admin._commands["wp.peek"].handler
+        Admin._guardIdentityCommands()
+        check(Admin._commands["wp.peek"].handler == before, "wrapped twice")
+        for name in pairs(Admin._IDENTITY_GUARDED) do
+            check(Admin._commands[name] and Admin._commands[name]._identityGuarded, name .. " is not guarded")
+        end
+    end)
+
+    _G.FindAllOf, Admin._config = savedFind, savedConfig
+end
+
 print(string.format("%d passed, %d failed", passed, failed))
 os.exit(failed == 0 and 0 or 1)

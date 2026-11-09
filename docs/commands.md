@@ -623,7 +623,7 @@ R5GameMode properties:
 
 ### wp.gm
 
-Read a single property from R5GameMode by name.
+Read a single property from R5GameMode by name. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug).
 
 ```
 Usage: wp.gm <property>
@@ -652,7 +652,7 @@ R5GameMode Settings:
 
 ### wp.probe_player
 
-Dump all name-related properties from R5PlayerState, PlayerController, and R5Character for connected players. Used for reverse-engineering player identity fields.
+Dump all name-related properties from R5PlayerState, PlayerController, and R5Character for connected players. Used for reverse-engineering player identity fields. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug).
 
 ```
 Usage: wp.probe_player
@@ -704,7 +704,7 @@ R5BuildingCenterStorageComponent functions matching "transfer":
 
 ### wp.peek
 
-Read a single property on the first valid instance of a type, dereferencing through the common wrapper shapes UE4SS returns.
+Read a single property on the first valid instance of a type, dereferencing through the common wrapper shapes UE4SS returns. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug).
 
 ```
 Usage: wp.peek <TypeName> <PropertyName>

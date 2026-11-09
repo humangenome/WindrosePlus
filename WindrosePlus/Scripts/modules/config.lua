@@ -216,6 +216,12 @@ function Config.getHarvestYieldMultiplier()
     return Config._clampFloat(Config.get("multipliers", "harvest_yield"), 1.0, 0.1, 100.0, "harvest_yield")
 end
 
+-- Players' network addresses and account IDs stay out of command answers (wp.probe_player, wp.peek,
+-- wp.gm and the other debug readers) unless this is exactly true.
+function Config.showPlayerIds()
+    return Config.get("debug", "show_player_ids") == true
+end
+
 function Config.getAdminSteamIds()
     return Config.get("admin", "steam_ids") or {}
 end
@@ -244,7 +250,7 @@ function Config._defaults()
         poiscan = { enabled = true, refresh_seconds = 4 * 60 * 60 },
         admin = { steam_ids = {} },
         multipliers = { xp = 1.0, loot = 1.0, stack_size = 1.0, craft_efficiency = 1.0, crop_speed = 1.0, weight = 1.0, inventory_size = 1.0, cooking_speed = 1.0, harvest_yield = 1.0 },
-        debug = { log_level = "info" }
+        debug = { log_level = "info", show_player_ids = false }
     }
 end
 

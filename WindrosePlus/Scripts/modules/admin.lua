@@ -2182,6 +2182,109 @@ function Admin._registerCommands()
         end
     }
 
+    Admin._guardIdentityCommands()
+end
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Players' network addresses and account IDs. wp.probe_player lists them, and wp.peek / wp.gm can read any
+-- property by name, so their answers leave those values out unless debug.show_player_ids is true in
+-- windrose_plus.json. The guard sits on the command handlers, so every route that runs a command (the dashboard
+-- console, the RCON spool, add-ons through API.executeCommand) gets the same answer.
+Admin._IDENTITY_HIDDEN = "(hidden: set debug.show_player_ids to true in windrose_plus.json to show)"
+
+-- Property names that hold a player's address or account ID, matched case-insensitively with punctuation removed.
+Admin._IDENTITY_NAME_PARTS = {
+    "networkaddress", "ipaddress", "remoteaddress", "address",
+    "uniqueid", "uniquenetid", "netid",
+    "accountid", "platformid", "platformaccountid", "steamid", "epicid", "epicaccountid", "productuserid",
+}
+
+-- Commands whose answers are guarded, and which argument (if any) names the property they read.
+Admin._IDENTITY_GUARDED = {
+    ["wp.probe_player"] = false,
+    ["wp.peek"] = 2,
+    ["wp.gm"] = 1,
+    ["wp.props"] = false,
+    ["wp.discover"] = false,
+    ["wp.settings"] = false,
+}
+
+function Admin._showPlayerIds()
+    local cfg = Admin._config
+    if not cfg or type(cfg.showPlayerIds) ~= "function" then return false end
+    local ok, v = pcall(cfg.showPlayerIds)
+    return ok and v == true
+end
+
+function Admin._isIdentityName(name)
+    local n = tostring(name or ""):lower():gsub("[^%w]", "")
+    if n == "" then return false end
+    for _, part in ipairs(Admin._IDENTITY_NAME_PARTS) do
+        if n:find(part, 1, true) then return true end
+    end
+    return false
+end
+
+local HEX32 = string.rep("%x", 32)
+
+-- Masks text that looks like an address or an account ID: an IPv4 address (alone, not part of a longer dotted
+-- version such as 0.10.0.9.32), an IPv6 address, a 17-digit Steam ID, or a 32-character hex ID (Epic and EOS).
+function Admin._maskIdentityText(text)
+    if type(text) ~= "string" or text == "" then return text end
+    local hidden = Admin._IDENTITY_HIDDEN
+    local out = text:gsub("()(%d+%.%d+%.%d+%.%d+)()", function(s, ip, e)
+        local before = s > 1 and text:sub(s - 1, s - 1) or ""
+        local after, after2 = text:sub(e, e), text:sub(e + 1, e + 1)
+        if before:match("[%d%.]") or after:match("%d") or (after == "." and after2:match("%d")) then return nil end
+        for octet in ip:gmatch("%d+") do
+            if #octet > 3 or tonumber(octet) > 255 then return nil end
+        end
+        return hidden
+    end)
+    out = out:gsub("%f[%x:][%x:]*%x:[%x:]*:[%x:]*:[%x:]*%f[^%x:]", function(v)
+        local _, colons = v:gsub(":", "")
+        if colons >= 3 and #v >= 7 and v:find("%x%x") then return hidden end
+        return nil
+    end)
+    out = out:gsub("%f[%d]7656119%d%d%d%d%d%d%d%d%d%d%f[%D]", hidden)
+    out = out:gsub("%f[%x]" .. HEX32 .. "%f[^%x]", hidden)
+    return out
+end
+
+-- Line by line: "Name = value" lines whose name is an address or account ID lose the value; every other line has
+-- address- and ID-shaped text masked.
+function Admin._redactIdentityAnswer(text)
+    if type(text) ~= "string" then return text end
+    local lines = {}
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+        local indent, name = line:match("^(%s*%.?)([%w_]+)%s*=")
+        if name and Admin._isIdentityName(name) then
+            line = indent .. name .. " = " .. Admin._IDENTITY_HIDDEN
+        else
+            line = Admin._maskIdentityText(line)
+        end
+        lines[#lines + 1] = line
+    end
+    return table.concat(lines, "\n")
+end
+
+function Admin._guardIdentityCommands()
+    for name, propArg in pairs(Admin._IDENTITY_GUARDED) do
+        local cmd = Admin._commands[name]
+        if cmd and cmd.handler and not cmd._identityGuarded then
+            local inner = cmd.handler
+            cmd.handler = function(args, caller)
+                if Admin._showPlayerIds() then return inner(args, caller) end
+                if propArg and type(args) == "table" and args[propArg] and Admin._isIdentityName(args[propArg]) then
+                    return tostring(args[propArg]) .. " holds a player's address or account ID. " .. Admin._IDENTITY_HIDDEN
+                end
+                local result = inner(args, caller)
+                if type(result) == "string" then return Admin._redactIdentityAnswer(result) end
+                return result
+            end
+            cmd._identityGuarded = true
+        end
+    end
 end
 
 -- Hand a moderation command to the WindrosePlusNative C++ mod via the command
