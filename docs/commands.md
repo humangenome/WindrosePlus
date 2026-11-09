@@ -652,7 +652,7 @@ R5GameMode Settings:
 
 ### wp.probe_player
 
-Dump all name-related properties from R5PlayerState, PlayerController, and R5Character for connected players. Used for reverse-engineering player identity fields. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug).
+Dump all name-related properties from R5PlayerState, PlayerController, and R5Character for connected players. Used for reverse-engineering player identity fields. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug). The web dashboard and `POST /api/rcon` refuse this command (HTTP 403), because it can read players' account IDs. A tool on the server itself can still run it through the command files in `windrose_plus_data\rcon`.
 
 ```
 Usage: wp.probe_player
@@ -704,7 +704,7 @@ R5BuildingCenterStorageComponent functions matching "transfer":
 
 ### wp.peek
 
-Read a single property on the first valid instance of a type, dereferencing through the common wrapper shapes UE4SS returns. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug).
+Read a single property on the first valid instance of a type, dereferencing through the common wrapper shapes UE4SS returns. Players' network addresses and account IDs are left out of the answer unless `show_player_ids` is `true` in the [debug settings](config-reference.md#debug). The web dashboard and `POST /api/rcon` refuse this command (HTTP 403), because it can read players' account IDs. A tool on the server itself can still run it through the command files in `windrose_plus_data\rcon`.
 
 ```
 Usage: wp.peek <TypeName> <PropertyName>
@@ -860,7 +860,7 @@ Windrose dedicated servers don't answer standard server queries, so external too
 
 ### POST /api/rcon
 
-Execute a command via the RCON interface.
+Execute a command via the RCON interface. `wp.peek` and `wp.probe_player` are refused here (HTTP 403), because they can read players' account IDs. A tool on the server itself can still run them through the command files in `windrose_plus_data\rcon`.
 
 **Request body** (JSON):
 ```json
