@@ -2,6 +2,21 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.29] - 2026-11-10
+
+### Security
+
+- **`wp.peek` and `wp.probe_player` no longer run from the web dashboard.** Both can read players' account IDs, and the dashboard can be reached from other computers. The dashboard now refuses them (HTTP 403) before they reach the game. A tool on the server itself can still run them through the command files in `windrose_plus_data\rcon`.
+- **Wrong passwords from many addresses at once no longer lift the dashboard's login blocks.** The list of addresses with wrong tries emptied itself at 5,000 addresses, which lifted every block. It now makes room by forgetting addresses that are not blocked, quietest first, and keeps every block.
+
+### Changed
+
+- **Debug commands no longer show players' network addresses or account IDs.** `wp.probe_player`, `wp.peek` and `wp.gm` leave them out of their answers unless the new `debug.show_player_ids` setting is `true`. It is off by default.
+
+### Fixed
+
+- **The harvest example file lists resources you can gather.** `windrose_plus.harvest.default.ini` had a `Charcoal` key that never matched anything: the game's files call that item `Coal`, so the key is now `Coal`. `Hardwood` and `Salt` are new. `Ash`, `Feather`, `Leather`, `GoatHorn` and `Bezoar` are gone, because nothing you gather drops them. If your own `windrose_plus.harvest.ini` sets `Charcoal`, rename it to `Coal`.
+
 ## [1.3.28] - 2026-11-04
 
 ### Added
@@ -13,7 +28,7 @@
 - **The Sea Chart's terrain survives a restart.** An export taken in the lobby, before the world loads, replaced the terrain file with an empty one, and every map rebuild failed with "No components with heightfield data" until a player joined. The last good terrain file is now kept before each export and put back when an export has no land, and an export left waiting from before a restart no longer runs in the lobby (#138).
 - **Click-to-teleport finds land after the first player joins.** The dashboard read the terrain heights once and kept them until it restarted, so a server that started before anyone was online sent teleports to the sea floor until the dashboard restarted (#139).
 - **The Items panel shows readable stat names.** Some stats were listed under the game's code names, such as `ShipFireRangeRANK` or `Greatsword_Souldrinker_AbilityCooldown`. The catalog builder now writes a `label` for every stat and every number in an item's text, and the page uses it (#137).
-- **Creatures with a one-word class name are named on the Sea Chart.** `BP_Skeleton_C` showed as part of an object path; it now shows as Skeleton (#138).
+- **Creatures with a one-word class name are named on the Sea Chart.** `BP_Skeleton_C` showed as part of an object path; it now shows as Skeleton (#137).
 - **Folder names with `[` or `]` work.** The installer stopped at its first line in a folder such as `Windrose [EU]`, and the PAK builder had the same problem. `start_dashboard.bat` now finds the game folder from where it sits, so a `%` sign or a non-English letter in the path cannot break it. A failed copy of `UE4SS-settings.ini` now says so (#139).
 - **A game folder at the root of a drive works with the map and catalog builders.** `D:\` reached them as `"D:\"`, which hid the closing quote (#139).
 
