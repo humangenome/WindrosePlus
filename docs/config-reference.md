@@ -230,12 +230,13 @@ Keys are UE asset family names. The matcher reads the
 | `FiberPlant` | `1.0` | Grasses, agave, hemp, flax bushes |
 | `Stone` | `1.0` | Stone outcrops |
 | `Clay` | `1.0` | Clay deposits |
-| `Ash` | `1.0` | Ash deposits |
 | `Sulfur` | `1.0` | Sulfur outcrops |
 | `CopperOre` | `1.0` | Surface copper nodes + `CopperCaves_DigVolumesDestroy` |
 | `Iron` | `1.0` | `IronCaverns_DigVolumesDestroy` |
-| `Charcoal` | `1.0` | Coal nodes |
-| `Feather`, `Fat`, `Leather`, `GoatHorn`, `Bezoar` | `1.0` | Animal-derived. Mostly creature drops (not affected); foliage tables that include them are scaled here. |
+| `Coal` | `1.0` | Charcoal from burnt trees and logs. The game shows the item as Charcoal; its files call it Coal. |
+| `Hardwood` | `1.0` | Divi logs and stumps |
+| `Salt` | `1.0` | Salt deposits |
+| `Fat` | `1.0` | Animal fat from a few gathered containers. Creature drops are not affected. |
 
 Unknown family names in the INI are silently ignored. Unknown families on
 in-game loot entries fall through to `harvest_yield` only.
