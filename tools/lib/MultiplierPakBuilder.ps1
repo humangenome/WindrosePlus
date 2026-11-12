@@ -191,7 +191,8 @@ function Read-HarvestIni {
             continue
         }
         $d = 0.0
-        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d)) {
+        # NaN and Infinity parse as numbers but cannot become a drop count (the [int] cast in ConvertTo-DropInt throws).
+        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d) -and -not [double]::IsNaN($d) -and -not [double]::IsInfinity($d)) {
             $out[$key] = [Math]::Max(0.01, $d)
         } else {
             Write-Warning "Read-HarvestIni: '$key = $val' is not a number (expected e.g. '5.0', not '5x'); line skipped"
