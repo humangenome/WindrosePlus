@@ -151,7 +151,19 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'lua'
           New-Item -ItemType Directory -Path $dir -Force | Out-Null
           $tgz = Join-Path $dir "lua-$env:LUA_VERSION.tar.gz"
-          Invoke-WebRequest -Uri "https://www.lua.org/ftp/lua-$env:LUA_VERSION.tar.gz" -OutFile $tgz
+          # lua.org's HTTPS can drop every connection for hours (2026-11-12), so the official mirror at PUC-Rio, where
+          # Lua is made, is tried too. The sha256 below decides whether the file is the right one, wherever it came from.
+          $urls = @("https://www.lua.org/ftp/lua-$env:LUA_VERSION.tar.gz", "https://www.tecgraf.puc-rio.br/lua/mirror/ftp/lua-$env:LUA_VERSION.tar.gz")
+          $got = $false
+          foreach ($try in 1..3) {
+            foreach ($url in $urls) {
+              try { Invoke-WebRequest -Uri $url -OutFile $tgz -ErrorAction Stop; $got = $true; break }
+              catch { Write-Host "download failed (try $try): $url : $($_.Exception.Message)" }
+            }
+            if ($got) { break }
+            Start-Sleep -Seconds (10 * $try)
+          }
+          if (-not $got) { throw "lua-$env:LUA_VERSION.tar.gz could not be downloaded" }
           $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $tgz).Hash.ToLowerInvariant()
           if ($sha -ne $env:LUA_SHA256) { throw "lua-$env:LUA_VERSION.tar.gz has sha256 $sha, expected $env:LUA_SHA256" }
           & "$env:SystemRoot\System32\tar.exe" -xzf $tgz -C $dir
