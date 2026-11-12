@@ -12,7 +12,6 @@ Admin._config = nil
 Admin._gameDir = nil  -- populated by init() for file-IO commands (wp.givestats queue)
 Admin.deferredSupported = false  -- set by main.lua when RCON can answer deferred commands
 Admin._playerJoinTimes = {}  -- track session join times for wp.playtime
-Admin._DEFAULT_PROCESS_NAME = "WindroseServer-Win64-Shipping.exe"
 Admin._bootTime = os.time()  -- track server start for uptime (no wmic needed)
 
 -- Keys whose PAK patch path is currently disabled in the builder (save-safety /
@@ -184,20 +183,6 @@ function Admin.execute(command, args, caller)
     end
     if not cmd.handler then return "error", name .. " has no handler" end
     return runHandler(cmd.handler, args, caller)
-end
-
--- Get the configured process name, falling back to the default
-function Admin._getProcessName()
-    if Admin._config then
-        local cfgName = nil
-        pcall(function()
-            if WindrosePlus and WindrosePlus._modules and WindrosePlus._modules.Config then
-                cfgName = WindrosePlus._modules.Config.get("server", "process_name")
-            end
-        end)
-        if cfgName and cfgName ~= "" then return cfgName end
-    end
-    return Admin._DEFAULT_PROCESS_NAME
 end
 
 function Admin._countCommands()
