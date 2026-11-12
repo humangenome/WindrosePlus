@@ -669,6 +669,24 @@ do
         end
     end)
 
+    case("player ids: masking hides newer Steam IDs starting 7656120 and leaves other long numbers alone", function()
+        local m = Admin._maskIdentityText
+        -- the lowest and highest personal Steam IDs, today's shape, and the newer shape
+        for _, id in ipairs({ "76561197960265729", STEAM, "76561200000000001", "76561202255233023" }) do
+            for _, t in ipairs({ id, "id " .. id .. ".", "STEAM:" .. id, "[" .. id .. "]" }) do
+                local out = m(t)
+                check(out:find(Admin._IDENTITY_HIDDEN, 1, true) and not out:find(id, 1, true), "not masked: " .. t .. " -> " .. out)
+            end
+        end
+        local r = Admin._redactIdentityAnswer("Note = joined as 76561200000000001\nName = Alice")
+        check(not r:find("76561200000000001", 1, true) and r:find("Name = Alice", 1, true), "a newer ID inside an ordinary line: " .. r)
+        -- 17 digits with another start, 16 and 18 digits, a 7656 run inside a longer number, short numbers
+        for _, t in ipairs({ "12345678901234567", "86561198000000001", "7656120000000000", "765612000000000011",
+                             "1765612000000000001", "at 1731400000000", "seed 76561", "build 20261112" }) do
+            check(m(t) == t, "changed: " .. t .. " -> " .. m(t))
+        end
+    end)
+
     case("player ids: the guard wraps each command once", function()
         local before = Admin._commands["wp.peek"].handler
         Admin._guardIdentityCommands()

@@ -2226,6 +2226,9 @@ function Admin._isIdentityName(name)
 end
 
 local HEX32 = string.rep("%x", 32)
+-- A Steam ID: any run of exactly 17 digits starting 7656. Today's IDs start 7656119 and newer accounts will start
+-- 7656120, so the mask is broad on purpose; hiding a number that only looks like one does no harm.
+local STEAM64 = "7656" .. string.rep("%d", 13)
 
 -- Masks text that looks like an address or an account ID: an IPv4 address (alone, not part of a longer dotted
 -- version such as 0.10.0.9.32), an IPv6 address, a 17-digit Steam ID, or a 32-character hex ID (Epic and EOS).
@@ -2246,7 +2249,7 @@ function Admin._maskIdentityText(text)
         if colons >= 3 and #v >= 7 and v:find("%x%x") then return hidden end
         return nil
     end)
-    out = out:gsub("%f[%d]7656119%d%d%d%d%d%d%d%d%d%d%f[%D]", hidden)
+    out = out:gsub("%f[%d]" .. STEAM64 .. "%f[%D]", hidden)
     out = out:gsub("%f[%x]" .. HEX32 .. "%f[^%x]", hidden)
     return out
 end
