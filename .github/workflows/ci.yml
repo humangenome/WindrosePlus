@@ -112,6 +112,9 @@ jobs:
       - name: Test windrose-heal
         run: cargo test --locked --manifest-path tools/windrose-heal/Cargo.toml
 
+      - name: Every crate built into windrose-heal has a licence to ship
+        run: python scripts/third-party-licenses.py tools/windrose-heal/Cargo.toml x86_64-pc-windows-msvc "$env:RUNNER_TEMP/THIRD-PARTY-LICENSES.txt"
+
   wrong-password-limit:
     name: Wrong-password limit (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

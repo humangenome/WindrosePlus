@@ -47,11 +47,17 @@ jobs:
       - name: Build windrose-heal
         run: cargo build --release --locked --manifest-path tools/windrose-heal/Cargo.toml
 
+      - name: Write the licences of the crates built into windrose-heal
+        run: python scripts/third-party-licenses.py tools/windrose-heal/Cargo.toml x86_64-pc-windows-msvc tools/windrose-heal/target/release/THIRD-PARTY-LICENSES.txt
+
       - name: Upload windrose-heal artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windrose-heal-windows
-          path: tools/windrose-heal/target/release/windrose-heal.exe
+          if-no-files-found: error
+          path: |
+            tools/windrose-heal/target/release/windrose-heal.exe
+            tools/windrose-heal/target/release/THIRD-PARTY-LICENSES.txt
 
   build-and-release:
     needs: build-windrose-heal
@@ -257,6 +263,14 @@ jobs:
           if find staging -name '*.cpp' -o -name 'CMakeLists.txt' | grep -q .; then echo "staging still has C++ source"; exit 1; fi
           for f in WindrosePlus/Scripts/main.lua server/windrose_plus_server.ps1 server/routes.json tools/generateTiles.ps1 install.ps1 cpp-mods/HeightmapExporter/HeightmapExporter.dll; do
             if [ ! -e "staging/$f" ]; then echo "staging is missing $f"; exit 1; fi
+          done
+          # Every bundled third-party part ships with its licence (THIRD-PARTY-NOTICES.md lists them). The repak and
+          # retoc licence downloads above may fail quietly; this does not.
+          for f in LICENSE THIRD-PARTY-NOTICES.md tools/windrose-heal/THIRD-PARTY-LICENSES.txt \
+                   tools/bin/LICENSE-repak-MIT.txt tools/bin/LICENSE-repak-APACHE.txt tools/bin/LICENSE-retoc.txt \
+                   server/web/vendor/leaflet/LICENSE cpp-mods/LICENSE-UE4SS.txt \
+                   server/web/vendor/fonts/OFL-Cinzel.txt server/web/vendor/fonts/OFL-CormorantGaramond.txt server/web/vendor/fonts/OFL-IBMPlexMono.txt; do
+            if [ ! -s "staging/$f" ]; then echo "staging is missing licence file $f"; exit 1; fi
           done
 
       - name: Build zip
