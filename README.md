@@ -45,7 +45,7 @@ Browse every item in the game by group, type, rarity and tier. An item's page sh
 
 ### Server console
 
-Run commands from your browser with autocomplete: see who's online, read server stats and performance, teleport players. 32 built-in commands, plus 12 debug commands listed by `wp.help all`.
+Run commands from your browser with autocomplete: see who's online, read server stats and performance, teleport players. 32 built-in commands, plus 12 debug commands listed by `wp.help all`. Two of the debug commands, `wp.peek` and `wp.probe_player`, can read players' account IDs, so the browser refuses them; tools on the server can still run them.
 
 ![Console](docs/screenshots/console.png)
 
