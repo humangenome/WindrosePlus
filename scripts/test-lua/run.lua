@@ -323,6 +323,60 @@ case("config: listeners run after a changed file that parsed, not after a broken
     check(calls == 1, "an unchanged reload called them again")
 end)
 
+local function freshConfig(text)
+    local Config = require("modules.config")
+    Config._path = tempDir() .. "\\windrose_plus.json"
+    Config._data, Config._lastContent, Config._changeListeners = nil, nil, {}
+    if text then writeFile(Config._path, text) end
+    return Config
+end
+local goodConfig = '{"rcon":{"enabled":true,"password":"Sea-Dog-41"},"multipliers":{"xp":3}}'
+
+case("config: a file that starts with a UTF-8 byte order mark loads", function()
+    local Config = freshConfig("\239\187\191" .. goodConfig)
+    check(Config.reload() == true, "reload did not report success")
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(Config.get("multipliers", "xp") == 3, "xp is " .. tostring(Config.get("multipliers", "xp")))
+end)
+
+case("config: a half-written file keeps the last good settings", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    writeFile(Config._path, '{"rcon":{"enabled":true,"pass')
+    local reloaded, why = Config.reload()
+    check(reloaded == false and tostring(why):find("did not parse", 1, true), "reported " .. tostring(reloaded) .. " " .. tostring(why))
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(Config.get("rcon", "enabled") == true, "rcon switched off")
+    check(Config.get("multipliers", "xp") == 3, "xp is " .. tostring(Config.get("multipliers", "xp")))
+end)
+
+case("config: a file missing for a moment keeps the last good settings and is not replaced with a default", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    os.remove(Config._path)
+    local reloaded = Config.reload()
+    check(reloaded == false, "reported " .. tostring(reloaded))
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(io.open(Config._path, "r") == nil, "a default file was written over the missing one")
+end)
+
+case("config: the first load with no file still creates the default file", function()
+    local Config = freshConfig(nil)
+    Config.reload()
+    local f = io.open(Config._path, "r")
+    check(f ~= nil, "no default file")
+    local text = f:read("*a"); f:close()
+    check(text:find("changeme", 1, true), "default file has no placeholder password")
+    check(Config.isRconEnabled() == false, "console on with the placeholder password")
+end)
+
+case("config: the first load of a broken file uses the defaults", function()
+    local Config = freshConfig('{"rcon":')
+    check(Config.reload() == false, "reported success")
+    check(Config.get("rcon", "enabled") ~= true or Config.isRconEnabled() == false, "console on with a broken file")
+    check(Config.get("multipliers") ~= nil, "no defaults")
+end)
+
 -- ---------------------------------------------------------------- subcommands (admin.lua)
 -- Own command table for these cases; the built-in commands registered above are restored afterwards.
 local savedCommands, savedGameDir = Admin._commands, Admin._gameDir

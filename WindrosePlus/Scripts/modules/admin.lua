@@ -364,7 +364,10 @@ function Admin._registerCommands()
         usage = "wp.reload",
         category = "server",
         handler = function(args)
-            Admin._config.reload()
+            local reloaded, why = Admin._config.reload()
+            if reloaded == false then
+                return "Config not reloaded (" .. tostring(why) .. "); the previous settings stay in use"
+            end
             return "Config reloaded"
         end
     }

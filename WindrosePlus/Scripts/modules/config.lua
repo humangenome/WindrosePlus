@@ -34,8 +34,18 @@ function Config.init(gameDir)
     Config.reload()
 end
 
+-- Reads windrose_plus.json; returns true when it was read and parsed, or false and the reason.
+-- RCON reloads before every command, so once a good file has loaded, a file that is missing for a
+-- moment or half-written (an editor or a panel saving it) keeps the last good settings: up to
+-- v1.3.29 such a read switched to the defaults (console off, multipliers shown as 1.0), and a missing
+-- file was replaced with a new default one. A UTF-8 byte order mark is ignored.
 function Config.reload()
+    local hadGood = Config._data ~= nil and Config._lastContent ~= nil
     local file = io.open(Config._path, "r")
+    if not file and hadGood then
+        Log.warn("Config", "Cannot read " .. Config._path .. " right now; keeping the previous settings")
+        return false, "windrose_plus.json could not be read"
+    end
     if not file then
         Log.info("Config", "No config found, creating default at: " .. Config._path)
         Config._createDefault()
@@ -43,12 +53,13 @@ function Config.reload()
         if not file then
             Log.error("Config", "Cannot create config file")
             Config._data = Config._defaults()
-            return
+            return false, "windrose_plus.json could not be created"
         end
     end
 
-    local content = file:read("*a")
+    local content = file:read("*a") or ""
     file:close()
+    if content:sub(1, 3) == "\239\187\191" then content = content:sub(4) end
 
     local ok, data = pcall(json.decode, content)
     if ok and type(data) == "table" then
@@ -66,15 +77,22 @@ function Config.reload()
             byte_size = #content,
         })
         notifyChange(content)
+        return true
     else
         Log.error("Config", "Failed to parse config: " .. tostring(data))
-        Log.warn("Config", "Using defaults")
-        Config._data = Config._defaults()
         Events.record("config.load.fail", {
             path = Config._path,
             reason = tostring(data),
             byte_size = #content,
+            kept_previous = hadGood,
         })
+        if hadGood then
+            Log.warn("Config", "Keeping the previous settings")
+        else
+            Log.warn("Config", "Using defaults")
+            Config._data = Config._defaults()
+        end
+        return false, "windrose_plus.json did not parse: " .. tostring(data)
     end
 end
 
