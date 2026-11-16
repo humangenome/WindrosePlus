@@ -176,6 +176,9 @@ if (-not $ServerDir -or -not (Test-Path -LiteralPath (Join-Path $ServerDir "R5\C
     Write-Error "Server directory not found. Pass -ServerDir or run from inside the server folder."
     exit 2
 }
+# A relative -ServerDir (".\" or "..\Server") becomes a full path: paths below are
+# cut against it, and .NET file calls resolve relative paths against a different folder.
+$ServerDir = (Resolve-Path -LiteralPath $ServerDir).Path
 
 $paksDir = Join-Path $ServerDir "R5\Content\Paks"
 $stateDir = Join-Path $ServerDir "windrose_plus_data"
@@ -257,7 +260,21 @@ if (Test-Path -LiteralPath $jsonPath) {
         $jsonObj = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json
         if ($jsonObj.multipliers) {
             foreach ($prop in $jsonObj.multipliers.PSObject.Properties) {
-                $multipliers[$prop.Name] = [double]$prop.Value
+                # A number, or text that reads as one the way the INI files are read.
+                # NaN, Infinity, true/false and null are refused: up to v1.3.29
+                # "Infinity" passed the xp ratchet as 1.0 and null became 0.
+                $raw = $prop.Value
+                $value = $null
+                if ($raw -is [string]) {
+                    $value = ConvertTo-SafeDouble $raw " (multipliers.$($prop.Name) in windrose_plus.json)"
+                } elseif ($raw -is [ValueType] -and $raw -isnot [bool]) {
+                    $value = [double]$raw
+                    if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) { $value = $null }
+                }
+                if ($null -eq $value) {
+                    throw "multipliers.$($prop.Name) is not a number: '$raw'"
+                }
+                $multipliers[$prop.Name] = $value
             }
         }
     } catch {
@@ -276,6 +293,17 @@ if ($multipliers.ContainsKey("craft_cost")) {
 }
 
 $disabledPakMultipliers = @("points_per_level", "stack_size", "weight", "inventory_size", "crop_speed")
+
+# An unknown key ("harvest" for "harvest_yield") is named and left out. Up to
+# v1.3.29 it counted as a change, the build found no file for it and failed with
+# "No files were modified", so the server did not start.
+$knownMultipliers = @("loot", "xp", "craft_efficiency", "cooking_speed", "harvest_yield") + $disabledPakMultipliers
+foreach ($name in @($multipliers.Keys)) {
+    if ($knownMultipliers -notcontains $name) {
+        Write-Warning "multipliers.$name in windrose_plus.json is not a Windrose+ multiplier and is ignored. The multipliers are: loot, xp, craft_efficiency, cooking_speed, harvest_yield."
+        $null = $multipliers.Remove($name)
+    }
+}
 
 # Save-state corruption guard. The xp multiplier rebuilds DA_HeroLevels /
 # EntityProgression PAK overrides; once a character has logged in and saved
@@ -528,6 +556,25 @@ if (-not $hasMultipliers -and -not $hasCT) {
     exit 0
 }
 
+# The game's own files the overrides are built from: the JSON data is in
+# pakchunk0-WindowsServer.pak, the CurveTables in its .utoc/.ucas. A game update
+# can change one without the other, so all three count, by size and time. Up to
+# v1.3.29 only the .pak's time was checked, and an update that changed only the
+# .utoc/.ucas kept the old cache and the old override.
+function Get-GameFilesFingerprint {
+    param([string]$PaksDir)
+    $parts = foreach ($ext in @("pak", "utoc", "ucas")) {
+        $gameFile = Join-Path $PaksDir "pakchunk0-WindowsServer.$ext"
+        if (Test-Path -LiteralPath $gameFile) {
+            $info = Get-Item -LiteralPath $gameFile
+            "${ext}:$($info.Length):$($info.LastWriteTimeUtc.Ticks)"
+        } else {
+            "${ext}:missing"
+        }
+    }
+    return ($parts -join "|")
+}
+
 # --- Hash-skip ---
 function Get-BuildInputHash {
     param([string]$ServerDir, [string]$ScriptRoot, [string[]]$IniConfigPaths)
@@ -560,6 +607,8 @@ function Get-BuildInputHash {
         $mtime = (Get-Item -LiteralPath $gamePak).LastWriteTimeUtc.Ticks
         $chunks.Add([System.Text.Encoding]::UTF8.GetBytes("GAMEPAK_TICKS:$mtime`n"))
     }
+    $gameFiles = Get-GameFilesFingerprint -PaksDir (Join-Path $ServerDir "R5\Content\Paks")
+    $chunks.Add([System.Text.Encoding]::UTF8.GetBytes("GAMEFILES:$gameFiles`n"))
 
     $pakRoot = Join-Path $ServerDir "R5\Content\Paks"
     foreach ($dir in @($pakRoot, (Join-Path $pakRoot "~mods"))) {
@@ -700,11 +749,14 @@ if ($hasCT) {
     $gamePak = Join-Path $paksDir "pakchunk0-WindowsServer.pak"
     $cacheExtractedThisRun = $false
 
-    if ((Test-Path -LiteralPath $retocDir) -and (Test-Path -LiteralPath $gamePak)) {
-        $cacheTime = (Get-Item -LiteralPath $retocDir).LastWriteTime
-        $pakTime = (Get-Item -LiteralPath $gamePak).LastWriteTime
-        if ($pakTime -gt $cacheTime) {
-            Write-Host "  Game pak is newer than cache — re-extracting..." -ForegroundColor Yellow
+    # The cache records which game files it came from; any other game files
+    # (an update, a rollback, a copy) mean a fresh extraction.
+    $cacheStampPath = Join-Path $retocDir ".game_files_fingerprint"
+    $gameFilesFingerprint = Get-GameFilesFingerprint -PaksDir $paksDir
+    if (Test-Path -LiteralPath $retocDir) {
+        $cachedFingerprint = if (Test-Path -LiteralPath $cacheStampPath) { ([System.IO.File]::ReadAllText($cacheStampPath)).Trim() } else { "" }
+        if ($cachedFingerprint -ne $gameFilesFingerprint) {
+            Write-Host "  Game files changed since the cache was made — re-extracting..." -ForegroundColor Yellow
             Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
@@ -761,6 +813,7 @@ if ($hasCT) {
             exit 3
         }
         Write-Host "  Extracted $($extractedFiles.Count) CurveTable assets to cache"
+        [System.IO.File]::WriteAllText($cacheStampPath, $gameFilesFingerprint)
     }
 
     $ctFiles = @(Get-ChildItem -LiteralPath $retocDir -Recurse -Filter "CT_*.uasset" -ErrorAction SilentlyContinue)
@@ -787,7 +840,6 @@ if ($hasCT) {
             $tableOverrides = if ($ctConfig.Contains($basename)) { $ctConfig[$basename] } else { $null }
             if (-not $tableOverrides -or $tableOverrides.overrides.Count -eq 0) { continue }
             $null = $pendingCtTables.Remove($basename)
-            $tablesTried++
 
             Write-Host "  Parsing $basename..."
             $manifest = Parse-CurveTable -UAssetPath $ctFile.FullName
@@ -825,6 +877,11 @@ if ($hasCT) {
                 }
             }
 
+            # Counted only once a setting matched a row: a table whose settings all
+            # name rows this build lacks (a typo, or a row a game update renamed) is
+            # not evidence of a stale cache. Up to v1.3.29 it was, so every second
+            # start cleared the cache and stopped with an error.
+            $tablesTried++
             $configHT = @{ overrides = $tableOverrides.overrides }
 
             if ($DryRun) {
