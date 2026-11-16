@@ -68,6 +68,15 @@ try {
         $parsed = $text | ConvertFrom-Json
         Assert ($parsed.Value -eq 5) 'the file text did not parse'
     }
+    Case 'the builders'' way of calling repak and retoc keeps the error text and the exit code' {
+        # The pattern used for retoc and repak in WindrosePlus-BuildPak.ps1,
+        # MultiplierPakBuilder.ps1 and WindrosePlus-BuildCatalog.ps1.
+        $out = @(& { $ErrorActionPreference = 'Continue'; & $repakStandIn --aes-key '0x00' get 'game.pak' 'R5/missing.json' 2>&1 })
+        $code = $LASTEXITCODE
+        Assert ($code -eq 1) "exit code $code"
+        Assert ((($out | ForEach-Object { $_.ToString() }) -join ' ') -match 'no file found') "error text not kept: $($out -join ' | ')"
+        Assert ($ErrorActionPreference -eq 'Stop') "the setting leaked out: $ErrorActionPreference"
+    }
     Case 'listing files works when repak also prints a warning' {
         $files = @(Invoke-RepakList -Repak $repakStandIn -AesKey '0x00' -PakPath 'game.pak' -Filter 'LootTables')
         Assert ($files.Count -eq 2) "got $($files.Count): $($files -join ' | ')"

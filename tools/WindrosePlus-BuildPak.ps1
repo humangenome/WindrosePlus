@@ -799,7 +799,9 @@ if ($hasCT) {
 
         Write-Host "  Extracting CurveTable assets with retoc..."
         New-Item -ItemType Directory -Force -Path $retocDir | Out-Null
-        $retocOutput = @(& $retocExe -a $aesKey to-legacy $paksDir $retocDir 2>&1)
+        # The script block keeps retoc's error text as output: under "Stop" Windows
+        # PowerShell 5.1 would end the script on it before the message below is written.
+        $retocOutput = @(& { $ErrorActionPreference = 'Continue'; & $retocExe -a $aesKey to-legacy $paksDir $retocDir 2>&1 })
         $retocExit = $LASTEXITCODE
         $cacheExtractedThisRun = $true
 
@@ -808,8 +810,10 @@ if ($hasCT) {
             $retocDetails = ($retocOutput | Select-Object -Last 8 | ForEach-Object { $_.ToString() }) -join "`n"
             $errorMessage = "retoc extraction failed (exit $retocExit, $($extractedFiles.Count) CT assets found). Check AES key, game files, and retoc compatibility with this Windrose build."
             if ($retocDetails) { $errorMessage += "`nretoc output:`n$retocDetails" }
-            Write-Error $errorMessage
+            # Cleared first: Write-Error ends the script under "Stop", and a half-filled
+            # cache left behind was reused by the next build.
             Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Error $errorMessage
             exit 3
         }
         Write-Host "  Extracted $($extractedFiles.Count) CurveTable assets to cache"
@@ -975,7 +979,7 @@ if ($hasCT) {
             New-Item -ItemType Directory -Force -Path $zenDir | Out-Null
             try {
                 $zenUtoc = Join-Path $zenDir "WindrosePlus_CurveTables_P.utoc"
-                $zenOutput = @(& $retocExe to-zen --version $engineVersion $stageDir $zenUtoc 2>&1)
+                $zenOutput = @(& { $ErrorActionPreference = 'Continue'; & $retocExe to-zen --version $engineVersion $stageDir $zenUtoc 2>&1 })
                 $zenExit = $LASTEXITCODE
                 $zenParts = $script:CurveTableOutputParts | ForEach-Object { Join-Path $zenDir $_ }
                 $zenComplete = $true

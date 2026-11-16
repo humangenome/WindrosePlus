@@ -167,7 +167,8 @@ if ($SourceDir) {
     foreach ($d in $includeDirs) { $repakArgs += @("-i", $d) }
     $repakArgs += $pakPath
     Write-Step "Unpacking game data from $pakPath"
-    $out = & $Repak @repakArgs 2>&1
+    # Error text stays output here (Windows PowerShell 5.1 would stop on it under "Stop").
+    $out = & { $ErrorActionPreference = 'Continue'; & $Repak @repakArgs 2>&1 }
     if ($LASTEXITCODE -ne 0) {
         Stop-Build "repak unpack failed (exit $LASTEXITCODE): $(($out | Out-String).Trim())" 3
     }
@@ -205,7 +206,7 @@ if (-not $CurveTableDir -and -not $SourceDir) {
             if ($linked -gt 0) { $ctInput = $vanillaDir; $statSource = "game files" }
             else { Write-Step "Could not set this server's settings override aside; stat values include it" }
         }
-        $null = & $Retoc -a $aesKey to-legacy --filter CT_ --no-shaders --no-script-objects $ctInput $ctOut 2>&1
+        $null = & { $ErrorActionPreference = 'Continue'; & $Retoc -a $aesKey to-legacy --filter CT_ --no-shaders --no-script-objects $ctInput $ctOut 2>&1 }
         if ($LASTEXITCODE -eq 0) { $CurveTableDir = $ctOut } else { Write-Step "retoc could not read the curve tables (exit $LASTEXITCODE); building without stat values" }
     } else {
         Write-Step "retoc not found; building without stat values"
