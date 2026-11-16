@@ -2218,25 +2218,109 @@ local HEX32 = string.rep("%x", 32)
 -- 7656120, so the mask is broad on purpose; hiding a number that only looks like one does no harm.
 local STEAM64 = "7656" .. string.rep("%d", 13)
 
--- Masks text that looks like an address or an account ID: an IPv4 address (alone, not part of a longer dotted
--- version such as 0.10.0.9.32), an IPv6 address, a 17-digit Steam ID, or a 32-character hex ID (Epic and EOS).
+-- One IPv4 address: four numbers of up to three digits, each 0-255.
+local function isIPv4(s)
+    local a, b, c, d = s:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then return false end
+    for _, octet in ipairs({ a, b, c, d }) do
+        if #octet > 3 or tonumber(octet) > 255 then return false end
+    end
+    return true
+end
+
+-- Number of colon-separated groups of 1-4 hex digits in part (no "::" in it), or nil when it is not such a list.
+local function ipv6GroupCount(part)
+    if part == "" then return 0 end
+    local n = 0
+    for group in (part .. ":"):gmatch("([^:]*):") do
+        if not group:match("^%x%x?%x?%x?$") then return nil end
+        n = n + 1
+    end
+    return n
+end
+
+-- One IPv6 address in any written form: eight groups, or fewer with one "::", optionally ending in an IPv4 address
+-- (::ffff:1.2.3.4). It must hold a digit, so names such as "Face::Add" and times such as 12:30:45 never count.
+local function isIPv6(s)
+    if not s:find(":", 1, true) or not s:find("%d") then return false end
+    local extra = 0
+    local head, v4 = s:match("^(.*):(%d+%.%d+%.%d+%.%d+)$")
+    if head then
+        if not isIPv4(v4) then return false end
+        extra = 2
+        s = (head:sub(-1) == ":") and (head .. ":") or head
+    end
+    if s:find("[^%x:]") then return false end
+    local left, right = s:match("^(.-)::(.*)$")
+    if left then
+        if right:find("::", 1, true) then return false end
+        local nl, nr = ipv6GroupCount(left), ipv6GroupCount(right)
+        return nl ~= nil and nr ~= nil and nl + nr + extra <= 7
+    end
+    local n = ipv6GroupCount(s)
+    return n ~= nil and n + extra == 8
+end
+
+-- Masks text that looks like an address or an account ID, in this order: an IPv6 or IPv4 address in brackets with
+-- its port ([2001:db8::1]:7777), a GUID with or without braces, an IPv6 address in any form (2001:db8::1,
+-- fe80::1%eth0, ::ffff:1.2.3.4), an IPv4 address with its port (alone, not part of a longer dotted version such as
+-- 0.10.0.9.32), a 17-digit Steam ID, and a 32-character hex ID (Epic and EOS). Only text shown in an answer goes
+-- through here; the values the mod works with are never changed.
 function Admin._maskIdentityText(text)
     if type(text) ~= "string" or text == "" then return text end
     local hidden = Admin._IDENTITY_HIDDEN
-    local out = text:gsub("()(%d+%.%d+%.%d+%.%d+)()", function(s, ip, e)
-        local before = s > 1 and text:sub(s - 1, s - 1) or ""
-        local after, after2 = text:sub(e, e), text:sub(e + 1, e + 1)
-        if before:match("[%d%.]") or after:match("%d") or (after == "." and after2:match("%d")) then return nil end
-        for octet in ip:gmatch("%d+") do
-            if #octet > 3 or tonumber(octet) > 255 then return nil end
-        end
+
+    local out = text:gsub("%[([%x:%.]+)(%%?[%w_%.%-]*)%](:?)(%d*)", function(addr, zone, colon, port)
+        if zone ~= "" and zone:sub(1, 1) ~= "%" then return nil end
+        if not (isIPv6(addr) or (zone == "" and isIPv4(addr))) then return nil end
+        if colon == ":" and port == "" then return hidden .. ":" end
         return hidden
     end)
-    out = out:gsub("%f[%x:][%x:]*%x:[%x:]*:[%x:]*:[%x:]*%f[^%x:]", function(v)
-        local _, colons = v:gsub(":", "")
-        if colons >= 3 and #v >= 7 and v:find("%x%x") then return hidden end
-        return nil
+
+    local subject = out
+    out = subject:gsub("()({?)(%x+%-%x+%-%x+%-%x+%-%x+)(}?)()", function(s, open, guid, close, e)
+        local a, b, c, d, f = guid:match("^(%x+)%-(%x+)%-(%x+)%-(%x+)%-(%x+)$")
+        if not (#a == 8 and #b == 4 and #c == 4 and #d == 4 and #f == 12) then return nil end
+        local before = s > 1 and subject:sub(s - 1, s - 1) or ""
+        local after = subject:sub(e, e)
+        if before:match("[%w_%-]") or after:match("[%w_%-]") then return nil end
+        if open == "{" and close == "}" then return hidden end
+        return open .. hidden .. close
     end)
+
+    local function maskIPv6(subj, pattern)
+        return subj:gsub(pattern, function(s, run, zone, e)
+            if e == nil then e, zone = zone, nil end
+            -- Sentence punctuation after the address ("from 2001:db8::1." or "::ffff:1.2.3.4: joined") stays.
+            local tail = run:match("%.*$")
+            local addr = run:sub(1, #run - #tail)
+            if not zone and not isIPv6(addr) and addr:match("[^:]:$") then
+                addr, tail = addr:sub(1, -2), ":" .. tail
+            end
+            if zone and tail ~= "" then return nil end
+            local before = s > 1 and subj:sub(s - 1, s - 1) or ""
+            local after = subj:sub(e, e)
+            if before:match("[%w_]") or (tail == "" and after:match("[%w_%%]")) then return nil end
+            if not isIPv6(addr) then return nil end
+            return hidden .. tail
+        end)
+    end
+    out = maskIPv6(out, "()([%x:%.]+)%%([%w_%.%-]+)()")
+    out = maskIPv6(out, "()([%x:%.]+)()")
+
+    subject = out
+    out = subject:gsub("()(%d+%.%d+%.%d+%.%d+)(:?)(%d*)()", function(s, ip, colon, port, e)
+        local before = s > 1 and subject:sub(s - 1, s - 1) or ""
+        if before:match("[%d%.]") then return nil end
+        if colon == "" then
+            local after, after2 = subject:sub(e, e), subject:sub(e + 1, e + 1)
+            if after == "." and after2:match("%d") then return nil end
+        end
+        if not isIPv4(ip) then return nil end
+        if colon == ":" and (port == "" or #port > 5) then return hidden .. ":" .. port end
+        return hidden
+    end)
+
     out = out:gsub("%f[%d]" .. STEAM64 .. "%f[%D]", hidden)
     out = out:gsub("%f[%x]" .. HEX32 .. "%f[^%x]", hidden)
     return out

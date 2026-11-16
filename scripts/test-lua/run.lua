@@ -741,6 +741,102 @@ do
         end
     end)
 
+    -- One case per shape: each text must come back with the marker and without any piece of the address or ID.
+    local function masksAll(label, cases)
+        for _, c in ipairs(cases) do
+            local out = Admin._maskIdentityText(c[1])
+            check(out:find(Admin._IDENTITY_HIDDEN, 1, true), label .. " not masked: " .. c[1] .. " -> " .. out)
+            for _, piece in ipairs(c[2]) do
+                check(not out:find(piece, 1, true), label .. " left '" .. piece .. "': " .. c[1] .. " -> " .. out)
+            end
+        end
+    end
+
+    case("player ids: a GUID with dashes is masked, with or without braces", function()
+        masksAll("GUID", {
+            { "id 3f2504e0-4f89-11d3-9a0c-0305e82c3301 joined", { "3f2504e0", "0305e82c3301" } },
+            { "{3F2504E0-4F89-11D3-9A0C-0305E82C3301}", { "3F2504E0", "0305E82C3301", "{", "}" } },
+            { "Net = {3f2504e0-4f89-11d3-9a0c-0305e82c3301}.", { "3f2504e0", "{", "}" } },
+        })
+    end)
+
+    case("player ids: a 32-character hex ID is masked in either case", function()
+        masksAll("hex ID", {
+            { "EOS:" .. EPIC, { EPIC } },
+            { "id " .. EPIC:upper() .. ",", { EPIC:upper() } },
+        })
+    end)
+
+    case("player ids: a 17-digit Steam ID is masked", function()
+        masksAll("Steam ID", {
+            { "STEAM:" .. STEAM, { STEAM } },
+            { "steam_76561202255233023 left", { "76561202255233023" } },
+        })
+    end)
+
+    case("player ids: a compressed IPv6 address is masked", function()
+        masksAll("IPv6 ::", {
+            { "from 2001:db8::1 now", { "2001", "db8" } },
+            { "2001:db8:85a3::8a2e:370:7334.", { "2001", "8a2e", "7334" } },
+            { "fe80:0:0:0:200:f8ff:fe21:67cf", { "fe80", "fe21" } },
+        })
+    end)
+
+    case("player ids: a link-local IPv6 address with a zone is masked, zone included", function()
+        masksAll("IPv6 %zone", {
+            { "addr fe80::1%eth0 up", { "fe80", "eth0", "%" } },
+            { "fe80::1c2a:3b4c:5d6e:7f80%12", { "fe80", "7f80", "%12" } },
+        })
+    end)
+
+    case("player ids: an IPv4 address written as IPv6 is masked", function()
+        masksAll("IPv6 ::ffff:", {
+            { "peer ::ffff:203.0.113.7", { "ffff", "203.0.113.7", "113" } },
+            { "::ffff:192.0.2.33:", { "ffff", "192.0.2.33" } },
+        })
+    end)
+
+    case("player ids: an IPv6 address in brackets with its port is masked, port included", function()
+        masksAll("[IPv6]:port", {
+            { "connect [2001:db8::1]:7777 ok", { "2001", "7777", "[" } },
+            { "[fe80::1%eth0]:27015", { "fe80", "eth0", "27015" } },
+            { "[203.0.113.7]:7777", { "203.0.113.7", "7777" } },
+        })
+    end)
+
+    case("player ids: an IPv4 address with its port is masked, port included", function()
+        masksAll("IPv4:port", {
+            { IP .. ":7777", { IP, "7777" } },
+            { "from 192.0.2.33:27015, joined", { "192.0.2.33", "27015" } },
+            { "from " .. IP .. ".", { IP } },
+        })
+    end)
+
+    case("player ids: ordinary text, version numbers and timestamps are left whole", function()
+        local m = Admin._maskIdentityText
+        for _, t in ipairs({
+            "Alice joined the game", "Windrose 0.10.0.9.32", "Windrose+ 1.3.29", "v1.3.30", "UE4SS 3.0.1-944-g0196ef29",
+            "build 24913903", "at 1731400000000", "seed 76561", "12:30:45", "12:30:45.123", "[12:30:45]",
+            "2026-11-15 12:30:45", "2026-11-15T12:30:45Z", "[2026-11-15 12:30:45] Saved", "Uptime: 3h 12m",
+            "X=14520.3 Y=-8340.1 Z=150.0", "X -924,823 Y -337,960", "at 100000 200000 5000",
+            "ECharacterState::Dead", "Face::Add", "UObject::GetName", "a 1-2-3-4-5 list", "2026-11-15",
+            "BP_X_C /Game/Maps/Main.Main:PersistentLevel.BP_X_C_7", string.rep("ab", 32), string.rep("c0ffee", 6) .. "1234",
+            "999.1.1.1", "12345678901234567", "Ratio 3:2", "times 10:00-12:00",
+        }) do
+            check(m(t) == t, "changed: " .. t .. " -> " .. m(t))
+        end
+    end)
+
+    case("player ids: only the answer is masked; the values the mod works with are unchanged", function()
+        setShow(false)
+        local msg = answer("wp.gm", { "SavedNetworkAddress" })
+        check(not leaks(msg), "the answer leaked the address")
+        check(gameMode.SavedNetworkAddress == IP, "the game value was changed: " .. tostring(gameMode.SavedNetworkAddress))
+        local r = Admin._redactIdentityAnswer("Peer = [2001:db8::1]:7777\nName = Alice\nGuid = {3f2504e0-4f89-11d3-9a0c-0305e82c3301}")
+        check(not r:find("2001", 1, true) and not r:find("3f2504e0", 1, true), "a line kept an address or ID:\n" .. r)
+        check(r:find("Name = Alice", 1, true), "an ordinary line changed:\n" .. r)
+    end)
+
     case("player ids: the guard wraps each command once", function()
         local before = Admin._commands["wp.peek"].handler
         Admin._guardIdentityCommands()
