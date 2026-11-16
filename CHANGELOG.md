@@ -2,6 +2,25 @@
 
 > **[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=changelog&utm_campaign=windrose_plus)**. Survival Servers game servers come with Windrose+ already installed.
 
+## [1.3.30] - 2026-11-15
+
+### Security
+
+- **Debug commands hide more kinds of addresses and IDs.** With `debug.show_player_ids` off, `wp.probe_player`, `wp.peek`, `wp.gm`, `wp.props`, `wp.discover` and `wp.settings` now also hide GUIDs, IPv6 addresses in every written form (link-local addresses with a zone, IPv4 addresses written as IPv6, addresses in brackets), the port after an address, and Steam IDs that start 7656120. Version numbers, times and ordinary text are left alone.
+
+### Fixed
+
+- **The console no longer switches off while `windrose_plus.json` is being saved.** The mod reads the file before every console command. A read in the middle of a save used the defaults for that command, and a file missing for a moment was replaced with a new default one. It now keeps the last good settings and says so in the console log and in the `wp.reload` answer ("windrose_plus.json could not be read: keeping the last good settings until it can"). A complete new file takes over at once, so a new RCON password replaces the old one on the next command. A file saved with a byte order mark now loads.
+- **A setting for a row this game version does not have no longer stops every second start.** A typo, or a row a game update renamed, made `StartWindrosePlusServer.bat` refuse to start the server every other time. The setting is now skipped with a warning.
+- **A game update that changes only the game's `.utoc` and `.ucas` files rebuilds your settings.** Only the `.pak` file was checked before, so such an update kept settings built from the previous game version.
+- **On Windows PowerShell 5.1, a warning from repak or retoc no longer stops the settings build or the item catalog.**
+- **Very large settings, such as `MaxWeight = 99999999`, no longer fail the build's check.**
+- **Multipliers in `windrose_plus.json` that are not numbers are refused with a clear message**, and an unknown name such as `"harvest"` is named and ignored instead of stopping the build. NaN and Infinity in `windrose_plus.harvest.ini` are skipped.
+
+### Added
+
+- **`THIRD-PARTY-NOTICES.md` and the licence of every bundled part** (Leaflet, UE4SS, repak, retoc and the libraries inside `windrose-heal`).
+
 ## [1.3.29] - 2026-11-10
 
 ### Security
