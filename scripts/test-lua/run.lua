@@ -344,7 +344,7 @@ case("config: a half-written file keeps the last good settings", function()
     Config.reload()
     writeFile(Config._path, '{"rcon":{"enabled":true,"pass')
     local reloaded, why = Config.reload()
-    check(reloaded == false and tostring(why):find("did not parse", 1, true), "reported " .. tostring(reloaded) .. " " .. tostring(why))
+    check(reloaded == false and why == Config.KEEP_LAST_GOOD_LINE, "reported " .. tostring(reloaded) .. " " .. tostring(why))
     check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
     check(Config.get("rcon", "enabled") == true, "rcon switched off")
     check(Config.get("multipliers", "xp") == 3, "xp is " .. tostring(Config.get("multipliers", "xp")))
@@ -375,6 +375,105 @@ case("config: the first load of a broken file uses the defaults", function()
     check(Config.reload() == false, "reported success")
     check(Config.get("rcon", "enabled") ~= true or Config.isRconEnabled() == false, "console on with a broken file")
     check(Config.get("multipliers") ~= nil, "no defaults")
+end)
+
+-- Security's terms for keeping the last good settings (2026-11-15): a complete new file takes over at once, and each
+-- time the old settings are kept the console log says so in these exact words, whatever the log level.
+local KEEP_LINE = "windrose_plus.json could not be read: keeping the last good settings until it can"
+
+local function capturePrints(fn)
+    local lines, realPrint = {}, print
+    print = function(...) local t = {} for i = 1, select("#", ...) do t[#t + 1] = tostring((select(i, ...))) end lines[#lines + 1] = table.concat(t, "\t") end
+    local ok, err = pcall(fn)
+    print = realPrint
+    if not ok then error(err, 0) end
+    return table.concat(lines, "\n")
+end
+
+case("config: keeping the last good settings is said in the console log, in Security's words, at any log level", function()
+    local Log = require("modules.log")
+    local savedLevel = Log.getLevel()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    check(Config.KEEP_LAST_GOOD_LINE == KEEP_LINE, "the line is worded: " .. tostring(Config.KEEP_LAST_GOOD_LINE))
+    Log.setLevel("error")
+    os.remove(Config._path)
+    local missing = capturePrints(function() Config.reload() end)
+    writeFile(Config._path, '{"rcon":{"enabled":true,"pass')
+    local broken = capturePrints(function() Config.reload() end)
+    writeFile(Config._path, goodConfig)
+    local good = capturePrints(function() Config.reload() end)
+    Log.setLevel(savedLevel)
+    check(missing:find(KEEP_LINE, 1, true), "no line for a missing file: " .. missing)
+    check(broken:find(KEEP_LINE, 1, true), "no line for a half-written file: " .. broken)
+    check(not good:find(KEEP_LINE, 1, true), "the line was written for a good file: " .. good)
+end)
+
+case("config: wp.reload answers with the same line when it keeps the last good settings", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    local savedConfig = Admin._config
+    Admin._config = Config
+    os.remove(Config._path)
+    local _, kept = Admin.execute("wp.reload", {})
+    writeFile(Config._path, goodConfig)
+    local _, done = Admin.execute("wp.reload", {})
+    Admin._config = savedConfig
+    check(kept == KEEP_LINE, "answer while kept: " .. tostring(kept))
+    check(done == "Config reloaded", "answer after a good file: " .. tostring(done))
+end)
+
+-- Through the console itself: the RCON spool reloads the file before every command.
+local function rconStatus(id, password)
+    local savedAdmin = Rcon._admin
+    Rcon._admin = { execute = function(cmd) return "ok", "done " .. cmd end }
+    writeFile(spool .. "\\cmd_" .. id .. ".json", '{"id":"' .. id .. '","command":"wp.ping","password":"' .. password .. '"}')
+    queue({ "cmd_" .. id .. ".json" })
+    Rcon._processCommands()
+    Rcon._admin = savedAdmin
+    local res = readFile(spool .. "\\res_" .. id .. ".json") or ""
+    if res:find('"status":"ok"', 1, true) then return "ok" end
+    if res:find("Authentication failed", 1, true) then return "refused" end
+    if res:find("RCON is off", 1, true) then return "off" end
+    return "other: " .. res
+end
+
+case("config: a complete new file with a new RCON password takes over at once; the old password stops working", function()
+    local Config = freshConfig('{"rcon":{"enabled":true,"password":"Old-Pass-111"}}')
+    Config.reload()
+    local savedRconConfig = Rcon._config
+    Rcon._config = Config
+    local ok, err = pcall(function()
+        local first = rconStatus("k1", "Old-Pass-111"); check(first == "ok", "the old password did not work before the change: " .. first)
+        writeFile(Config._path, '{"rcon":{"enabled":true,"pass')                 -- half-written: last good kept
+        check(rconStatus("k2", "Old-Pass-111") == "ok", "the last good settings were not kept while half-written")
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":"New-Pass-222"}}')
+        local old = rconStatus("k3", "Old-Pass-111")
+        check(old == "refused", "the old password still works after a good new file: " .. old)
+        check(rconStatus("k4", "New-Pass-222") == "ok", "the new password does not work")
+        os.remove(Config._path)                                                   -- missing: the NEW password is kept
+        check(rconStatus("k5", "Old-Pass-111") == "refused", "a missing file brought the old password back")
+        check(rconStatus("k6", "New-Pass-222") == "ok", "the last good (new) password was not kept")
+    end)
+    Rcon._config = savedRconConfig
+    if not ok then error(err, 0) end
+end)
+
+case("config: blank and changeme passwords stay refused in a complete new file", function()
+    local Config = freshConfig('{"rcon":{"enabled":true,"password":"Old-Pass-111"}}')
+    Config.reload()
+    local savedRconConfig = Rcon._config
+    Rcon._config = Config
+    local ok, err = pcall(function()
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":"changeme"}}')
+        check(rconStatus("c1", "changeme") == "off", "changeme was accepted")
+        check(rconStatus("c2", "Old-Pass-111") ~= "ok", "the old password worked after a changeme file")
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":""}}')
+        check(rconStatus("c3", "") == "off", "a blank password was accepted")
+        check(rconStatus("c4", "Old-Pass-111") ~= "ok", "the old password worked after a blank file")
+    end)
+    Rcon._config = savedRconConfig
+    if not ok then error(err, 0) end
 end)
 
 -- ---------------------------------------------------------------- subcommands (admin.lua)

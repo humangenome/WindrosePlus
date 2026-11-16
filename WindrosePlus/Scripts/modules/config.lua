@@ -38,13 +38,23 @@ end
 -- RCON reloads before every command, so once a good file has loaded, a file that is missing for a
 -- moment or half-written (an editor or a panel saving it) keeps the last good settings: up to
 -- v1.3.29 such a read switched to the defaults (console off, multipliers shown as 1.0), and a missing
--- file was replaced with a new default one. A UTF-8 byte order mark is ignored.
+-- file was replaced with a new default one. A UTF-8 byte order mark is ignored. A complete new file always takes
+-- over at once (a new RCON password replaces the old one on the next command), and every time the last good
+-- settings are kept the console log says so, at a level no log_level setting hides, so an owner who removed the
+-- file can see why the old password still works. Blank and "changeme" passwords stay refused (isRconEnabled).
+Config.KEEP_LAST_GOOD_LINE = "windrose_plus.json could not be read: keeping the last good settings until it can"
+
+local function keepLastGood(reason)
+    Log.error("Config", Config.KEEP_LAST_GOOD_LINE)
+    Events.record("config.load.fail", { path = Config._path, reason = reason, kept_previous = true })
+    return false, Config.KEEP_LAST_GOOD_LINE
+end
+
 function Config.reload()
     local hadGood = Config._data ~= nil and Config._lastContent ~= nil
     local file = io.open(Config._path, "r")
     if not file and hadGood then
-        Log.warn("Config", "Cannot read " .. Config._path .. " right now; keeping the previous settings")
-        return false, "windrose_plus.json could not be read"
+        return keepLastGood("missing")
     end
     if not file then
         Log.info("Config", "No config found, creating default at: " .. Config._path)
@@ -80,18 +90,15 @@ function Config.reload()
         return true
     else
         Log.error("Config", "Failed to parse config: " .. tostring(data))
+        if hadGood then return keepLastGood(tostring(data)) end
         Events.record("config.load.fail", {
             path = Config._path,
             reason = tostring(data),
             byte_size = #content,
-            kept_previous = hadGood,
+            kept_previous = false,
         })
-        if hadGood then
-            Log.warn("Config", "Keeping the previous settings")
-        else
-            Log.warn("Config", "Using defaults")
-            Config._data = Config._defaults()
-        end
+        Log.warn("Config", "Using defaults")
+        Config._data = Config._defaults()
         return false, "windrose_plus.json did not parse: " .. tostring(data)
     end
 end

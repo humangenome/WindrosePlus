@@ -365,9 +365,7 @@ function Admin._registerCommands()
         category = "server",
         handler = function(args)
             local reloaded, why = Admin._config.reload()
-            if reloaded == false then
-                return "Config not reloaded (" .. tostring(why) .. "); the previous settings stay in use"
-            end
+            if reloaded == false then return tostring(why) end
             return "Config reloaded"
         end
     }
