@@ -756,7 +756,7 @@ if ($hasCT) {
     if (Test-Path -LiteralPath $retocDir) {
         $cachedFingerprint = if (Test-Path -LiteralPath $cacheStampPath) { ([System.IO.File]::ReadAllText($cacheStampPath)).Trim() } else { "" }
         if ($cachedFingerprint -ne $gameFilesFingerprint) {
-            Write-Host "  Game files changed since the cache was made — re-extracting..." -ForegroundColor Yellow
+            Write-Host "  Game files changed since the cache was made: re-extracting..." -ForegroundColor Yellow
             Remove-Item -LiteralPath $retocDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
