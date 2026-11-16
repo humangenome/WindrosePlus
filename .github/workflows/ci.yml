@@ -242,6 +242,16 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-RepairTool.ps1
 
+      - name: Error text from repak (Windows PowerShell 5.1)
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: ./scripts/Test-ToolErrorText.ps1
+
+      - name: Error text from repak (PowerShell 7)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./scripts/Test-ToolErrorText.ps1
+
   page-smoke:
     name: Page smoke test (five widths, twice)
     runs-on: windows-latest
