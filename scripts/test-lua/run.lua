@@ -323,6 +323,159 @@ case("config: listeners run after a changed file that parsed, not after a broken
     check(calls == 1, "an unchanged reload called them again")
 end)
 
+local function freshConfig(text)
+    local Config = require("modules.config")
+    Config._path = tempDir() .. "\\windrose_plus.json"
+    Config._data, Config._lastContent, Config._changeListeners = nil, nil, {}
+    if text then writeFile(Config._path, text) end
+    return Config
+end
+local goodConfig = '{"rcon":{"enabled":true,"password":"Sea-Dog-41"},"multipliers":{"xp":3}}'
+
+case("config: a file that starts with a UTF-8 byte order mark loads", function()
+    local Config = freshConfig("\239\187\191" .. goodConfig)
+    check(Config.reload() == true, "reload did not report success")
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(Config.get("multipliers", "xp") == 3, "xp is " .. tostring(Config.get("multipliers", "xp")))
+end)
+
+case("config: a half-written file keeps the last good settings", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    writeFile(Config._path, '{"rcon":{"enabled":true,"pass')
+    local reloaded, why = Config.reload()
+    check(reloaded == false and why == Config.KEEP_LAST_GOOD_LINE, "reported " .. tostring(reloaded) .. " " .. tostring(why))
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(Config.get("rcon", "enabled") == true, "rcon switched off")
+    check(Config.get("multipliers", "xp") == 3, "xp is " .. tostring(Config.get("multipliers", "xp")))
+end)
+
+case("config: a file missing for a moment keeps the last good settings and is not replaced with a default", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    os.remove(Config._path)
+    local reloaded = Config.reload()
+    check(reloaded == false, "reported " .. tostring(reloaded))
+    check(Config.getRconPassword() == "Sea-Dog-41", "password is " .. tostring(Config.getRconPassword()))
+    check(io.open(Config._path, "r") == nil, "a default file was written over the missing one")
+end)
+
+case("config: the first load with no file still creates the default file", function()
+    local Config = freshConfig(nil)
+    Config.reload()
+    local f = io.open(Config._path, "r")
+    check(f ~= nil, "no default file")
+    local text = f:read("*a"); f:close()
+    check(text:find("changeme", 1, true), "default file has no placeholder password")
+    check(Config.isRconEnabled() == false, "console on with the placeholder password")
+end)
+
+case("config: the first load of a broken file uses the defaults", function()
+    local Config = freshConfig('{"rcon":')
+    check(Config.reload() == false, "reported success")
+    check(Config.get("rcon", "enabled") ~= true or Config.isRconEnabled() == false, "console on with a broken file")
+    check(Config.get("multipliers") ~= nil, "no defaults")
+end)
+
+-- Security's terms for keeping the last good settings (2026-11-15): a complete new file takes over at once, and each
+-- time the old settings are kept the console log says so in these exact words, whatever the log level.
+local KEEP_LINE = "windrose_plus.json could not be read: keeping the last good settings until it can"
+
+local function capturePrints(fn)
+    local lines, realPrint = {}, print
+    print = function(...) local t = {} for i = 1, select("#", ...) do t[#t + 1] = tostring((select(i, ...))) end lines[#lines + 1] = table.concat(t, "\t") end
+    local ok, err = pcall(fn)
+    print = realPrint
+    if not ok then error(err, 0) end
+    return table.concat(lines, "\n")
+end
+
+case("config: keeping the last good settings is said in the console log, in Security's words, at any log level", function()
+    local Log = require("modules.log")
+    local savedLevel = Log.getLevel()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    check(Config.KEEP_LAST_GOOD_LINE == KEEP_LINE, "the line is worded: " .. tostring(Config.KEEP_LAST_GOOD_LINE))
+    Log.setLevel("error")
+    os.remove(Config._path)
+    local missing = capturePrints(function() Config.reload() end)
+    writeFile(Config._path, '{"rcon":{"enabled":true,"pass')
+    local broken = capturePrints(function() Config.reload() end)
+    writeFile(Config._path, goodConfig)
+    local good = capturePrints(function() Config.reload() end)
+    Log.setLevel(savedLevel)
+    check(missing:find(KEEP_LINE, 1, true), "no line for a missing file: " .. missing)
+    check(broken:find(KEEP_LINE, 1, true), "no line for a half-written file: " .. broken)
+    check(not good:find(KEEP_LINE, 1, true), "the line was written for a good file: " .. good)
+end)
+
+case("config: wp.reload answers with the same line when it keeps the last good settings", function()
+    local Config = freshConfig(goodConfig)
+    Config.reload()
+    local savedConfig = Admin._config
+    Admin._config = Config
+    os.remove(Config._path)
+    local _, kept = Admin.execute("wp.reload", {})
+    writeFile(Config._path, goodConfig)
+    local _, done = Admin.execute("wp.reload", {})
+    Admin._config = savedConfig
+    check(kept == KEEP_LINE, "answer while kept: " .. tostring(kept))
+    check(done == "Config reloaded", "answer after a good file: " .. tostring(done))
+end)
+
+-- Through the console itself: the RCON spool reloads the file before every command.
+local function rconStatus(id, password)
+    local savedAdmin = Rcon._admin
+    Rcon._admin = { execute = function(cmd) return "ok", "done " .. cmd end }
+    writeFile(spool .. "\\cmd_" .. id .. ".json", '{"id":"' .. id .. '","command":"wp.ping","password":"' .. password .. '"}')
+    queue({ "cmd_" .. id .. ".json" })
+    Rcon._processCommands()
+    Rcon._admin = savedAdmin
+    local res = readFile(spool .. "\\res_" .. id .. ".json") or ""
+    if res:find('"status":"ok"', 1, true) then return "ok" end
+    if res:find("Authentication failed", 1, true) then return "refused" end
+    if res:find("RCON is off", 1, true) then return "off" end
+    return "other: " .. res
+end
+
+case("config: a complete new file with a new RCON password takes over at once; the old password stops working", function()
+    local Config = freshConfig('{"rcon":{"enabled":true,"password":"Old-Pass-111"}}')
+    Config.reload()
+    local savedRconConfig = Rcon._config
+    Rcon._config = Config
+    local ok, err = pcall(function()
+        local first = rconStatus("k1", "Old-Pass-111"); check(first == "ok", "the old password did not work before the change: " .. first)
+        writeFile(Config._path, '{"rcon":{"enabled":true,"pass')                 -- half-written: last good kept
+        check(rconStatus("k2", "Old-Pass-111") == "ok", "the last good settings were not kept while half-written")
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":"New-Pass-222"}}')
+        local old = rconStatus("k3", "Old-Pass-111")
+        check(old == "refused", "the old password still works after a good new file: " .. old)
+        check(rconStatus("k4", "New-Pass-222") == "ok", "the new password does not work")
+        os.remove(Config._path)                                                   -- missing: the NEW password is kept
+        check(rconStatus("k5", "Old-Pass-111") == "refused", "a missing file brought the old password back")
+        check(rconStatus("k6", "New-Pass-222") == "ok", "the last good (new) password was not kept")
+    end)
+    Rcon._config = savedRconConfig
+    if not ok then error(err, 0) end
+end)
+
+case("config: blank and changeme passwords stay refused in a complete new file", function()
+    local Config = freshConfig('{"rcon":{"enabled":true,"password":"Old-Pass-111"}}')
+    Config.reload()
+    local savedRconConfig = Rcon._config
+    Rcon._config = Config
+    local ok, err = pcall(function()
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":"changeme"}}')
+        check(rconStatus("c1", "changeme") == "off", "changeme was accepted")
+        check(rconStatus("c2", "Old-Pass-111") ~= "ok", "the old password worked after a changeme file")
+        writeFile(Config._path, '{"rcon":{"enabled":true,"password":""}}')
+        check(rconStatus("c3", "") == "off", "a blank password was accepted")
+        check(rconStatus("c4", "Old-Pass-111") ~= "ok", "the old password worked after a blank file")
+    end)
+    Rcon._config = savedRconConfig
+    if not ok then error(err, 0) end
+end)
+
 -- ---------------------------------------------------------------- subcommands (admin.lua)
 -- Own command table for these cases; the built-in commands registered above are restored afterwards.
 local savedCommands, savedGameDir = Admin._commands, Admin._gameDir
@@ -667,6 +820,120 @@ do
         for _, t in ipairs({ "from " .. IP .. ".", IP .. ":7777", "fe80:0:0:0:200:f8ff:fe21:67cf", "id " .. STEAM, EPIC:upper() }) do
             check(m(t):find(Admin._IDENTITY_HIDDEN, 1, true) and not leaks(m(t)) and not m(t):find("fe21", 1, true), "not masked: " .. t .. " -> " .. m(t))
         end
+    end)
+
+    case("player ids: masking hides newer Steam IDs starting 7656120 and leaves other long numbers alone", function()
+        local m = Admin._maskIdentityText
+        -- the lowest and highest personal Steam IDs, today's shape, and the newer shape
+        for _, id in ipairs({ "76561197960265729", STEAM, "76561200000000001", "76561202255233023" }) do
+            for _, t in ipairs({ id, "id " .. id .. ".", "STEAM:" .. id, "[" .. id .. "]" }) do
+                local out = m(t)
+                check(out:find(Admin._IDENTITY_HIDDEN, 1, true) and not out:find(id, 1, true), "not masked: " .. t .. " -> " .. out)
+            end
+        end
+        local r = Admin._redactIdentityAnswer("Note = joined as 76561200000000001\nName = Alice")
+        check(not r:find("76561200000000001", 1, true) and r:find("Name = Alice", 1, true), "a newer ID inside an ordinary line: " .. r)
+        -- 17 digits with another start, 16 and 18 digits, a 7656 run inside a longer number, short numbers
+        for _, t in ipairs({ "12345678901234567", "86561198000000001", "7656120000000000", "765612000000000011",
+                             "1765612000000000001", "at 1731400000000", "seed 76561", "build 20261112" }) do
+            check(m(t) == t, "changed: " .. t .. " -> " .. m(t))
+        end
+    end)
+
+    -- One case per shape: each text must come back with the marker and without any piece of the address or ID.
+    local function masksAll(label, cases)
+        for _, c in ipairs(cases) do
+            local out = Admin._maskIdentityText(c[1])
+            check(out:find(Admin._IDENTITY_HIDDEN, 1, true), label .. " not masked: " .. c[1] .. " -> " .. out)
+            for _, piece in ipairs(c[2]) do
+                check(not out:find(piece, 1, true), label .. " left '" .. piece .. "': " .. c[1] .. " -> " .. out)
+            end
+        end
+    end
+
+    case("player ids: a GUID with dashes is masked, with or without braces", function()
+        masksAll("GUID", {
+            { "id 3f2504e0-4f89-11d3-9a0c-0305e82c3301 joined", { "3f2504e0", "0305e82c3301" } },
+            { "{3F2504E0-4F89-11D3-9A0C-0305E82C3301}", { "3F2504E0", "0305E82C3301", "{", "}" } },
+            { "Net = {3f2504e0-4f89-11d3-9a0c-0305e82c3301}.", { "3f2504e0", "{", "}" } },
+        })
+    end)
+
+    case("player ids: a 32-character hex ID is masked in either case", function()
+        masksAll("hex ID", {
+            { "EOS:" .. EPIC, { EPIC } },
+            { "id " .. EPIC:upper() .. ",", { EPIC:upper() } },
+        })
+    end)
+
+    case("player ids: a 17-digit Steam ID is masked", function()
+        masksAll("Steam ID", {
+            { "STEAM:" .. STEAM, { STEAM } },
+            { "steam_76561202255233023 left", { "76561202255233023" } },
+        })
+    end)
+
+    case("player ids: a compressed IPv6 address is masked", function()
+        masksAll("IPv6 ::", {
+            { "from 2001:db8::1 now", { "2001", "db8" } },
+            { "2001:db8:85a3::8a2e:370:7334.", { "2001", "8a2e", "7334" } },
+            { "fe80:0:0:0:200:f8ff:fe21:67cf", { "fe80", "fe21" } },
+        })
+    end)
+
+    case("player ids: a link-local IPv6 address with a zone is masked, zone included", function()
+        masksAll("IPv6 %zone", {
+            { "addr fe80::1%eth0 up", { "fe80", "eth0", "%" } },
+            { "fe80::1c2a:3b4c:5d6e:7f80%12", { "fe80", "7f80", "%12" } },
+        })
+    end)
+
+    case("player ids: an IPv4 address written as IPv6 is masked", function()
+        masksAll("IPv6 ::ffff:", {
+            { "peer ::ffff:203.0.113.7", { "ffff", "203.0.113.7", "113" } },
+            { "::ffff:192.0.2.33:", { "ffff", "192.0.2.33" } },
+        })
+    end)
+
+    case("player ids: an IPv6 address in brackets with its port is masked, port included", function()
+        masksAll("[IPv6]:port", {
+            { "connect [2001:db8::1]:7777 ok", { "2001", "7777", "[" } },
+            { "[fe80::1%eth0]:27015", { "fe80", "eth0", "27015" } },
+            { "[203.0.113.7]:7777", { "203.0.113.7", "7777" } },
+        })
+    end)
+
+    case("player ids: an IPv4 address with its port is masked, port included", function()
+        masksAll("IPv4:port", {
+            { IP .. ":7777", { IP, "7777" } },
+            { "from 192.0.2.33:27015, joined", { "192.0.2.33", "27015" } },
+            { "from " .. IP .. ".", { IP } },
+        })
+    end)
+
+    case("player ids: ordinary text, version numbers and timestamps are left whole", function()
+        local m = Admin._maskIdentityText
+        for _, t in ipairs({
+            "Alice joined the game", "Windrose 0.10.0.9.32", "Windrose+ 1.3.29", "v1.3.30", "UE4SS 3.0.1-944-g0196ef29",
+            "build 24913903", "at 1731400000000", "seed 76561", "12:30:45", "12:30:45.123", "[12:30:45]",
+            "2026-11-15 12:30:45", "2026-11-15T12:30:45Z", "[2026-11-15 12:30:45] Saved", "Uptime: 3h 12m",
+            "X=14520.3 Y=-8340.1 Z=150.0", "X -924,823 Y -337,960", "at 100000 200000 5000",
+            "ECharacterState::Dead", "Face::Add", "UObject::GetName", "a 1-2-3-4-5 list", "2026-11-15",
+            "BP_X_C /Game/Maps/Main.Main:PersistentLevel.BP_X_C_7", string.rep("ab", 32), string.rep("c0ffee", 6) .. "1234",
+            "999.1.1.1", "12345678901234567", "Ratio 3:2", "times 10:00-12:00",
+        }) do
+            check(m(t) == t, "changed: " .. t .. " -> " .. m(t))
+        end
+    end)
+
+    case("player ids: only the answer is masked; the values the mod works with are unchanged", function()
+        setShow(false)
+        local msg = answer("wp.gm", { "SavedNetworkAddress" })
+        check(not leaks(msg), "the answer leaked the address")
+        check(gameMode.SavedNetworkAddress == IP, "the game value was changed: " .. tostring(gameMode.SavedNetworkAddress))
+        local r = Admin._redactIdentityAnswer("Peer = [2001:db8::1]:7777\nName = Alice\nGuid = {3f2504e0-4f89-11d3-9a0c-0305e82c3301}")
+        check(not r:find("2001", 1, true) and not r:find("3f2504e0", 1, true), "a line kept an address or ID:\n" .. r)
+        check(r:find("Name = Alice", 1, true), "an ordinary line changed:\n" .. r)
     end)
 
     case("player ids: the guard wraps each command once", function()

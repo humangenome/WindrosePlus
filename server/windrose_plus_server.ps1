@@ -1747,7 +1747,7 @@ try {
                                         if ($semi -ge 0) { $val = $val.Substring(0, $semi) }
                                         $val = $val.Trim()
                                         $d = 0.0
-                                        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d)) {
+                                        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d) -and -not [double]::IsNaN($d) -and -not [double]::IsInfinity($d)) {
                                             if ($d -ne 1.0) { $expectMultPak = $true; break }
                                         }
                                     }

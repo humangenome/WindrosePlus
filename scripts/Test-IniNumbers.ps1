@@ -1,5 +1,6 @@
 # Tests that INI numbers (tools/lib/IniConfigParser.ps1, ConvertTo-SafeDouble) read the
 # same on every Windows language. The function is taken out of the file as written.
+# Also windrose_plus.harvest.ini numbers (Read-HarvestIni in tools/lib/MultiplierPakBuilder.ps1).
 # Run: pwsh scripts/Test-IniNumbers.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -59,6 +60,30 @@ Case 'text, NaN and infinity are refused' {
         $r = Read-InCulture 'en-US' $v
         Assert ($null -eq $r.Value) "'$v' read as '$($r.Value)'"
     }
+}
+
+# windrose_plus.harvest.ini (tools/lib/MultiplierPakBuilder.ps1, Read-HarvestIni), taken out of the file as written
+$builderPath = Join-Path $root 'tools/lib/MultiplierPakBuilder.ps1'
+$builderAst = [System.Management.Automation.Language.Parser]::ParseFile($builderPath, [ref]$null, [ref]$null)
+$harvestFn = $builderAst.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $args[0].Name -eq 'Read-HarvestIni' }, $true) | Select-Object -First 1
+if (-not $harvestFn) { Write-Host 'FAIL Read-HarvestIni not found'; exit 1 }
+. ([scriptblock]::Create($harvestFn.Extent.Text))
+function Read-HarvestText([string]$Text) {
+    $path = Join-Path ([System.IO.Path]::GetTempPath()) ("wp-harvest-test-" + [guid]::NewGuid().ToString('N') + '.ini')
+    try {
+        [System.IO.File]::WriteAllText($path, $Text)
+        return Read-HarvestIni -Path $path -WarningAction SilentlyContinue
+    } finally {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+}
+Case 'harvest file: numbers are read, names match whatever their case' {
+    $r = Read-HarvestText "[Resources]`r`nWood = 5.0`r`nstone = 2 ; note`r`n; Clay = 9`r`n"
+    Assert ($r['wood'] -eq 5.0 -and $r['Stone'] -eq 2.0 -and -not $r.ContainsKey('Clay')) "read $($r.Keys -join ',')"
+}
+Case 'harvest file: 5x, NaN and Infinity are skipped, not read' {
+    $r = Read-HarvestText "Wood = 5x`nStone = NaN`nClay = Infinity`nSalt = -Infinity`nCoal = 2`n"
+    Assert ($r.Count -eq 1 -and $r['Coal'] -eq 2.0) "read $(($r.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ',')"
 }
 
 if ($failed) { Write-Host "$failed case(s) failed"; exit 1 }

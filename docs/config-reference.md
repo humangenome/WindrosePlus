@@ -76,11 +76,11 @@ Remote console. The password is read live: a new one works for the next command 
 
 ### query
 
-Server-query responder, so server browsers and monitoring tools can read your player count.
+The status file: the player list and server status written to `windrose_plus_data\server_status.json` and served at `/api/status`, so bots and monitoring tools can read your player count. It does not make the server answer server-browser queries.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `true` | Enable query responses. |
+| `enabled` | `true` | Write the status file. |
 | `interval_ms` | `5000` | Poll interval while players are online. |
 | `idle_interval_ms` | `30000` | Poll interval while the server is empty. |
 
@@ -180,7 +180,7 @@ Run it by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `log_level` | `"info"` | How much the mod writes to the UE4SS log: `debug`, `info`, `warn` or `error`. Read when the server starts. |
-| `show_player_ids` | `false` | Shows players' network addresses and account IDs in the answers of `wp.probe_player`, `wp.peek` and `wp.gm`. Leave it off unless you are debugging: anyone who can use the console would see them. Takes effect from the next console command. |
+| `show_player_ids` | `false` | Shows players' network addresses and account IDs in the answers of `wp.probe_player`, `wp.peek`, `wp.gm`, `wp.props`, `wp.discover` and `wp.settings`. Leave it off unless you are debugging: anyone who can use the console would see them. Takes effect from the next console command. |
 
 ```json
 {

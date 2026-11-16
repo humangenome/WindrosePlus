@@ -109,6 +109,19 @@ try {
         $diff = @(0..($before.Length - 1) | Where-Object { $before[$_] -ne $after[$_] })
         Assert ($diff.Count -ge 1 -and $diff.Count -le 4 -and ($diff | Where-Object { $_ -lt $off -or $_ -ge $off + 4 }).Count -eq 0) "bytes changed outside the value: $($diff -join ',')"
     }
+    Case 'large settings that a 32-bit float cannot hold exactly are patched and verified' {
+        $ua = New-Table 'pl' (New-UExp 'C' @(@('Row_First', 500), @('Row_Second', 7), @('Row_Third', 1)))
+        $ux = $ua -replace '\.uasset$', '.uexp'
+        $m = Parse-CurveTable -UAssetPath $ua
+        $out = Join-Path $base 'pl-patched.uexp'
+        $r = Invoke-CurveTablePatch -Manifest $m -Config @{ overrides = @{ Row_First = 99999999; Row_Second = 300000.3 } } -UExpPath $ux -OutputPath $out
+        Assert (-not $r.Error) "patch error: $($r.Error)"
+        Assert ($r.VerificationPassed) 'verification failed'
+        Assert ($r.ChangesApplied -eq 2) "changes applied: $($r.ChangesApplied)"
+        $after = [System.IO.File]::ReadAllBytes($out)
+        Assert ([BitConverter]::ToSingle($after, $m.Rows[0].Keys[0].ValueOffset) -eq [float]99999999) 'first value not written'
+        Assert ([BitConverter]::ToSingle($after, $m.Rows[1].Keys[0].ValueOffset) -eq [float]300000.3) 'second value not written'
+    }
 } finally {
     Remove-Item -LiteralPath $base -Recurse -Force
 }

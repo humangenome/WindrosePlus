@@ -185,11 +185,14 @@ function Invoke-CurveTablePatch {
         return $result
     }
 
-    # Verification pass: re-read every patched offset and confirm the new value
+    # Verification pass: re-read every patched offset and confirm the new value.
+    # The file holds 32-bit floats, so compare with the value as a float: a large
+    # setting such as 99999999 is stored as 100000000 and was reported as a failed
+    # verification up to v1.3.29.
     $verified = $true
     foreach ($change in $changes) {
         $readBack = [BitConverter]::ToSingle($uexp, $change.Offset)
-        if ([Math]::Abs($readBack - $change.NewValue) -gt 0.01) {
+        if ([Math]::Abs([double]$readBack - [double][float]$change.NewValue) -gt 0.01) {
             $verified = $false
             $result.Error = "Verification failed for '$($change.RowName)' at offset $($change.Offset): expected $($change.NewValue) but got $readBack"
             break

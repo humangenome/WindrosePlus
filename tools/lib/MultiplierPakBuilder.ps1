@@ -58,7 +58,11 @@ function Invoke-RepakGet {
     #>
     param([string]$Repak, [string]$AesKey, [string]$PakPath, [string]$FilePath)
 
-    $result = & $Repak --aes-key $AesKey get $PakPath $FilePath 2>&1
+    # Only repak's normal output is the file. Its error text is left out, and with
+    # "Continue" here Windows PowerShell 5.1 does not turn that text into a stopping
+    # error under the builder's "Stop" (a missing file is $null, as the callers expect).
+    $ErrorActionPreference = 'Continue'
+    $result = & $Repak --aes-key $AesKey get $PakPath $FilePath 2>$null
     if ($LASTEXITCODE -ne 0) { return $null }
     return ($result | Out-String)
 }
@@ -70,7 +74,8 @@ function Invoke-RepakList {
     #>
     param([string]$Repak, [string]$AesKey, [string]$PakPath, [string]$Filter = "")
 
-    $result = & $Repak --aes-key $AesKey list $PakPath 2>&1
+    $ErrorActionPreference = 'Continue'
+    $result = & $Repak --aes-key $AesKey list $PakPath 2>$null
     $files = ($result | Out-String).Split("`n") | Where-Object { $_.Trim() -ne "" -and $_.Trim().EndsWith(".json") }
     if ($Filter) {
         $files = $files | Where-Object { $_ -match [regex]::Escape($Filter) }
@@ -191,7 +196,8 @@ function Read-HarvestIni {
             continue
         }
         $d = 0.0
-        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d)) {
+        # NaN and Infinity parse as numbers but cannot become a drop count (the [int] cast in ConvertTo-DropInt throws).
+        if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$d) -and -not [double]::IsNaN($d) -and -not [double]::IsInfinity($d)) {
             $out[$key] = [Math]::Max(0.01, $d)
         } else {
             Write-Warning "Read-HarvestIni: '$key = $val' is not a number (expected e.g. '5.0', not '5x'); line skipped"
@@ -861,7 +867,7 @@ function Build-MultiplierPak {
             return $result
         }
 
-        & $repak pack $tmpDir $outPakPath 2>&1 | Out-Null
+        & { $ErrorActionPreference = 'Continue'; & $repak pack $tmpDir $outPakPath 2>&1 } | Out-Null
         $packExit = $LASTEXITCODE
         if ($packExit -ne 0 -or -not (Test-Path -LiteralPath $outPakPath)) {
             $result.Error = "repak failed to create $outPakPath (exit $packExit)"

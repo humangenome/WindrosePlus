@@ -54,3 +54,6 @@ test-results/
 !scripts/contract/fixture/game/windrose_plus.json
 !scripts/contract/fixture/game/windrose_plus_data/server_status.json
 !scripts/contract/fixture/game/windrose_plus_data/livemap_data.json
+
+# Python
+__pycache__/

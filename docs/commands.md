@@ -125,7 +125,7 @@ Multipliers marked `(disabled)` are stored but not applied. See
 
 ### wp.uptime
 
-Show how long the server process has been running.
+Show how long Windrose+ has been running in this server process. It counts from when the mod loaded, so `wp.modreload` and a hot reload start it again.
 
 ```
 Usage: wp.uptime
@@ -138,7 +138,7 @@ Uptime: 2d 14h 32m
 
 ### wp.reload
 
-Reload config from disk. Changes to `windrose_plus.json` take effect immediately without a server restart.
+Reload `windrose_plus.json` from disk. The RCON password and the public map settings (`livemap.public`) apply right away. Multipliers apply at the next start through `StartWindrosePlusServer.bat`; the update intervals in `query`, `livemap`, `poiscan` and `events`, and the log level, at the next server start. Until then `wp.status` and `wp.config` show the values in the file, not the ones in use. If the file cannot be read or does not parse, the previous settings stay in use and the answer says so.
 
 ```
 Usage: wp.reload
@@ -184,7 +184,7 @@ Usage: wp.pos [player]
 ```
 
 ```
-> wp.pos Human
+> wp.pos HumanGenome
 HumanGenome: X=14520.3 Y=-8340.1 Z=150.0
 ```
 
@@ -204,21 +204,16 @@ CaptainMorgan: 100/100 HP
 
 ### wp.stamina
 
-Read stamina, hunger, and thirst component values for one or all players. Accepts `[player]` argument.
+Read stamina for one or all players, plus hunger and thirst where the game build exposes them. Accepts `[player]` argument.
 
 ```
 Usage: wp.stamina [player]
 ```
 
 ```
-> wp.stamina Human
+> wp.stamina HumanGenome
 HumanGenome:
-  StaminaComponent.CurrentStamina = 72
-  StaminaComponent.MaxStamina = 100
-  HungerComponent.CurrentHunger = 55
-  HungerComponent.MaxHunger = 100
-  ThirstComponent.CurrentThirst = 80
-  ThirstComponent.MaxThirst = 100
+  Stamina: 72/100
 ```
 
 ### wp.playerinfo
