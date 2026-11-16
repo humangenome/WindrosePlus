@@ -232,6 +232,16 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-Installer.ps1
 
+      - name: Character repair tool runner (Windows PowerShell 5.1)
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: ./scripts/Test-RepairTool.ps1
+
+      - name: Character repair tool runner (PowerShell 7)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./scripts/Test-RepairTool.ps1
+
   page-smoke:
     name: Page smoke test (five widths, twice)
     runs-on: windows-latest
