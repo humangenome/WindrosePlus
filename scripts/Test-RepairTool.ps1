@@ -12,12 +12,11 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $ServerScript) { $ServerScript = Join-Path $root 'server\windrose_plus_server.ps1' }
 
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($ServerScript, [ref]$null, [ref]$null)
-$wanted = @('Invoke-RepairTool', 'ConvertTo-RepairToolArgument')
-$functions = @($ast.FindAll({
-    $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $args[0].Name
-}, $true))
-if (-not ($functions | Where-Object { $_.Name -eq 'Invoke-RepairTool' })) { Write-Host 'FAIL Invoke-RepairTool not found in the server script'; exit 1 }
-foreach ($fn in $functions) { . ([scriptblock]::Create($fn.Extent.Text)) }
+$fn = $ast.FindAll({
+    $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $args[0].Name -eq 'Invoke-RepairTool'
+}, $true) | Select-Object -First 1
+if (-not $fn) { Write-Host 'FAIL Invoke-RepairTool not found in the server script'; exit 1 }
+. ([scriptblock]::Create($fn.Extent.Text))
 
 $failed = 0
 function Case([string]$Name, [scriptblock]$Body) {
