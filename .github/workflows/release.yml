@@ -215,13 +215,11 @@ jobs:
           {
             cat "$NOTES_FILE"
             echo
-            echo "## Install / Upgrade"
+            echo "## Install or update"
             echo
-            echo "Download \`WindrosePlus.zip\`, extract into your Windrose Dedicated Server folder, run \`install.ps1\`. Reinstalling keeps your configs and custom mods; it rewrites \`ue4ss\\UE4SS-settings.ini\` with the settings Windrose needs. Check the download against \`SHA256SUMS.txt\`. See [the installation guide](https://github.com/HumanGenome/WindrosePlus#installation) for details."
+            echo "Download \`WindrosePlus.zip\`, extract it into your Windrose Dedicated Server folder and run \`install.ps1\`. Reinstalling keeps your configs and mods, and rewrites \`ue4ss\\UE4SS-settings.ini\` with the settings Windrose needs. Check the download against \`SHA256SUMS.txt\`. Full steps: [Install](https://github.com/HumanGenome/WindrosePlus#installation)."
             echo
-            echo "## Rent a server"
-            echo
-            echo "[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=release_notes&utm_campaign=windrose_plus). Survival Servers game servers come with Windrose+ already installed."
+            echo "Hosting: [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=release_notes&utm_campaign=windrose_plus) runs Windrose+ for you."
           } > release_notes.md
 
       - name: Stage release tree

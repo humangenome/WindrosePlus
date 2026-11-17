@@ -16,9 +16,7 @@
 
 The Windrose dedicated server has difficulty settings, but no XP or loot rates, no admin console and no map. Windrose+ is a Windrose dedicated server mod that adds them: XP and loot multipliers, 2,400+ server settings, a live map, a console in your browser and Lua mods. It runs on the server only, so your players join with the normal game.
 
-_Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose._
-
-## Table of Contents
+## Table of contents
 
 - [Features](#features)
 - [Install](#install)
@@ -45,7 +43,7 @@ Browse every item in the game by group, type, rarity and tier. An item's page sh
 
 ### Server console
 
-Run commands from your browser with autocomplete: see who's online, read server stats and performance, teleport players. 32 built-in commands, plus 12 debug commands listed by `wp.help all`. Two of the debug commands, `wp.peek` and `wp.probe_player`, can read players' account IDs, so the browser refuses them; tools on the server can still run them.
+Run commands from your browser with autocomplete: see who's online, read server stats and performance, teleport players. 32 built-in commands, plus 12 debug commands listed by `wp.help all`. Two of the debug commands, `wp.peek` and `wp.probe_player`, can read players' account IDs, so the browser refuses them. Tools on the server can still run them.
 
 ![Console](docs/screenshots/console.png)
 
@@ -53,8 +51,8 @@ Run commands from your browser with autocomplete: see who's online, read server 
 
 - **XP and loot multipliers:** XP, loot, crafting cost, cooking speed and harvest yield, in one file ([Settings](#settings)).
 - **2,400+ server settings:** player stats, weapons, food, gear, creatures, co-op scaling, swimming and rest bonuses ([full list](docs/config-reference.md)).
-- **Player count for bots and monitoring tools:** Windrose dedicated servers don't answer standard server queries. Windrose+ writes the player list and server status to a file every 5 seconds (every 30 with nobody online) and serves it at `/api/status` ([example](docs/commands.md#get-apistatus)). It does not make the server answer server-browser queries.
-- **Character repair:** a character stuck on the known progression bug can be fixed from the dashboard. Upload a zip of the local save folder and download a repaired copy.
+- **Player count for bots and monitoring tools:** the player list and server status at `/api/status`, updated every 5 seconds (every 30 with nobody online) ([example](docs/commands.md#get-apistatus)). Windrose servers still don't show up in server browsers.
+- **Character repair:** fix a character that crashes the server on join because of Windrose's progression bug. Upload a zip of the save folder and download the repaired copy.
 - **Lua mods:** add commands, scheduled tasks and player join and leave hooks ([scripting guide](docs/scripting-guide.md)).
 - **Activity log:** joins, leaves, console commands and config changes, one line of JSON per event ([format](docs/scripting-guide.md#activity-log)).
 
@@ -63,13 +61,13 @@ Run commands from your browser with autocomplete: see who's online, read server 
 
 ### Rent a server
 
-[Rent a Windrose server](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus). Survival Servers game servers come with Windrose+ already installed.
+[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/windrose/?utm_source=github&utm_medium=readme&utm_campaign=windrose_plus) runs Windrose servers with Windrose+ installed.
 
 ### Install on your server
 
 You need a Windrose Dedicated Server on Windows.
 
-1. Download `WindrosePlus.zip` from the latest [GitHub Release](https://github.com/HumanGenome/WindrosePlus/releases/latest). Do not use GitHub's "Source code" zip: `tools/bin/repak.exe` and `tools/bin/retoc.exe` are in the release zip only.
+1. Download `WindrosePlus.zip` from the latest [GitHub release](https://github.com/HumanGenome/WindrosePlus/releases/latest). Don't use GitHub's "Source code" zip: the tools in `tools/bin` come only in the release zip.
 2. Extract the zip into your Windrose Dedicated Server folder (e.g. `C:\WindroseServer\`).
 3. Open PowerShell in that folder and run:
 
@@ -77,15 +75,15 @@ You need a Windrose Dedicated Server on Windows.
 .\install.ps1
 ```
 
-If PowerShell refuses to run it (scripts are blocked by default on Windows, and a zip downloaded with a browser is marked as from the internet), run `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` instead.
+If PowerShell won't run it, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` instead. Windows blocks scripts by default, and it marks a zip downloaded in a browser as from the internet.
 
-This downloads UE4SS (the exact build Windrose+ is tested with, checked against its SHA-256), installs the mod and sets up the dashboard. Reinstalling keeps your configs and mods. It does rewrite `ue4ss\UE4SS-settings.ini` with the settings Windrose needs, so copy that file first if you changed it. If the server already has a different UE4SS build, the installer swaps in the tested loader files and keeps your mods and settings; run `.\install.ps1 -KeepCurrentUE4SS` to leave yours in place.
+This downloads UE4SS (the exact build Windrose+ is tested with, checked against its SHA-256), installs the mod and sets up the dashboard. Reinstalling keeps your configs and mods. It does rewrite `ue4ss\UE4SS-settings.ini` with the settings Windrose needs, so copy that file first if you changed it. If the server already has a different UE4SS build, the installer swaps in the tested loader files and keeps your mods and settings. To keep your own build, run `.\install.ps1 -KeepCurrentUE4SS`.
 
 ### Start the server
 
-Run `StartWindrosePlusServer.bat` (installed in your server folder). It rebuilds the game override PAK if your settings changed, then starts `WindroseServer.exe`.
+Run `StartWindrosePlusServer.bat` (installed in your server folder). It applies any settings you changed, then starts `WindroseServer.exe`.
 
-If you have your own launcher, add this line before whatever starts `WindroseServer.exe`. A non-zero exit means the build failed, so don't start the game:
+If you start the server another way, run this line first. A non-zero exit code means your settings didn't build, so don't start the game:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<gameDir>\windrose_plus\tools\WindrosePlus-BuildPak.ps1" -ServerDir "<gameDir>" -RemoveStalePak
@@ -95,7 +93,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<gameDir>\windrose_plus\too
 
 ### Open the dashboard
 
-The server's first start creates `windrose_plus.json` with the password `changeme`, which the dashboard refuses. Set a real `rcon.password` in that file and restart the server: the console only starts with a real password.
+The server's first start creates `windrose_plus.json` with the password `changeme`. The console won't start until you set your own `rcon.password` in that file and restart the server.
 
 Then open a second terminal in your server folder and run:
 
@@ -105,7 +103,7 @@ windrose_plus\start_dashboard.bat
 
 The console shows the dashboard's address. It asks for the RCON password from every browser, including one on the server itself. Scripts and other tools send the same password in an `X-RCON-Password` header ([HTTP API](docs/commands.md#http-api-endpoints)).
 
-The dashboard needs Administrator rights (or a URL reservation) to listen on every network address; without them it listens on localhost only. To bind it to one address on a multi-IP host, run `windrose_plus\start_dashboard.bat -BindIp 192.0.2.10` or set `"server": { "bind_ip": "192.0.2.10" }` in `windrose_plus.json`. If a reverse proxy on the same machine does its own login, set `"server": { "trust_loopback": true }` to let it through.
+Without Administrator rights or a URL reservation, the dashboard opens only on the server itself (localhost). To use one address on a server with several, run `windrose_plus\start_dashboard.bat -BindIp 192.0.2.10` or set `"server": { "bind_ip": "192.0.2.10" }` in `windrose_plus.json`. If a reverse proxy on the same machine does its own login, set `"server": { "trust_loopback": true }` to let it through.
 
 ### Hosting panels and Docker
 
@@ -161,7 +159,7 @@ Show the Sea Chart to friends without the console password:
 }
 ```
 
-Then share `/public-map` or `/public-map?token=optional-share-token`. This shows only the map view, its data, its tiles and the item list; the console and config still need the dashboard login. Players on the server and their live positions are on it.
+Then share `/public-map` or `/public-map?token=optional-share-token`. The public map shows the map and the item list, with players on the server and their live positions. The console and settings still need the dashboard login.
 
 ## Commands
 
@@ -174,7 +172,7 @@ Type `wp.help` in the console to see every command. Common ones:
 | `wp.config` | Current settings |
 | `wp.creatures` | What's spawned on the map |
 | `wp.memory` | Server memory usage |
-| `wp.doctor` | Support snapshot and config warnings |
+| `wp.doctor` | A summary for bug reports, plus settings warnings |
 
 Full reference: [docs/commands.md](docs/commands.md)
 
@@ -185,17 +183,17 @@ Bugs go to [GitHub Issues](https://github.com/HumanGenome/WindrosePlus/issues). 
 <details>
 <summary><strong>Troubleshooting</strong></summary>
 
-- **Server crashes on startup** - Check `UE4SS-settings.ini`. The Windrose-safe defaults keep `HookProcessInternal = 1`, `HookEngineTick = 0`, `HookUObjectProcessEvent = 0` and `DefaultExecuteInGameThreadMethod = EngineTick`.
-- **Server crashes a few seconds after start now and then** - UE4SS's sample mods (CheatManagerEnablerMod, ConsoleCommandsMod, ConsoleEnablerMod, BPML_GenericFunctions, BPModLoaderMod, Keybinds) cause it on Windrose. The installer switches them off; on an older install set each of those lines to 0 in `R5\Binaries\Win64\ue4ss\Mods\mods.txt` and restart.
-- **RCON not working** - Set a real password in `windrose_plus.json` (not blank, not `changeme`) and restart the server.
-- **Dashboard commands time out except `wp.help`** - Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
-- **No map data** - Windrose loads the world when the first player joins, so the terrain export runs then. The dashboard must be running to draw the tiles. If the Sea Chart still says "not ready", check `windrose_plus_data\map_generation_status.json`; it records whether tile generation is running, complete, or failed. The item list can load before terrain is ready, but "show on map" links need the markers that appear after the first player joins.
-- **Sea Chart shows islands from another world** - Run `wp.mapexport` while a player is online; it exports the current world and rebuilds the tiles.
-- **Items panel says the catalog is not built** - The dashboard builds it from the game files when it starts; the log is `windrose_plus_data\catalog\build.log`. It needs `tools\bin\repak.exe` (and `retoc.exe` for stat values), which antivirus sometimes quarantines. Rebuild by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
-- **Antivirus flags the download** - Versions up to v1.3.25 carried an unused helper script that antivirus tools flag. v1.3.26 removed it; download the latest release.
-- **INI changes build but do not show in game** - The game reads these overrides only when the process starts, and they cannot be replaced while the server is running. Fully stop every `WindroseServer-Win64-Shipping.exe` process, start the server through `StartWindrosePlusServer.bat`, and confirm the builder prints `CurveTables PAK` plus `Patched ... values (verified)`. The last verified set is in `windrose_plus_data\.windroseplus_curvetables_manifest.json` and `/api/pak-status`.
-- **The settings build fails with a retoc error** - Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full error is shown.
-- **A multiplier PAK or a save causes trouble** - The disable switch, recovery steps and save-backup advice are in [docs/config-reference.md](docs/config-reference.md#multipliers).
+- **Server crashes on startup.** Check `UE4SS-settings.ini`. The Windrose-safe defaults keep `HookProcessInternal = 1`, `HookEngineTick = 0`, `HookUObjectProcessEvent = 0` and `DefaultExecuteInGameThreadMethod = EngineTick`.
+- **Server sometimes crashes a few seconds after start.** UE4SS's sample mods (CheatManagerEnablerMod, ConsoleCommandsMod, ConsoleEnablerMod, BPML_GenericFunctions, BPModLoaderMod, Keybinds) cause it on Windrose. The installer switches them off. On an older install, set each of those lines to 0 in `R5\Binaries\Win64\ue4ss\Mods\mods.txt` and restart.
+- **RCON not working.** Set a real password in `windrose_plus.json` (not blank, not `changeme`) and restart the server.
+- **Dashboard commands time out except `wp.help`.** Fully stop the game process and dashboard, then start them again. If you launched with `StartWindrosePlusServer.bat`, closing the console window can leave `WindroseServer-Win64-Shipping.exe` running in the background; stop it in Task Manager before relaunching.
+- **The Sea Chart has no map.** Windrose loads the world when the first player joins, so the map is made then, and the dashboard must be running to draw it. If it still says the map isn't ready, `windrose_plus_data\map_generation_status.json` shows whether the map is still being drawn, done, or stopped on an error. "Show on map" links in the item list work after the first player joins.
+- **Sea Chart shows islands from another world.** Run `wp.mapexport` while a player is online; it exports the current world and rebuilds the tiles.
+- **Items panel says the catalog is not built.** The dashboard builds it from the game files when it starts; the log is `windrose_plus_data\catalog\build.log`. It needs `tools\bin\repak.exe` (and `retoc.exe` for stat values), which antivirus sometimes quarantines. Rebuild by hand with `windrose_plus\tools\WindrosePlus-BuildCatalog.ps1 -GameDir <server folder> -Force`.
+- **Antivirus flags the download.** Versions up to v1.3.25 carried an unused helper script that antivirus tools flag. Download the latest release.
+- **INI changes build but don't show in game.** The game reads these overrides only when the process starts, and they cannot be replaced while the server is running. Fully stop every `WindroseServer-Win64-Shipping.exe` process, start the server through `StartWindrosePlusServer.bat`, and confirm the builder prints `CurveTables PAK` plus `Patched ... values (verified)`. The last verified set is in `windrose_plus_data\.windroseplus_curvetables_manifest.json` and `/api/pak-status`.
+- **The settings build fails with a retoc error.** Run `windrose_plus\tools\WindrosePlus-BuildPak.ps1 -ForceExtract` once so the cache is rebuilt and the full error is shown.
+- **A multiplier PAK or a save causes trouble.** The disable switch, recovery steps and save-backup advice are in [docs/config-reference.md](docs/config-reference.md#multipliers).
 
 </details>
 
@@ -207,12 +205,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 MIT. See [LICENSE](LICENSE). Parts made by others that ship in the release zip keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose. Use at your own discretion and in accordance with the [Windrose EULA](https://playwindrose.com/eula/).
+Windrose+ is a community project and is not affiliated with or endorsed by the developers of Windrose. Use it in line with the [Windrose EULA](https://playwindrose.com/eula/).
 
 ## Credits
 
-- [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) - Unreal Engine scripting and modding framework
-- [repak](https://github.com/trumank/repak) and [retoc](https://github.com/trumank/retoc) - build the game override files
-- [Leaflet](https://leafletjs.com/) - the map
-- [rxi/json.lua](https://github.com/rxi/json.lua) - Pure Lua JSON library (MIT)
+- [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS): Unreal Engine scripting and modding framework
+- [repak](https://github.com/trumank/repak) and [retoc](https://github.com/trumank/retoc): build the files that apply your settings
+- [Leaflet](https://leafletjs.com/): the map
+- [rxi/json.lua](https://github.com/rxi/json.lua): JSON library for Lua (MIT)
 - Item and map icons were made for Windrose+ and are MIT licensed like the rest of the repository.
