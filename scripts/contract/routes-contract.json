@@ -19,7 +19,7 @@
         "status": 200,
         "type": "html",
         "contains": [
-          "Invalid password"
+          "Wrong password. Try again."
         ],
         "no_cookie": true
       },

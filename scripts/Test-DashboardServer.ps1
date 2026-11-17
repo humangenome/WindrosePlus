@@ -156,7 +156,7 @@ try {
     }
     Case 'wrong password: no cookie' {
         $r = Invoke-Http POST "$baseA/login" 'password=nope' 'application/x-www-form-urlencoded'
-        Assert ($r.Status -eq 200 -and -not $r.SetCookie -and $r.Body -match 'Invalid password') "status $($r.Status), cookie '$($r.SetCookie)'"
+        Assert ($r.Status -eq 200 -and -not $r.SetCookie -and $r.Body -match 'Wrong password. Try again.') "status $($r.Status), cookie '$($r.SetCookie)'"
     }
 
     $loginA = Invoke-Http POST "$baseA/login" ("password=" + [uri]::EscapeDataString($password)) 'application/x-www-form-urlencoded'
@@ -375,14 +375,14 @@ try {
         try {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $r = Invoke-Http POST "$baseB/api/rcon" '{"command":"wp.ping"}' 'application/json' -Headers @{ 'X-RCON-Password' = $password }
-            Assert ($r.Status -eq 503 -and $r.Body -match 'switched off' -and $sw.Elapsed.TotalSeconds -lt 3) "status $($r.Status) after $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s: $($r.Body)"
+            Assert ($r.Status -eq 503 -and $r.Body -match 'RCON is off' -and $sw.Elapsed.TotalSeconds -lt 3) "status $($r.Status) after $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s: $($r.Body)"
         } finally {
             [System.IO.File]::WriteAllText($cfgPath, $saved)
         }
     }
-    Case 'a command nobody answers is withdrawn when the dashboard gives up' {
+    Case 'a command nobody answers is cancelled when the dashboard gives up' {
         $r = Invoke-Http POST "$baseA/api/rcon" '{"command":"wp.ping"}' 'application/json' -Headers @{ 'X-RCON-Password' = $password }
-        Assert ($r.Status -eq 504 -and $r.Body -match 'withdrawn') "status $($r.Status): $($r.Body)"
+        Assert ($r.Status -eq 504 -and $r.Body -match 'cancelled') "status $($r.Status): $($r.Body)"
         $left = @(Get-ChildItem -LiteralPath (Join-Path $dirA 'windrose_plus_data\rcon') -Filter 'cmd_*.json' -File -ErrorAction SilentlyContinue)
         Assert ($left.Count -eq 0) "$($left.Count) command file(s) left in the spool"
     }

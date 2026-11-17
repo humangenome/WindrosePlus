@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
+<title>Windrose+ Sea Chart</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
 <style>
@@ -99,8 +100,8 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 #wpitems-panel.open{display:flex}
 #wpitems-head{padding:10px 12px;border-bottom:1px solid rgba(200,170,90,.2);display:flex;align-items:center;gap:8px}
 #wpitems-title{flex:1;font-size:12px;font-weight:600;color:#c9a959}
-#wpitems-close{background:rgba(20,24,32,.92);border:1px solid rgba(200,170,90,.35);color:#c9a959;font-size:13px;cursor:pointer;padding:4px 7px;border-radius:2px}
-#wpitems-close:hover{background:rgba(40,30,12,.95);border-color:rgba(200,170,90,.6)}
+#wplayers-close,#wpitems-close{background:rgba(20,24,32,.92);border:1px solid rgba(200,170,90,.35);color:#c9a959;font-size:13px;cursor:pointer;padding:4px 7px;border-radius:2px}
+#wplayers-close:hover,#wpitems-close:hover{background:rgba(40,30,12,.95);border-color:rgba(200,170,90,.6)}
 #wpitems-search-wrap{padding:10px 12px;border-bottom:1px solid rgba(200,170,90,.15)}
 #wpitems-search{width:100%;background:rgba(20,24,32,.9);border:1px solid rgba(200,170,90,.25);color:#ede0cc;padding:6px 8px;font:11px monospace;border-radius:2px;outline:none}
 #wpitems-search:focus{border-color:rgba(200,170,90,.6)}
@@ -210,9 +211,10 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
 <div id="wplayers-panel" aria-label="Map layers">
   <div id="wplayers-head">
     <div id="wplayers-title">Layers</div>
-    <button class="wplayers-action" type="button" data-layer-action="all">All</button>
-    <button class="wplayers-action" type="button" data-layer-action="none">None</button>
-    <button class="wplayers-action" type="button" data-layer-action="default">Default</button>
+    <button class="wplayers-action" type="button" data-layer-action="all">Show all</button>
+    <button class="wplayers-action" type="button" data-layer-action="none">Hide all</button>
+    <button class="wplayers-action" type="button" data-layer-action="default">Reset</button>
+    <button id="wplayers-close" type="button" aria-label="Close">×</button>
   </div>
   <div id="wplayers-body"></div>
 </div>
@@ -234,7 +236,7 @@ body.wp-embed-tp-armed .leaflet-interactive{cursor:crosshair!important}
   <div id="wpitems-list"><div id="wpitems-loading">Click Items to load catalog…</div></div>
   <div id="wpitems-detail"></div>
 </div>
-<div id="loading"><div style="text-align:center"><div style="display:inline-block;width:24px;height:24px;border:3px solid rgba(200,170,90,0.3);border-top-color:#c9a959;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px"></div><div>Loading map data...</div><div id="loading-sub" style="font-size:11px;color:#8f775d;margin-top:6px"></div></div></div>
+<div id="loading"><div style="text-align:center"><div style="display:inline-block;width:24px;height:24px;border:3px solid rgba(200,170,90,0.3);border-top-color:#c9a959;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px"></div><div>Loading the map...</div><div id="loading-sub" style="font-size:11px;color:#8f775d;margin-top:6px"></div></div></div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script>
@@ -282,10 +284,12 @@ var STATIC_CATALOG='/catalog/v1';
             if (layerClickReady) saveLayerPrefs();
         });
     }
+    var layerCloseBtn = document.getElementById('wplayers-close');
+    if (layerCloseBtn) layerCloseBtn.addEventListener('click', function() { window.WindrosePanels.closeLayers(); });
 
     // Fetch map manifest from dashboard proxy (async so loading spinner works)
     var loadSub = document.getElementById('loading-sub');
-    loadSub.textContent = 'First load may take up to 2 minutes while map generates...';
+    loadSub.textContent = 'The first load can take up to 2 minutes while the map is made...';
 
     var manifest;
     var mapInfoUrl = isPublicMap ? '/api/public/mapinfo' : '/api/mapinfo';
@@ -298,18 +302,18 @@ var STATIC_CATALOG='/catalog/v1';
                 if (body && body.generation && body.generation.state === 'error') { manifest = body; break; }
             }
         } catch (e) {}
-        loadSub.textContent = 'Waiting for map data… attempt ' + manifestAttempts + '/60';
+        loadSub.textContent = 'Waiting for the map… try ' + manifestAttempts + ' of 60';
         await new Promise(function(resolve) { setTimeout(resolve, 3000); });
     }
 
     if (!manifest || manifest.error) {
-        var msg = (manifest && manifest.error) ? manifest.error : 'No map data available.';
+        var msg = (manifest && manifest.error) ? manifest.error : 'The map isn\'t ready yet.';
         if (manifest && manifest.generation) {
-            if (manifest.generation.state === 'running') msg += ' Tile generation is currently running.';
-            else if (manifest.generation.state === 'error') msg += ' Tile generation failed: ' + (manifest.generation.error || 'unknown error');
-            else if (manifest.generation.state === 'complete') msg += ' Tile generation completed, but the map manifest is still missing.';
+            if (manifest.generation.state === 'running') msg += ' The map is being made now.';
+            else if (manifest.generation.state === 'error') msg += ' Couldn\'t make the map: ' + (manifest.generation.error || 'unknown error');
+            else if (manifest.generation.state === 'complete') msg += ' The map tiles are made, but map_coords.json is missing.';
         }
-        loadEl.innerHTML = '<span style="color:#c9a959">' + escHtml(msg) + '</span><br><span style="font-size:11px;color:#8f775d">Join the server once to generate terrain data.</span>';
+        loadEl.innerHTML = '<span style="color:#c9a959">' + escHtml(msg) + '</span><br><span style="font-size:11px;color:#8f775d">Join the server once to make the map.</span>';
         return;
     }
 
@@ -424,8 +428,8 @@ var STATIC_CATALOG='/catalog/v1';
     // toggle + lets us show fresh counts after each fpoi() refresh.
     var POI_KINDS = ['overlap','audio','marker_scenario','marker_quest','marker_simple','unknown'];
     var POI_LABEL = {
-        overlap:         'Overlap volumes',
-        audio:           'Audio volumes',
+        overlap:         'Trigger areas',
+        audio:           'Sound areas',
         marker_scenario: 'Scenario POIs',
         marker_quest:    'Quest markers',
         marker_simple:   'Simple markers',
@@ -513,7 +517,7 @@ var STATIC_CATALOG='/catalog/v1';
             popupAnchor: [0, -size / 2]
         });
     }
-    var SOURCE_LABELS = { 'live-mob': 'Live mob', 'live-resource': 'Resource node', poiscan: 'POIScan marker' };
+    var SOURCE_LABELS = { 'live-mob': 'Creature', 'live-resource': 'Resource node', poiscan: 'Point of interest' };
     function sourceLabel(kind) {
         return SOURCE_LABELS[kind] || 'Map marker';
     }
@@ -708,8 +712,8 @@ var STATIC_CATALOG='/catalog/v1';
                 opacity: 1
             });
             var html = '<b>' + escHtml(label || 'Item source') + '</b><br>' + escHtml(title);
-            if (src.poiId) html += '<br>poi: ' + escHtml(src.poiId);
-            html += '<br>pos: ' + Math.round(src.x) + ', ' + Math.round(src.y);
+            if (src.poiId) html += '<br>POI ID: ' + escHtml(src.poiId);
+            html += '<br>Position: ' + Math.round(src.x) + ', ' + Math.round(src.y);
             m.bindTooltip(escHtml(title), { direction: 'top', offset: [0, -6], opacity: 0.95 });
             m.bindPopup(html, { maxWidth: 360 });
             m.addTo(itemSourceLayer);
@@ -833,11 +837,11 @@ var STATIC_CATALOG='/catalog/v1';
                 if (Array.isArray(d.mobs)) d.mobs.forEach(function(m) {
                     if (typeof m.x !== 'number' || typeof m.y !== 'number') return;
                     if (Math.abs(m.x) < 100 && Math.abs(m.y) < 100) return;
-                    var name = m.name || 'Mob';
+                    var name = m.name || 'Creature';
                     var marker = L.marker(wLL(m.x, m.y), { icon: liveIcon('mob'), keyboard: false });
-                    var html = '<b>' + escHtml(name) + '</b><br>type: live mob';
-                    if (typeof m.z === 'number') html += '<br>z: ' + Math.round(m.z);
-                    html += '<br>pos: ' + Math.round(m.x) + ', ' + Math.round(m.y);
+                    var html = '<b>' + escHtml(name) + '</b><br>Creature';
+                    if (typeof m.z === 'number') html += '<br>Height: ' + Math.round(m.z);
+                    html += '<br>Position: ' + Math.round(m.x) + ', ' + Math.round(m.y);
                     marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 320 });
                     marker.addTo(liveMobLayer);
@@ -850,9 +854,9 @@ var STATIC_CATALOG='/catalog/v1';
                     if (Math.abs(n.x) < 100 && Math.abs(n.y) < 100) return;
                     var name = n.name || 'Resource node';
                     var marker = L.marker(wLL(n.x, n.y), { icon: liveIcon('node'), keyboard: false });
-                    var html = '<b>' + escHtml(name) + '</b><br>type: live resource node';
-                    if (typeof n.z === 'number') html += '<br>z: ' + Math.round(n.z);
-                    html += '<br>pos: ' + Math.round(n.x) + ', ' + Math.round(n.y);
+                    var html = '<b>' + escHtml(name) + '</b><br>Resource node';
+                    if (typeof n.z === 'number') html += '<br>Height: ' + Math.round(n.z);
+                    html += '<br>Position: ' + Math.round(n.x) + ', ' + Math.round(n.y);
                     marker.bindTooltip(escHtml(name), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 320 });
                     marker.addTo(liveNodeLayer);
@@ -927,11 +931,11 @@ var STATIC_CATALOG='/catalog/v1';
                     });
                     var cls = shortClass(p.class || '');
                     var label = cls || POI_LABEL[kind] || 'POI';
-                    var html = '<b>' + escHtml(label) + '</b><br>kind: ' + escHtml(POI_LABEL[kind] || kind);
-                    if (p.islandId !== undefined && p.islandId !== null) html += '<br>island: ' + escHtml(String(p.islandId));
-                    if (p.poiSubType !== undefined && p.poiSubType !== null) html += '<br>subtype: ' + escHtml(String(p.poiSubType));
-                    if (p.poiId) html += '<br>poi: ' + escHtml(String(p.poiId));
-                    html += '<br>pos: ' + Math.round(p.x) + ', ' + Math.round(p.y);
+                    var html = '<b>' + escHtml(label) + '</b><br>Kind: ' + escHtml(POI_LABEL[kind] || kind);
+                    if (p.islandId !== undefined && p.islandId !== null) html += '<br>Island: ' + escHtml(String(p.islandId));
+                    if (p.poiSubType !== undefined && p.poiSubType !== null) html += '<br>Subtype: ' + escHtml(String(p.poiSubType));
+                    if (p.poiId) html += '<br>POI ID: ' + escHtml(String(p.poiId));
+                    html += '<br>Position: ' + Math.round(p.x) + ', ' + Math.round(p.y);
                     marker.bindTooltip(escHtml(label), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                     marker.bindPopup(html, { maxWidth: 420 });
                     marker.addTo(poiKindLayers[kind]);
@@ -1024,7 +1028,7 @@ var STATIC_CATALOG='/catalog/v1';
                     if (hasAnchor) {
                         var liveTime = typeof isle.live_time === 'number' ? Math.round(isle.live_time) + ' sec' : '';
                         var templateName = isle.common_island_template ? String(isle.common_island_template).split('/').pop() : '';
-                        var html = '<b>Island runtime state</b><br>island: ' + escHtml(isle.guid || '');
+                        var html = '<b>Island save details</b><br>Island: ' + escHtml(isle.guid || '');
                         if (isle.seed !== undefined && isle.seed !== null) html += '<br>seed: ' + escHtml(String(isle.seed));
                         if (isle.world_generator_version) html += '<br>world version: ' + escHtml(isle.world_generator_version);
                         if (liveTime) html += '<br>live time: ' + escHtml(liveTime);
@@ -1043,7 +1047,7 @@ var STATIC_CATALOG='/catalog/v1';
                             fillOpacity: 0.65,
                             weight: 1.3,
                             opacity: 0.9
-                        }).bindTooltip('Island runtime state', {
+                        }).bindTooltip('Island save details', {
                             direction: 'top',
                             offset: [0, -5],
                             opacity: 0.95
@@ -1064,13 +1068,13 @@ var STATIC_CATALOG='/catalog/v1';
                         var tag = c.actor_tag || 'Chest';
                         var owner = c.owner_name || '';
                         var html = '<b>' + escHtml(tag) + '</b>';
-                        if (owner) html += '<br>owner: ' + escHtml(owner);
-                        if (c.collect_counter_tag) html += '<br>counter: ' + escHtml(c.collect_counter_tag);
+                        if (owner) html += '<br>Owner: ' + escHtml(owner);
+                        if (c.collect_counter_tag) html += '<br>Counter: ' + escHtml(c.collect_counter_tag);
                         if (c.rewards_chest_state && c.rewards_chest_state.bSharedRewardLocked !== undefined) {
-                            html += '<br>shared locked: ' + (c.rewards_chest_state.bSharedRewardLocked ? 'yes' : 'no');
+                            html += '<br>Shared locked: ' + (c.rewards_chest_state.bSharedRewardLocked ? 'yes' : 'no');
                         }
-                        if (c.optional_personal_loot) html += '<br>loot: ' + escHtml(String(c.optional_personal_loot).split('/').pop());
-                        html += '<br>pos: ' + Math.round(loc.X) + ', ' + Math.round(loc.Y);
+                        if (c.optional_personal_loot) html += '<br>Loot: ' + escHtml(String(c.optional_personal_loot).split('/').pop());
+                        html += '<br>Position: ' + Math.round(loc.X) + ', ' + Math.round(loc.Y);
                         m.bindTooltip(escHtml(tag), { direction: 'top', offset: [0, -4], opacity: 0.95 });
                         m.bindPopup(html);
                         m.addTo(chestLayer);
@@ -1097,7 +1101,7 @@ var STATIC_CATALOG='/catalog/v1';
                         } else {
                             html += '<br>geometry: awaiting non-empty block payload';
                         }
-                        m.bindTooltip('Building save row', { direction: 'top', offset: [0, -4], opacity: 0.95 });
+                        m.bindTooltip('Building', { direction: 'top', offset: [0, -4], opacity: 0.95 });
                         m.bindPopup(html);
                         m.addTo(buildingLayer);
                         overlayCounts.buildings++;
@@ -1158,7 +1162,7 @@ var STATIC_CATALOG='/catalog/v1';
                         var x1 = x0 + fogCell;
                         var y1 = y0 + fogCell;
                         if (x1 < W.minX || x0 > W.maxX || y1 < W.minY || y0 > W.maxY) return;
-                        var tip = 'Fog chunk ' + c.chunk_idx + ' (' + col + ', ' + row + ')';
+                        var tip = 'Explored area ' + c.chunk_idx + ' (' + col + ', ' + row + ')';
                         L.rectangle(wBounds(x0, y0, x1, y1), {
                             color: fogColor,
                             weight: 1,
@@ -1182,11 +1186,11 @@ var STATIC_CATALOG='/catalog/v1';
                         var label = savedPlayerDisplayName(p, last);
                         var idLabel = p.player_id ? String(p.player_id) : '';
                         var icon = liveIcon('player');
-                        var html = '<b>Saved player position</b><br>player: ' + escHtml(label) + copyMiniButton(label);
-                        if (idLabel && idLabel !== label) html += '<br>player id: ' + escHtml(idLabel) + copyMiniButton(idLabel);
-                        html += '<br>pos: ' + Math.round(last.X) + ', ' + Math.round(last.Y);
-                        html += '<br>fog chunks: ' + (p.map_fog_chunks || []).length;
-                        html += '<br>quest flags: ' + (p.blackboard || []).length;
+                        var html = '<b>Saved player position</b><br>Player: ' + escHtml(label) + copyMiniButton(label);
+                        if (idLabel && idLabel !== label) html += '<br>Player ID: ' + escHtml(idLabel) + copyMiniButton(idLabel);
+                        html += '<br>Position: ' + Math.round(last.X) + ', ' + Math.round(last.Y);
+                        html += '<br>Explored areas: ' + (p.map_fog_chunks || []).length;
+                        html += '<br>Quest flags: ' + (p.blackboard || []).length;
                         if ((p.blackboard || []).length) {
                             html += '<hr style="border-color:rgba(200,170,90,.25);margin:6px 0">';
                             (p.blackboard || []).slice(0, 12).forEach(function(b) {
@@ -1206,7 +1210,7 @@ var STATIC_CATALOG='/catalog/v1';
                                 fillOpacity: 0.15,
                                 weight: 1,
                                 opacity: 0.75
-                            }).bindTooltip('Quest blackboard: ' + (p.blackboard || []).length + ' flags', {
+                            }).bindTooltip('Quest flags: ' + (p.blackboard || []).length, {
                                 direction: 'top',
                                 offset: [0, -10],
                                 opacity: 0.95
@@ -1262,7 +1266,7 @@ var STATIC_CATALOG='/catalog/v1';
             window.WindrosePanels.closeSearch();
         }
         layerPanel.classList.toggle('open', !!open);
-        layerBtn.textContent = open ? 'Close' : 'Layers';
+        layerBtn.textContent = 'Layers';
         layerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     layerClickReady = true;
@@ -1330,7 +1334,7 @@ var STATIC_CATALOG='/catalog/v1';
         return String(section || 'Layers').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     }
     function sectionDefaultOpen(section) {
-        return section === 'Essentials' || section === 'Live save';
+        return section === 'Essentials' || section === 'World save';
     }
     function ensureLayerState(key) {
         if (layerState[key] === undefined) layerState[key] = layerDefaultOn(key);
@@ -1417,43 +1421,43 @@ var STATIC_CATALOG='/catalog/v1';
     function rebuildLayerControl() {
         layerEntries = [];
         addLayerEntry('Essentials', 'base:players', 'Players', pL, pL.getLayers().length);
-        if (liveMobCount > 0) addLayerEntry('Live entities', 'base:mobs', 'Mobs', liveMobLayer, liveMobCount);
-        if (liveNodeCount > 0) addLayerEntry('Live entities', 'base:resource_nodes', 'Resource nodes', liveNodeLayer, liveNodeCount);
+        if (liveMobCount > 0) addLayerEntry('Creatures and resources', 'base:mobs', 'Creatures', liveMobLayer, liveMobCount);
+        if (liveNodeCount > 0) addLayerEntry('Creatures and resources', 'base:resource_nodes', 'Resource nodes', liveNodeLayer, liveNodeCount);
 
-        if (itemSourceCount > 0) addLayerEntry('Essentials', 'item:source_hits', 'Item source hits', itemSourceLayer, itemSourceCount);
+        if (itemSourceCount > 0) addLayerEntry('Essentials', 'item:source_hits', 'Item sources', itemSourceLayer, itemSourceCount);
 
         // POIScan output (Lua side — actor scanner)
         if (poiStatus === 'loading') {
-            addLayerStatus('Scanner / debug', 'POIScan loading…');
+            addLayerStatus('Points of interest', 'Loading points of interest…');
         } else if (poiStatus === 'error') {
-            addLayerStatus('Scanner / debug', 'POIScan unavailable');
+            addLayerStatus('Points of interest', 'Points of interest couldn\'t load');
         } else if (poiStatus === 'empty') {
-            addLayerStatus('Scanner / debug', 'POIScan has no markers yet');
+            addLayerStatus('Points of interest', 'No points of interest yet');
         } else {
             POI_KINDS.forEach(function(k) {
                 var c = poiCounts[k] || 0;
                 if (c <= 0) return;
-                addLayerEntry('Scanner / debug', 'poiscan:' + k, 'POIScan: ' + POI_LABEL[k], poiKindLayers[k], c);
+                addLayerEntry('Points of interest', 'poiscan:' + k, POI_LABEL[k], poiKindLayers[k], c);
             });
         }
 
         // Runtime overlay (save-parser): chests, buildings, fog, save rows
         if (overlayStatus === 'loading') {
-            addLayerStatus('Live save', 'Save state loading…');
+            addLayerStatus('World save', 'Loading save data…');
         } else if (overlayStatus === 'unavailable') {
             // Optional file-backed overlay. Hide the group when no
             // runtime_overlay.json producer is installed.
         } else if (overlayStatus === 'empty') {
-            addLayerStatus('Live save', 'No save state layers yet');
+            addLayerStatus('World save', 'No save data yet');
         } else {
-            if (overlayCounts.islandStates > 0) addLayerEntry('Live save', 'live:island_state', 'Island runtime state', islandStateLayer, overlayCounts.islandStates);
-            if (overlayCounts.chests > 0) addLayerEntry('Live save', 'live:chests', 'Chests', chestLayer, overlayCounts.chests);
-            if (overlayCounts.buildings > 0) addLayerEntry('Live save', 'live:buildings', 'Buildings', buildingLayer, overlayCounts.buildings);
-            if (overlayCounts.savePlayers > 0) addLayerEntry('Live save', 'live:save_players', 'Saved player positions', savePlayerLayer, overlayCounts.savePlayers);
-            if (overlayCounts.questFlags > 0) addLayerEntry('Live save', 'live:quest_state', 'Quest blackboard', questStateLayer, overlayCounts.questFlags + ' flags');
-            if (overlayCounts.fog > 0) addLayerEntry('Live save', 'live:fog', 'Fog reveal', fogLayer, overlayCounts.fog + ' chunks');
-            if (overlayCounts.staticActors > 0) addLayerEntry('Scanner / debug', 'live:static_actors', 'Static actor save rows', staticActorLayer, overlayCounts.staticActors);
-            if (overlayCounts.scenarioSaves > 0) addLayerEntry('Scanner / debug', 'live:scenario_saves', 'Scenario save rows', scenarioSaveLayer, overlayCounts.scenarioSaves);
+            if (overlayCounts.islandStates > 0) addLayerEntry('World save', 'live:island_state', 'Island save details', islandStateLayer, overlayCounts.islandStates);
+            if (overlayCounts.chests > 0) addLayerEntry('World save', 'live:chests', 'Chests', chestLayer, overlayCounts.chests);
+            if (overlayCounts.buildings > 0) addLayerEntry('World save', 'live:buildings', 'Buildings', buildingLayer, overlayCounts.buildings);
+            if (overlayCounts.savePlayers > 0) addLayerEntry('World save', 'live:save_players', 'Saved player positions', savePlayerLayer, overlayCounts.savePlayers);
+            if (overlayCounts.questFlags > 0) addLayerEntry('World save', 'live:quest_state', 'Quest flags', questStateLayer, overlayCounts.questFlags + ' flags');
+            if (overlayCounts.fog > 0) addLayerEntry('World save', 'live:fog', 'Explored areas', fogLayer, overlayCounts.fog + ' areas');
+            if (overlayCounts.staticActors > 0) addLayerEntry('Points of interest', 'live:static_actors', 'Static actor save rows', staticActorLayer, overlayCounts.staticActors);
+            if (overlayCounts.scenarioSaves > 0) addLayerEntry('Points of interest', 'live:scenario_saves', 'Scenario save rows', scenarioSaveLayer, overlayCounts.scenarioSaves);
         }
         syncLayerVisibility();
         renderLayerPanel();
@@ -1670,7 +1674,7 @@ var STATIC_CATALOG='/catalog/v1';
             window.WindrosePanels.closeSearch();
         }
         panel.classList.toggle('open', !!open);
-        btn.textContent = open ? 'Close' : 'Items';
+        btn.textContent = 'Items';
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (!open) detailEl.classList.remove('open');
     }
@@ -1783,7 +1787,7 @@ var STATIC_CATALOG='/catalog/v1';
                 + '<div class="wpitem-body">'
                 +   '<div class="wpitem-name">' + escHtml(itemName(it)) + '</div>'
                 +   '<div class="wpitem-meta">'
-                +     '<span class="wpitem-rarity-' + escAttr(rarity) + '">' + escHtml(rarity || '—') + '</span>'
+                +     '<span class="wpitem-rarity-' + escAttr(rarity) + '">' + escHtml(rarity || '-') + '</span>'
                 +     (tier ? ' · T' + escHtml(tier) : '')
                 +     ' · ' + escHtml(itemType(it))
                 +     ' · stack ' + itemStack(it)
@@ -2019,7 +2023,7 @@ var STATIC_CATALOG='/catalog/v1';
         return '<div class="wpitem-flow">'
             + requirementItemsHtml(inputs, 'No inputs')
             + '<span class="wpitem-flow-arrow">makes</span>'
-            + requirementItemsHtml(outputs, 'Output')
+            + requirementItemsHtml(outputs, 'No output')
             + '</div>';
     }
     function stationText(list) {
@@ -2050,10 +2054,10 @@ var STATIC_CATALOG='/catalog/v1';
                 + usageFlowHtml(row.inputs, row.outputs)
                 + '</div>';
         });
-        html += usageSection('Vendor trades', usage.vendorTrades, function(row) {
+        html += usageSection('Trader offers', usage.vendorTrades, function(row) {
             var verb = row.direction === 'sell' ? 'Sell' : 'Buy';
             return '<div class="wpitem-usage">'
-                + '<div class="wpitem-usage-title">' + escHtml(row.vendor && row.vendor.name ? row.vendor.name : 'Vendor') + '</div>'
+                + '<div class="wpitem-usage-title">' + escHtml(row.vendor && row.vendor.name ? row.vendor.name : 'Trader') + '</div>'
                 + '<div class="wpitem-usage-meta">' + escHtml(verb + ' x' + (row.itemQuantity || 1)) + '</div>'
                 + usageFlowHtml(row.costs, row.rewards)
                 + '</div>';
@@ -2064,7 +2068,7 @@ var STATIC_CATALOG='/catalog/v1';
                 + '<div class="wpitem-usage-meta">' + escHtml((row.category || 'Building') + ' · requires x' + (row.quantity || 1)) + '</div>'
                 + '</div>';
         });
-        html += usageSection('Crafts', usage.crafts, function(row) {
+        html += usageSection('Used in', usage.crafts, function(row) {
             return '<div class="wpitem-usage">'
                 + '<div class="wpitem-usage-title">' + escHtml(row.name || row.sourceRecipeId || 'Recipe') + (row.sourceRecipeId ? copyButton(row.sourceRecipeId) : '') + '</div>'
                 + '<div class="wpitem-usage-meta">' + escHtml(stationText(row.stations)) + '</div>'
@@ -2082,7 +2086,7 @@ var STATIC_CATALOG='/catalog/v1';
         var drops = it.drops || [];
         lastSourceHits = [];
         var iconUrl_ = iconUrl(it);
-        var html = '<button type="button" id="wpitems-back" class="wpitems-back">← back</button>';
+        var html = '<button type="button" id="wpitems-back" class="wpitems-back">← Back</button>';
         html += '<div class="wpitems-hero">'
             + '<div class="wpitems-hero-icon" style="' + (iconUrl_ ? 'background-image:url(' + escAttr(iconUrl_) + ')' : '') + '"></div>'
             + '<div><h3>' + escHtml(itemName(it)) + '</h3>'
@@ -2111,7 +2115,7 @@ var STATIC_CATALOG='/catalog/v1';
                 var pct = d.chance ? (Math.round(d.chance * 10000) / 100) : 0;
                 var qmin = d.minQuantity == null ? 0 : d.minQuantity;
                 var qmax = d.maxQuantity == null ? 0 : d.maxQuantity;
-                var qty = (qmin === qmax) ? String(qmin) : qmin + '-' + qmax;
+                var qty = (qmin === qmax) ? String(qmin) : qmin + ' to ' + qmax;
                 var locs = mapLocationsForDrop(d);
                 var hitIndex = -1;
                 if (locs.length) {
@@ -2128,7 +2132,7 @@ var STATIC_CATALOG='/catalog/v1';
             }
             allLocations = uniqueLocations(allLocations);
             if (allLocations.length) {
-                html = html.replace('<h4>Loot sources (' + drops.length + ')</h4>', '<h4>Loot sources (' + drops.length + ')</h4><div class="wpitem-source-actions" style="margin-bottom:6px"><button type="button" class="wpitem-source-map" id="wpitems-show-all-sources">Show ' + allLocations.length + ' mapped location' + (allLocations.length === 1 ? '' : 's') + '</button></div>');
+                html = html.replace('<h4>Loot sources (' + drops.length + ')</h4>', '<h4>Loot sources (' + drops.length + ')</h4><div class="wpitem-source-actions" style="margin-bottom:6px"><button type="button" class="wpitem-source-map" id="wpitems-show-all-sources">Show ' + allLocations.length + ' on map</button></div>');
                 lastSourceHits.unshift({ drop: null, locations: allLocations, all: true, itemName: itemName(it) });
             }
         } else {
@@ -2152,8 +2156,8 @@ var STATIC_CATALOG='/catalog/v1';
         catalogPromise = fetch(CDN + '/items_full.json?v=gamefiles-1')
             .then(function(r) {
                 if (r.status === 503) throw new Error('The item catalog is being built from the game files. Try again in a minute.');
-                if (r.status === 404) throw new Error('The item catalog has not been built yet. It is made from the game files when the dashboard starts.');
-                if (!r.ok) throw new Error('HTTP ' + r.status);
+                if (r.status === 404) throw new Error('The item catalog isn\'t built yet. The dashboard builds it from the game files when it starts.');
+                if (!r.ok) throw new Error('Couldn\'t load the item catalog. Reload the page to try again.');
                 return r.json();
             })
             .then(function(d) {
@@ -2320,7 +2324,7 @@ var STATIC_CATALOG='/catalog/v1';
         if (open && window.WindrosePanels && typeof window.WindrosePanels.closeLayers === 'function') window.WindrosePanels.closeLayers();
         if (open && window.WindrosePanels && typeof window.WindrosePanels.closeItems === 'function') window.WindrosePanels.closeItems();
         panel.classList.toggle('open', !!open);
-        btn.textContent = open ? 'Close' : 'Search';
+        btn.textContent = 'Search';
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         if (open && input) {
             setTimeout(function() { input.focus(); input.select(); }, 0);
@@ -2362,7 +2366,7 @@ var STATIC_CATALOG='/catalog/v1';
         var q = (input.value || '').trim();
         var current = ++runId;
         if (q.length < 2) {
-            results.innerHTML = '<div class="wpsearch-empty">Type at least 2 characters to search items and map markers.</div>';
+            results.innerHTML = '<div class="wpsearch-empty">Type at least 2 characters.</div>';
             return;
         }
         var api = window.WindroseSeaChart || {};
@@ -2380,7 +2384,7 @@ var STATIC_CATALOG='/catalog/v1';
             results.innerHTML = html || '<div class="wpsearch-empty">No matches.</div>';
         }).catch(function() {
             if (current !== runId) return;
-            results.innerHTML = baseHtml || '<div class="wpsearch-empty">Item catalog unavailable.</div>';
+            results.innerHTML = baseHtml || '<div class="wpsearch-empty">The item catalog couldn\'t load.</div>';
         });
     }
     if (btn) btn.addEventListener('click', function() { setOpen(!panel.classList.contains('open')); });

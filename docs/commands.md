@@ -51,18 +51,18 @@ Usage: wp.status
 Players: 3
 Loot: 2x
 XP: 3x
-Stack Size: 5x (disabled)
-Craft Efficiency: 2x
-Crop Speed: 2x (disabled)
+Stack size: 5x (disabled)
+Craft efficiency: 2x
+Crop speed: 2x (disabled)
 Weight: 5x (disabled)
-Cooking Speed: 1x
-Harvest Yield: 2x
-WindrosePlus v1.3.25
+Cooking speed: 1x
+Harvest yield: 2x
+Windrose+ v1.3.25
 ```
 
 ### wp.version
 
-Show WindrosePlus version.
+Show the Windrose+ version.
 
 ```
 Usage: wp.version
@@ -70,7 +70,7 @@ Usage: wp.version
 
 ```
 > wp.version
-WindrosePlus v1.3.16
+Windrose+ v1.3.16
 ```
 
 ### wp.config
@@ -83,15 +83,15 @@ Usage: wp.config
 
 ```
 > wp.config
-WindrosePlus Config:
+Windrose+ config:
   Loot: 2x
   XP: 3x
-  Stack Size: 5x (disabled)
-  Craft Efficiency: 2x
-  Crop Speed: 2x (disabled)
+  Stack size: 5x (disabled)
+  Craft efficiency: 2x
+  Crop speed: 2x (disabled)
   Weight: 5x (disabled)
-  Cooking Speed: 1x
-  Harvest Yield: 2x
+  Cooking speed: 1x
+  Harvest yield: 2x
   RCON: enabled
   Mods: 1
 ```
@@ -112,12 +112,12 @@ Usage: wp.multipliers
 Multipliers:
   Loot: 2x
   XP: 3x
-  Stack Size: 5x (disabled)
-  Craft Efficiency: 2x
-  Crop Speed: 2x (disabled)
+  Stack size: 5x (disabled)
+  Craft efficiency: 2x
+  Crop speed: 2x (disabled)
   Weight: 5x (disabled)
-  Cooking Speed: 1x
-  Harvest Yield: 2x
+  Cooking speed: 1x
+  Harvest yield: 2x
 ```
 
 Multipliers marked `(disabled)` are stored but not applied. See
@@ -259,14 +259,14 @@ Usage: wp.givestats <player> <stat_count> [talent_count]
 
 ```
 > wp.givestats HumanGenome 3 2
-Recorded audit note: HumanGenome +3 stat +2 talent. This does not change the character in-game.
+Recorded audit note: HumanGenome +3 stat +2 talent. This doesn't change the character in game.
 ```
 
 ### Moderation (wp.kick / wp.ban / wp.unban / wp.listbans)
 
 These four commands are handled by the `WindrosePlusNative` C++ mod, not by Lua. Windrose+ writes the request to `windrose_plus_data\wpn_command.txt` and the native mod picks it up on the game thread within about a second. The ban list lives in `windrose_plus_data\wpn_bans.txt` and is re-checked on a timer, so a banned name is removed again if it rejoins.
 
-`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Without it, `wp.kick` / `wp.ban` / `wp.unban` change nothing and answer `Kick and ban are not available on this server, so Alice was not kicked.` (or `banned` / `unbanned`), and `wp.listbans` reads an empty list. Windrose+ counts the mod as present when UE4SS would load it: `ue4ss\Mods\WindrosePlusNative\dlls\main.dll` exists and either `enabled.txt` is in that folder or `mods.txt` has `WindrosePlusNative : 1`. The examples below are the answers with the mod present. Confirm a kick took effect with `wp.players`.
+`WindrosePlusNative` is **not installed or enabled by the installer as of v1.3.16** while it is revalidated against the current Windrose dedicated-server build. Without it, `wp.kick` / `wp.ban` / `wp.unban` change nothing and answer `Kick and ban aren't available on this server, so Alice wasn't kicked.` (or `banned` / `unbanned`), and `wp.listbans` reads an empty list. Windrose+ counts the mod as present when UE4SS would load it: `ue4ss\Mods\WindrosePlusNative\dlls\main.dll` exists and either `enabled.txt` is in that folder or `mods.txt` has `WindrosePlusNative : 1`. The examples below are the answers with the mod present. Confirm a kick took effect with `wp.players`.
 
 #### wp.kick
 
@@ -373,7 +373,7 @@ Usage: wp.entities
 
 ```
 > wp.entities
-Entity Counts:
+Entity counts:
   Pawn: 152
   R5Character: 3
   R5MineralNode: 89
@@ -410,9 +410,9 @@ Usage: wp.perf
 
 ```
 > wp.perf
-Server Performance:
+Server performance:
   Players: 3
-  Memory: use wp.memory for cached data
+  Memory: see wp.memory
   Uptime: 14h 32m
 ```
 
@@ -426,9 +426,9 @@ Usage: wp.memory
 
 ```
 > wp.memory
-Memory Usage:
-  Lua Heap: 2048 KB
-  Process memory: not available (use Task Manager or perfpoll)
+Memory usage:
+  Lua memory: 2048 KB
+  Server memory: not shown here. Check Task Manager.
 ```
 
 ### wp.doctor
@@ -441,7 +441,7 @@ Usage: wp.doctor
 
 ```
 > wp.doctor
-WindrosePlus Doctor:
+Windrose+ doctor:
   Version: 1.1.12
   Mode: active
   Uptime: 0h 42m
@@ -455,7 +455,7 @@ Runtime:
   RestartMod: yes
 
 Warnings:
-  - stack_size is configured as 5x but is disabled/no-op in current PAK builds
+  - stack_size is set to 5x, but Windrose+ doesn't apply it in this version.
 ```
 
 ### wp.connections
@@ -739,7 +739,7 @@ Usage: wp.mapexport
 
 ```
 > wp.mapexport
-Terrain export requested. The HeightmapExporter mod picks it up within a few seconds, then the Sea Chart tiles are rebuilt automatically.
+Exporting the terrain now. The Sea Chart rebuilds by itself when it's done.
 ```
 
 ### wp.mapgen
@@ -812,7 +812,7 @@ Logging in (`POST /login` with a form field `password`) sets a cookie named `wp_
 | GET | `/api/pois` | Yes | POI scanner markers |
 | GET | `/livemap/tiles/{z}/{x}-{y}.png` | Yes | Sea Chart tiles. Asked for with `?v=<tileset_id>` from `map_coords.json`, they may be cached for a day |
 | GET | `/api/terrain_height?x={x}&y={y}` | Yes | Ground height at a world position, from the exported heightmap (used by click-to-teleport) |
-| GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for chests, buildings, saved player positions, fog reveal, and quest blackboard layers. |
+| GET | `/api/runtime-overlay` | Yes | Optional live save-state overlay for the chests, buildings, saved player positions, explored areas and quest flags layers. |
 | GET | `/api/config` | Yes | Current config (RCON password masked) |
 | GET | `/api/commands` | Yes | Live command catalog for console autocomplete, sourced from the Lua side via `windrose_plus_data/commands.json`. |
 | GET | `/api/pak-status` | Yes | Generated PAK status, stale-config detection, and recent CurveTable patch summary. |
@@ -869,7 +869,7 @@ Execute a command via the RCON interface. `wp.peek` and `wp.probe_player` are re
 ```json
 {
     "status": "ok",
-    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrosePlus v1.3.16"
+    "message": "Players: 3\nLoot: 2x\nXP: 3x\nWindrose+ v1.3.16"
 }
 ```
 

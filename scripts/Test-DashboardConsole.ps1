@@ -20,7 +20,7 @@ $password = 'Console-Pass-1234'
 # The made-up player's address and account IDs (console-worker.lua)
 $identity = @('203.0.113.7', '76561198000000002', '0123456789abcdef0123456789abcdef')
 $hidden = '(hidden: set debug.show_player_ids to true in windrose_plus.json to show)'
-$refusedText = 'is not available from the web dashboard'
+$refusedText = 'isn''t available in the dashboard'
 
 $failed = 0
 function Case([string]$Name, [scriptblock]$Body) {

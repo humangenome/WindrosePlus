@@ -37,7 +37,7 @@ function Clamp-WindroseInt {
 }
 
 Write-Host ""
-Write-Host "  Windrose+ Installer" -ForegroundColor Cyan
+Write-Host "  Windrose+ installer" -ForegroundColor Cyan
 Write-Host ""
 
 # Use provided path or current directory
@@ -54,7 +54,7 @@ $gameDir = (Resolve-Path -LiteralPath $gameDir).Path
 $r5Dir = Join-Path $gameDir "R5"
 if (-not (Test-Path -LiteralPath $r5Dir)) {
     Write-Host "  ERROR: This doesn't look like a Windrose server folder." -ForegroundColor Red
-    Write-Host "  Expected to find R5\ directory in: $gameDir" -ForegroundColor Red
+    Write-Host "  There's no R5 folder in $gameDir." -ForegroundColor Red
     Write-Host ""
     Write-Host "  Extract the Windrose+ zip into your Windrose Dedicated Server folder and run this again." -ForegroundColor Yellow
     exit 1
@@ -99,12 +99,12 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
     if ($ue4ssOnPin) {
         Write-Host " already installed" -ForegroundColor DarkGray
     } else {
-        Write-Host " kept (-KeepCurrentUE4SS; not the tested build)" -ForegroundColor Yellow
+        Write-Host " kept (-KeepCurrentUE4SS), not the version Windrose+ is tested with" -ForegroundColor Yellow
     }
 } else {
     Write-Host ""
     if ($ue4ssPresent) {
-        Write-Host "    The installed UE4SS is not the build Windrose+ is tested with; replacing the loader files only." -ForegroundColor Yellow
+        Write-Host "    The installed UE4SS isn't the version Windrose+ is tested with. Replacing only its loader files." -ForegroundColor Yellow
         Write-Host "    Your mods and settings are kept. Run with -KeepCurrentUE4SS to skip this." -ForegroundColor DarkGray
     }
     Write-Host "    Downloading $ue4ssPinName..." -ForegroundColor DarkGray
@@ -116,7 +116,7 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
         Invoke-WebRequest -Uri $ue4ssPinUrl -OutFile $ue4ssZipPath -UseBasicParsing
         $zipHash = (Get-FileHash -LiteralPath $ue4ssZipPath -Algorithm SHA256).Hash
         if ($zipHash -ne $ue4ssPinZipSha256) {
-            Write-Host "    ERROR: UE4SS download does not match the expected file (SHA256 $zipHash)." -ForegroundColor Red
+            Write-Host "    ERROR: The UE4SS download doesn't match the expected file (SHA256 $zipHash). Run the installer again." -ForegroundColor Red
             try { Remove-Item -LiteralPath $ue4ssZipPath -Force -ErrorAction SilentlyContinue } catch {}
             exit 1
         }
@@ -128,7 +128,7 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
         $extractedUe4ss = Join-Path $ue4ssExtractDir "ue4ss"
         $extractedDll = Join-Path $extractedUe4ss "UE4SS.dll"
         if (-not (Test-Path -LiteralPath $extractedProxy) -or -not (Test-Path -LiteralPath $extractedDll)) {
-            Write-Host "    ERROR: dwmapi.dll or UE4SS.dll not found in UE4SS download." -ForegroundColor Red
+            Write-Host "    ERROR: The UE4SS download is missing dwmapi.dll or UE4SS.dll. Run the installer again." -ForegroundColor Red
             exit 1
         }
 
@@ -148,7 +148,7 @@ if ($ue4ssPresent -and ($ue4ssOnPin -or $KeepCurrentUE4SS)) {
 
         Write-Host "    Done." -ForegroundColor Green
     } catch {
-        Write-Host "    ERROR: Failed to download UE4SS." -ForegroundColor Red
+        Write-Host "    ERROR: Couldn't download UE4SS." -ForegroundColor Red
         Write-Host "    Download $ue4ssPinName manually from: https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/experimental" -ForegroundColor Yellow
         exit 1
     }
@@ -161,7 +161,7 @@ if (Test-Path -LiteralPath $settingsSource) {
     try {
         Copy-Item -LiteralPath $settingsSource -Destination (Join-Path $ue4ssDir "UE4SS-settings.ini") -Force
     } catch {
-        Write-Host "  WARNING: could not write ue4ss\UE4SS-settings.ini: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  WARNING: couldn't write ue4ss\UE4SS-settings.ini: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "           Stop the server and run the installer again." -ForegroundColor Yellow
     }
 }
@@ -242,7 +242,7 @@ if (Test-Path -LiteralPath $modSource) {
         exit 1
     }
 } else {
-    Write-Host " ERROR: WindrosePlus folder not found" -ForegroundColor Red
+    Write-Host " ERROR: The WindrosePlus folder is missing. Extract the whole Windrose+ zip here and run this again." -ForegroundColor Red
     exit 1
 }
 
@@ -376,7 +376,7 @@ foreach ($tool in @("repak.exe", "retoc.exe")) {
 }
 if ($missingTools.Count -gt 0) {
     Write-Host ""
-    Write-Host "  WARNING: Bundled build tools missing: $($missingTools -join ', ')" -ForegroundColor Yellow
+    Write-Host "  WARNING: Missing from windrose_plus\tools\bin: $($missingTools -join ', ')" -ForegroundColor Yellow
     Write-Host "           Antivirus often quarantines retoc/repak as a false positive." -ForegroundColor Yellow
     Write-Host "           Add an exclusion for the windrose_plus folder, then re-extract WindrosePlus.zip." -ForegroundColor Yellow
 }
@@ -393,12 +393,12 @@ if "%GAMEDIR:~-1%"=="\" set "GAMEDIR=%GAMEDIR:~0,-1%"
 set "WP_BUILD=%GAMEDIR%\windrose_plus\tools\WindrosePlus-BuildPak.ps1"
 
 if not exist "%WP_BUILD%" (
-    echo [WindrosePlus] Installer not complete. Run install.ps1 first.
+    echo [Windrose+] Windrose+ isn't fully installed. Run install.ps1 first.
     if not "%WP_NOPAUSE%"=="1" pause
     exit /b 1
 )
 
-echo [WindrosePlus] Checking config overrides...
+echo [Windrose+] Checking your settings...
 where pwsh >nul 2>&1
 if %ERRORLEVEL%==0 (
     pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass ^
@@ -415,14 +415,14 @@ set "BUILD_EXIT=%ERRORLEVEL%"
 
 if not "%BUILD_EXIT%"=="0" (
     echo.
-    echo [WindrosePlus] Config build failed (exit %BUILD_EXIT%^).
-    echo Not launching server. Fix the error above and try again.
+    echo [Windrose+] Couldn't apply your settings (exit code %BUILD_EXIT%^).
+    echo The server wasn't started. Fix the error above and try again.
     if not "%WP_NOPAUSE%"=="1" pause
     exit /b %BUILD_EXIT%
 )
 
 echo.
-echo [WindrosePlus] Starting Windrose server...
+echo [Windrose+] Starting the Windrose server...
 pushd "%GAMEDIR%"
 "%GAMEDIR%\WindroseServer.exe" %*
 set "SERVER_EXIT=%ERRORLEVEL%"
@@ -433,19 +433,19 @@ endlocal & exit /b %SERVER_EXIT%
 try {
     [System.IO.File]::WriteAllText($wrapperPath, $wrapperBody, [System.Text.Encoding]::ASCII)
 } catch {
-    Write-Host "  WARNING: could not write wrapper batch: $_" -ForegroundColor Yellow
+    Write-Host "  WARNING: couldn't write StartWindrosePlusServer.bat: $_" -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "  Windrose+ installed." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Start server:" -ForegroundColor Cyan
-Write-Host "    StartWindrosePlusServer.bat   (always use this — it rebuilds the override PAK when config changes)"
+Write-Host "    StartWindrosePlusServer.bat   (always use this: it applies your settings changes)"
 Write-Host ""
 Write-Host "  Start dashboard:" -ForegroundColor Cyan
 Write-Host "    windrose_plus\start_dashboard.bat"
 Write-Host ""
 Write-Host "  Config:" -ForegroundColor Cyan
-Write-Host "    windrose_plus.json  (multipliers, RCON, admin — created on first server start)"
-Write-Host "    windrose_plus.ini   (advanced overrides — optional, copy from windrose_plus\config\windrose_plus.default.ini)"
+Write-Host "    windrose_plus.json  (multipliers, RCON and admins, made on the first server start)"
+Write-Host "    windrose_plus.ini   (optional advanced settings: copy it from windrose_plus\config\windrose_plus.default.ini)"
 Write-Host ""

@@ -198,10 +198,10 @@ function Get-CurrentPublicMapConfig {
 function Test-PublicMapAccess($request) {
     $publicMap = Get-CurrentPublicMapConfig
     if ($null -eq $publicMap) {
-        return @{ Allowed = $false; StatusCode = 503; Error = "Config temporarily unavailable, retry in a moment" }
+        return @{ Allowed = $false; StatusCode = 503; Error = "Couldn't read the server's settings. Try again in a moment." }
     }
     if (-not $publicMap.Enabled) {
-        return @{ Allowed = $false; StatusCode = 404; Error = "Public map is not enabled" }
+        return @{ Allowed = $false; StatusCode = 404; Error = "The public map is off for this server." }
     }
     if (-not $publicMap.Token) {
         return @{ Allowed = $true; StatusCode = 200; Error = "" }
@@ -212,7 +212,7 @@ function Test-PublicMapAccess($request) {
     if ($provided -and (Test-SecretEqual ([string]$provided) ([string]$publicMap.Token))) {
         return @{ Allowed = $true; StatusCode = 200; Error = "" }
     }
-    return @{ Allowed = $false; StatusCode = 401; Error = "Invalid public map token" }
+    return @{ Allowed = $false; StatusCode = 401; Error = "This map link is wrong or out of date. Ask the server owner for the current one." }
 }
 
 function ConvertTo-PublicLiveMapData($data) {
@@ -537,7 +537,7 @@ function Invoke-GameWatch {
     $d = Get-GameWatchDecision -Now $now -Started $script:GameWatchStarted -LastSeen $script:GameWatchLastSeen -GameState (Get-GameState)
     $script:GameWatchLastSeen = $d.LastSeen
     if ($d.Exit) {
-        Write-Host "The game has not been running from $gameDir for 10 minutes and server.stop_with_game is on; the dashboard is stopping."
+        Write-Host "The game hasn't run from $gameDir for 10 minutes, so the dashboard is stopping (server.stop_with_game is on)."
         try { $listener.Stop() } catch {}
         exit 0
     }
@@ -670,12 +670,12 @@ $loginPageHtml = @"
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WindrosePlus - Login</title>
+<title>Windrose+ login</title>
 <style>
 body { background: #1a1410; color: #ede0cc; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
 .login-box { background: rgba(30, 22, 16, 0.9); border: 1px solid rgba(180, 140, 80, 0.3); border-radius: 8px; padding: 40px; max-width: 400px; width: 90%; text-align: center; }
-h1 { color: #d4a04a; font-size: 24px; margin: 0 0 8px; }
-p { color: #8f775d; font-size: 14px; margin: 0 0 24px; }
+h1 { color: #d4a04a; font-size: 24px; margin: 0 0 24px; }
+label { display: block; color: #8f775d; font-size: 14px; margin: 0 0 8px; text-align: left; }
 input[type=password] { width: 100%; padding: 12px; background: rgba(15, 10, 8, 0.9); border: 1px solid rgba(180, 140, 80, 0.3); color: #ede0cc; border-radius: 4px; font-size: 16px; box-sizing: border-box; }
 input[type=password]:focus { outline: none; border-color: #d4a04a; }
 button { width: 100%; padding: 12px; background: #d4a04a; color: #1a1410; border: none; border-radius: 4px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 16px; }
@@ -685,11 +685,11 @@ button:hover { background: #e0b060; }
 </head>
 <body>
 <div class="login-box">
-<h1>WindrosePlus</h1>
-<p>Enter RCON password to access the dashboard</p>
+<h1>Windrose+</h1>
 <form method="POST" action="/login" data-form-type="other" autocomplete="off">
-<input type="password" name="password" placeholder="RCON Password" autofocus required autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other">
-<button type="submit">Enter</button>
+<label for="password">RCON password</label>
+<input type="password" id="password" name="password" autofocus required autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other">
+<button type="submit">Log in</button>
 </form>
 ERRORPLACEHOLDER
 </div>
@@ -697,9 +697,9 @@ ERRORPLACEHOLDER
 </html>
 "@
 
-Write-Host "WindrosePlus Server v$Version (PowerShell)"
-Write-Host "Game directory: $gameDir"
-Write-Host "Data directory: $dataDir"
+Write-Host "Windrose+ dashboard v$Version"
+Write-Host "Game folder: $gameDir"
+Write-Host "Data folder: $dataDir"
 Write-Host ""
 Write-Host ("Dashboard:  http://{0}:{1}/" -f $dashboardHost, $Port)
 Write-Host ("API:        http://{0}:{1}/api/status" -f $dashboardHost, $Port)
@@ -713,11 +713,11 @@ if ($listenHost -eq "+") {
         $listener.Start()
         Write-Host ("Listening on {0}:{1}" -f $displayListenHost, $Port)
     } catch {
-        Write-Host "Cannot bind to all interfaces (needs admin), trying localhost only..."
+        Write-Host "Couldn't open the dashboard to other computers (that needs admin rights). Opening it on this PC only..."
         $listener = New-Object System.Net.HttpListener
         $listener.Prefixes.Add(("http://localhost:{0}/" -f $Port))
         $listener.Start()
-        Write-Host ("Listening on localhost:{0} (localhost only)" -f $Port)
+        Write-Host ("Listening on localhost:{0} (this PC only)" -f $Port)
     }
 } else {
     try {
@@ -725,7 +725,7 @@ if ($listenHost -eq "+") {
         $listener.Start()
         Write-Host ("Listening on {0}:{1}" -f $displayListenHost, $Port)
     } catch {
-        Write-Error ("Cannot bind dashboard to {0}:{1}: {2}" -f $displayListenHost, $Port, $_.Exception.Message)
+        Write-Error ("Couldn't start the dashboard on {0}:{1}: {2}" -f $displayListenHost, $Port, $_.Exception.Message)
         exit 1
     }
 }
@@ -797,7 +797,7 @@ function Invoke-TileGenerationWatch {
         } else {
             $lastLine = @($output -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
             Write-TileGenStatus @{ state = "error"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); started_ts = $job.Started; script = $tileGenScript; error = "generateTiles.ps1 exited with code ${code}: $lastLine"; output = $output }
-            Write-Host "Tile generation failed (exit $code)."
+            Write-Host "Couldn't make the map tiles (exit code $code)."
         }
         try { $job.Process.Dispose() } catch {}
         $script:TileGen = $null
@@ -824,7 +824,7 @@ function Invoke-TileGenerationWatch {
         Write-TileGenStatus @{ state = "running"; ts = $started; script = $tileGenScript }
     } catch {
         Write-TileGenStatus @{ state = "error"; ts = [long][DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); script = $tileGenScript; error = "generateTiles.ps1 could not start: $($_.Exception.Message)" }
-        Write-Host "Tile generation could not start: $($_.Exception.Message)"
+        Write-Host "Couldn't start making the map tiles: $($_.Exception.Message)"
     }
 }
 
@@ -852,7 +852,7 @@ if ($config.catalog -and $config.catalog.PSObject.Properties['build'] -and $conf
 if ("$env:WINDROSEPLUS_CATALOG_BUILD" -eq "0") { $catalogBuildEnabled = $false }
 function Start-CatalogBuild {
     if (-not $catalogBuildEnabled) { Write-Host "Item catalog: building is switched off in windrose_plus.json"; return }
-    if (-not $catalogBuildScript) { Write-Host "Item catalog: WindrosePlus-BuildCatalog.ps1 not found; the Items panel stays empty"; return }
+    if (-not $catalogBuildScript) { Write-Host "Item catalog: WindrosePlus-BuildCatalog.ps1 is missing, so the Items panel stays empty"; return }
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = (Get-Process -Id $PID).Path
@@ -864,7 +864,7 @@ function Start-CatalogBuild {
         $script:CatalogBuildProcess = $proc
         Write-Host "Item catalog: checking it against the game files (log: $catalogBuildLog)"
     } catch {
-        Write-Host "Item catalog: the builder could not start: $($_.Exception.Message)"
+        Write-Host "Item catalog: couldn't start the build: $($_.Exception.Message)"
     }
 }
 function Test-CatalogBuilding {
@@ -1072,7 +1072,7 @@ function Get-DashboardRefusal($Command) {
     $name = $first.ToLowerInvariant()
     if (-not $name.StartsWith('wp.')) { $name = 'wp.' + $name }
     if ($script:DashboardRefusedCommands -notcontains $name) { return $null }
-    return "$name is not available from the web dashboard. It can read players' account IDs, so it runs only from a tool on the server itself."
+    return "$name isn't available in the dashboard. It can show players' account IDs, so it only runs from a tool on the server itself."
 }
 
 function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
@@ -1086,29 +1086,29 @@ function Get-RconWorkerDiagnostic($spoolDir, $cmdPath) {
             $status = Read-TextUtf8 $statusPath | ConvertFrom-Json
             if ($null -ne $status.ts) { $age = $now - [long]$status.ts }
         } catch {
-            return "Command timed out (25s). RCON worker status exists but could not be parsed; restart the Windrose server."
+            return "No answer after 25 seconds. Windrose+ couldn't read its console status file. Restart the Windrose server."
         }
     } else {
-        return "Command timed out (25s). RCON worker status file is missing; the Windrose+ Lua worker is not running or RCON is disabled in the game process."
+        return "No answer after 25 seconds. Windrose+ isn't running in the game server, or RCON is off."
     }
 
     $detail = ""
     if ($status.state -or $status.detail) {
-        $detail = " Worker state: $($status.state); detail: $($status.detail)"
+        $detail = " Status: $($status.state), $($status.detail)."
     }
     if ($status.last_error) {
-        $detail += " Last worker error: $($status.last_error)"
+        $detail += " Last error: $($status.last_error)"
     }
 
     if ($null -ne $age -and $age -gt 15) {
-        return "Command timed out (25s). RCON worker heartbeat is stale (${age}s old); restart the Windrose server process.$detail"
+        return "No answer after 25 seconds. Windrose+ hasn't checked in for ${age} seconds. Restart the Windrose server.$detail"
     }
 
     if (Test-Path -LiteralPath $cmdPath) {
-        return "Command timed out (25s). RCON worker is alive but did not consume the command file; check windrose_plus_data\\rcon and restart the Windrose server if it persists.$detail"
+        return "No answer after 25 seconds. Windrose+ is running but didn't pick up the command. If this keeps happening, check windrose_plus_data\\rcon and restart the Windrose server.$detail"
     }
 
-    return "Command timed out (25s). RCON worker consumed the command but did not write a response.$detail"
+    return "No answer after 25 seconds. Windrose+ picked up the command but didn't answer. Check whether it ran before you send it again.$detail"
 }
 
 function Send-Html($context, $html, $statusCode = 200) {
@@ -1225,27 +1225,27 @@ function Read-RequestBodyToFile($context, $targetPath, $maxBytes) {
 function Format-RepairToolOutput($output, $repairRoot) {
     $text = (($output | ForEach-Object { "$_" }) -join "`n").Trim()
     if ($text -match "spent or allocated progression nodes|spent points detected") {
-        return "The uploaded save has spent or allocated progression nodes, so Safe mode declined to auto-edit it. Send the same SaveProfiles zip to your server admin or hosting support so they can run the deeper repair manually."
+        return "This character has spent talent or stat points, so it can't be fixed automatically. Your save wasn't changed. Send the same zip to your server admin or your host's support for a manual repair."
     }
     if ($text -match "no repairable progression drift") {
-        return "No known no-spend progression drift was found in the uploaded save."
+        return "This save doesn't have the progression bug this tool fixes. Your save wasn't changed."
     }
     if ($text -match "could not find SaveProfiles|could not resolve Players RocksDB|no PlayerId") {
-        return "The zip did not contain a supported SaveProfiles/<steamid>/RocksDB/0.10.0/Players folder."
+        return "That zip has no character save in it. Zip your Steam ID folder inside SaveProfiles and try again."
     }
     if ($text -match "zip has too many entries|zip entry is too large|zip extracted size is too large|unsafe zip entry path|open zip archive") {
-        return "The upload is not a safe supported SaveProfiles zip. Recreate the zip from only your local SteamID profile folder."
+        return "That zip can't be used. Make a new zip of only your Steam ID folder and try again."
     }
     if ($text -match "round-trip mismatch|decode BSON|R5BLPlayer|column family|missing or invalid tree path|tree path is not an array|tree node") {
-        return "The player save shape was not recognized, so no automatic repair was made."
+        return "The tool doesn't recognize this save, so nothing was changed."
     }
     if ($text -match "timed out") {
-        return "Repair timed out before a safe result was produced."
+        return "The repair took too long and stopped. Your save wasn't changed. Try again."
     }
     if ($text -match "Upload exceeds") {
-        return "The uploaded zip is larger than the 200 MB limit."
+        return "That zip is larger than 200 MB."
     }
-    return "The repair tool could not safely repair this zip."
+    return "This save couldn't be fixed automatically. Your save wasn't changed."
 }
 
 function Invoke-RepairTool($healExe, $auditLog, $uploadPath, $outputPath, $timeoutSeconds) {
@@ -1312,7 +1312,7 @@ try {
                 if ($method -eq "POST") {
                     $bodyRead = Read-RequestBodyText $context 8192
                     if (-not $bodyRead.Ok) {
-                        if ($bodyRead.Status -eq 413) { Send-Html $context ($loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">The login request was too large.</div>')) 413 }
+                        if ($bodyRead.Status -eq 413) { Send-Html $context ($loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">That password is too long.</div>')) 413 }
                         continue
                     }
                     $body = $bodyRead.Text
@@ -1358,13 +1358,13 @@ try {
                         }
                     }
                     if ($null -eq $currentPassword) {
-                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Config temporarily unavailable — retry in a moment</div>')
+                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Couldn''t read the server''s settings. Try again in a moment.</div>')
                         Send-Html $context $errorHtml
                     } elseif (-not $currentPassword) {
-                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Set a password in windrose_plus.json to access the dashboard</div>')
+                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Set an RCON password in windrose_plus.json to use the dashboard.</div>')
                         Send-Html $context $errorHtml
                     } elseif ($currentPassword -eq "changeme") {
-                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Change the default password in windrose_plus.json</div>')
+                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">The RCON password is still changeme. Set your own in windrose_plus.json.</div>')
                         Send-Html $context $errorHtml
                     } elseif (Test-SecretEqual $formPassword $currentPassword) {
                         $token = New-SessionToken
@@ -1372,16 +1372,16 @@ try {
                         Send-Redirect $context "/"
                     } else {
                         Add-AuthFailure $clientKey
-                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Invalid password</div>')
+                        $errorHtml = $loginPageHtml.Replace("ERRORPLACEHOLDER", '<div class="error" style="display:block">Wrong password. Try again.</div>')
                         Send-Html $context $errorHtml
                     }
                 } else {
                     if ($null -eq $currentPassword) {
-                        $errorMsg = '<div class="error" style="display:block">Config temporarily unavailable — retry in a moment</div>'
+                        $errorMsg = '<div class="error" style="display:block">Couldn''t read the server''s settings. Try again in a moment.</div>'
                     } elseif (-not $currentPassword) {
-                        $errorMsg = '<div class="error" style="display:block">Set a password in windrose_plus.json to access the dashboard</div>'
+                        $errorMsg = '<div class="error" style="display:block">Set an RCON password in windrose_plus.json to use the dashboard.</div>'
                     } elseif ($currentPassword -eq "changeme") {
-                        $errorMsg = '<div class="error" style="display:block">Change the default password in windrose_plus.json</div>'
+                        $errorMsg = '<div class="error" style="display:block">The RCON password is still changeme. Set your own in windrose_plus.json.</div>'
                     } else {
                         $errorMsg = ""
                     }
@@ -1515,7 +1515,7 @@ try {
                             } catch {}
                         }
                         Send-Json $context @{
-                            error = "Map not ready yet. Join the server once to auto-generate the map."
+                            error = "The map isn't ready yet. Join the server once and Windrose+ makes it."
                             generation = $generation
                         } 503
                     }
@@ -1546,7 +1546,7 @@ try {
                 $currentPassword = Get-CurrentRconPassword
                 if ($null -eq $currentPassword) {
                     if ($path.StartsWith("/api/")) {
-                        Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
+                        Send-Json $context @{ error = "Couldn't read the server's settings. Try again in a moment." } 503
                     } else {
                         Send-Redirect $context "/login"
                     }
@@ -1555,7 +1555,7 @@ try {
                 if (-not $currentPassword -or $currentPassword -eq "changeme") {
                     # No password configured or still default: block everything
                     if ($path.StartsWith("/api/")) {
-                        Send-Json $context @{ error = "No password configured. Set a password in windrose_plus.json to access the dashboard." } 403
+                        Send-Json $context @{ error = "Set your own RCON password in windrose_plus.json to use the dashboard." } 403
                     } else {
                         Send-Redirect $context "/login"
                     }
@@ -1570,7 +1570,7 @@ try {
                     if (-not $headerPassword -and $path -eq "/api/rcon" -and $method -eq "POST") {
                         $bodyRead = Read-RequestBodyText $context 65536
                         if (-not $bodyRead.Ok) {
-                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "Request body too large" } 413 }
+                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "That command is too long." } 413 }
                             continue
                         }
                         $script:RconBodyText = $bodyRead.Text
@@ -1595,7 +1595,7 @@ try {
                 if (-not $authenticated) {
                     # API calls get 401, browser requests get redirect
                     if ($path.StartsWith("/api/")) {
-                        Send-Json $context @{ error = "Authentication required" } 401
+                        Send-Json $context @{ error = "You're logged out. Reload the page to log in again." } 401
                     } else {
                         Send-Redirect $context "/login"
                     }
@@ -1644,7 +1644,7 @@ try {
                 "/api/config" {
                     $liveConfig = Get-CurrentConfig
                     if ($null -eq $liveConfig) {
-                        Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
+                        Send-Json $context @{ error = "Couldn't read the server's settings. Try again in a moment." } 503
                         continue
                     }
                     if ($liveConfig.rcon -and $liveConfig.rcon.password) { $liveConfig.rcon.password = "***" }
@@ -1761,7 +1761,7 @@ try {
                             # and surface the parser error. Early-out so the composite
                             # stale/reason calculation below doesn't overwrite this.
                             $status.stale = $true
-                            $status.stale_reason = "Parser unavailable: $script:IniParserLoadError"
+                            $status.stale_reason = "Windrose+ couldn't check windrose_plus.ini ($script:IniParserLoadError)."
                         } else {
                             # Does the current config *require* a CurveTables PAK?
                             $expectCtPak = $false
@@ -1772,15 +1772,15 @@ try {
                                     try {
                                         $parsed = Import-WindrosePlusConfig -ConfigPath $iniPath -DefaultPath $defaultIniPath
                                         if ($parsed.Error) {
-                                            $ctStatusError = "INI parse failed: $($parsed.Error)"
+                                            $ctStatusError = "windrose_plus.ini has a mistake: $($parsed.Error)."
                                         } elseif ($parsed.CurveTables -and $parsed.CurveTables.Count -gt 0) {
                                             $expectCtPak = $true
                                         }
                                     } catch {
-                                        $ctStatusError = "INI parse failed: $_"
+                                        $ctStatusError = "windrose_plus.ini couldn't be read: $_."
                                     }
                                 } else {
-                                    $ctStatusError = "Default INI missing; cannot evaluate CurveTable config"
+                                    $ctStatusError = "windrose_plus.default.ini is missing, so your windrose_plus.ini settings can't be checked. Run install.ps1 again."
                                 }
                             }
 
@@ -1804,7 +1804,7 @@ try {
                                     $t = (Get-Item $multPak).LastWriteTimeUtc.Ticks
                                     if ($t -lt $pakMtime) { $pakMtime = $t }
                                 } else {
-                                    $stale = $true; $reason = "Multipliers PAK missing but config requires one"
+                                    $stale = $true; $reason = "The multiplier PAK for your settings is missing."
                                 }
                             }
                             if ($expectCtPak -and -not $stale) {
@@ -1812,13 +1812,13 @@ try {
                                     $t = (Get-Item $ctPak).LastWriteTimeUtc.Ticks
                                     if ($t -lt $pakMtime) { $pakMtime = $t }
                                 } else {
-                                    $stale = $true; $reason = "CurveTables PAK missing but config requires one"
+                                    $stale = $true; $reason = "The PAK for your windrose_plus.ini settings is missing."
                                 }
                             }
                             if (-not $stale -and (($expectMultPak -and -not $multiplierPakDisabled) -or $expectCtPak)) {
                                 if ($configMtime -gt 0 -and $configMtime -gt $pakMtime) {
                                     $stale = $true
-                                    $reason = "Config edited after PAK build"
+                                    $reason = "Settings changed since the last start."
                                 }
                             }
 
@@ -1865,7 +1865,7 @@ try {
                         commands = @(
                             @{name="wp.help"; usage="wp.help [command|all]"; description="List all commands or get help for a specific command"; category="server"},
                             @{name="wp.status"; usage="wp.status"; description="Show server status and multipliers"; category="server"},
-                            @{name="wp.version"; usage="wp.version"; description="Show version"; category="server"}
+                            @{name="wp.version"; usage="wp.version"; description="Show the Windrose+ version"; category="server"}
                         )
                         bootstrap = $true
                     }
@@ -1884,7 +1884,7 @@ try {
                             try { $generation = Read-TextUtf8 $statusFile | ConvertFrom-Json } catch {}
                         }
                         Send-Json $context @{
-                            error = "Map not ready yet. Join the server once to auto-generate the map."
+                            error = "The map isn't ready yet. Join the server once and Windrose+ makes it."
                             generation = $generation
                         } 503
                     }
@@ -1937,7 +1937,7 @@ try {
                     if ($null -eq $rawBody) {
                         $bodyRead = Read-RequestBodyText $context 65536
                         if (-not $bodyRead.Ok) {
-                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "Request body too large" } 413 }
+                            if ($bodyRead.Status -eq 413) { Send-Json $context @{ error = "That command is too long." } 413 }
                             continue
                         }
                         $rawBody = $bodyRead.Text
@@ -1957,11 +1957,11 @@ try {
 
                     $rconSecret = Get-CurrentRconPassword
                     if ($null -eq $rconSecret) {
-                        Send-Json $context @{ error = "Config temporarily unavailable, retry in a moment" } 503
+                        Send-Json $context @{ error = "Couldn't read the server's settings. Try again in a moment." } 503
                         continue
                     }
                     if (-not $rconSecret -or $rconSecret -eq "changeme") {
-                        Send-Json $context @{ error = "RCON not configured" } 403
+                        Send-Json $context @{ error = "Set your own RCON password in windrose_plus.json to use the console." } 403
                         continue
                     }
 
@@ -1969,7 +1969,7 @@ try {
                     # instead of waiting 25 seconds for an answer that never comes.
                     $liveCfg = Get-CurrentConfig
                     if ($liveCfg -and $liveCfg.rcon -and $liveCfg.rcon.enabled -ne $true) {
-                        Send-Json $context @{ error = "RCON is switched off (rcon.enabled in windrose_plus.json)" } 503
+                        Send-Json $context @{ error = "RCON is off. Set rcon.enabled to true in windrose_plus.json." } 503
                         continue
                     }
 
@@ -2020,7 +2020,7 @@ try {
                         # has not picked up, so a retry cannot make it run twice.
                         if (Test-Path -LiteralPath $cmdPath) {
                             Remove-Item -LiteralPath $cmdPath -Force -ErrorAction SilentlyContinue
-                            if (-not (Test-Path -LiteralPath $cmdPath)) { $message = "$message The command was withdrawn and did not run." }
+                            if (-not (Test-Path -LiteralPath $cmdPath)) { $message = "$message The command was cancelled and didn't run." }
                         }
                         Send-Json $context @{ id = $cmdId; status = "error"; message = $message } 504
                         continue
@@ -2035,7 +2035,7 @@ try {
 
                     $maxUploadBytes = 200MB
                     if ($context.Request.ContentLength64 -gt $maxUploadBytes) {
-                        Send-Json $context @{ error = "Upload too large. Zip files must be 200 MB or smaller." } 413
+                        Send-Json $context @{ error = "That zip is larger than 200 MB." } 413
                         continue
                     }
                     $maxOutputBytes = 200MB
@@ -2059,7 +2059,7 @@ try {
                     try {
                         $uploadedBytes = Read-RequestBodyToFile $context $uploadPath $maxUploadBytes
                         if ($uploadedBytes -lt 4) {
-                            throw "Uploaded file is empty or invalid."
+                            throw "That file is empty or isn't a zip."
                         }
 
                         $repairResult = Invoke-RepairTool $healExe $auditLog $uploadPath $outputPath 45
@@ -2067,7 +2067,7 @@ try {
                         $exitCode = $repairResult.ExitCode
                         if ($exitCode -ne 0 -or -not (Test-Path -LiteralPath $outputPath)) {
                             Send-Json $context @{
-                                error = "No safe automatic repair was made."
+                                error = "This save couldn't be fixed automatically. Your save wasn't changed."
                                 detail = Format-RepairToolOutput $toolOutput $repairRoot
                             } 422
                             continue
@@ -2076,8 +2076,8 @@ try {
                         $outputInfo = Get-Item -LiteralPath $outputPath
                         if ($outputInfo.Length -gt $maxOutputBytes) {
                             Send-Json $context @{
-                                error = "Repair failed."
-                                detail = "The repaired zip is larger than the 200 MB limit."
+                                error = "The save couldn't be repaired."
+                                detail = "The repaired save is larger than 200 MB, so it can't be downloaded."
                             } 413
                             continue
                         }
@@ -2087,7 +2087,7 @@ try {
                         $statusCode = 422
                         if ($_.Exception.Message -match "Upload exceeds") { $statusCode = 413 }
                         Send-Json $context @{
-                            error = "Repair failed."
+                            error = "The save couldn't be repaired."
                             detail = Format-RepairToolOutput $_.Exception.Message $repairRoot
                         } $statusCode
                     } finally {

@@ -389,7 +389,7 @@ function Rcon._dashboardRefusal(id, command)
     if name == "" then return nil end
     if name:sub(1, 3) ~= "wp." then name = "wp." .. name end
     if not Rcon._DASHBOARD_REFUSED[name] then return nil end
-    return name .. " is not available from the web dashboard. It can read players' account IDs, so it runs only from a tool on the server itself."
+    return name .. " isn't available in the dashboard. It can show players' account IDs, so it only runs from a tool on the server itself."
 end
 
 function Rcon._processFile(filePath, filename)
@@ -452,7 +452,7 @@ function Rcon._processFile(filePath, filename)
         end
         local age = os.time() - timestamp
         if age > Rcon._commandExpirySec then
-            finish("error", "Command expired (" .. age .. "s old)", originalCommand, adminUser)
+            finish("error", "Windrose+ got this command " .. age .. " seconds late, so it didn't run. Send it again.", originalCommand, adminUser)
             return
         end
     end
@@ -460,14 +460,14 @@ function Rcon._processFile(filePath, filename)
     if Rcon._config and Rcon._config.reload then
         local okReload, reloadErr = pcall(Rcon._config.reload)
         if not okReload then
-            finish("error", "Config reload failed: " .. tostring(reloadErr), originalCommand, adminUser)
+            finish("error", "Couldn't reload windrose_plus.json: " .. tostring(reloadErr), originalCommand, adminUser)
             return
         end
     end
 
     local okPassword, expectedPassword = pcall(Rcon._config.getRconPassword)
     if not okPassword then
-        finish("error", "Config password read failed: " .. tostring(expectedPassword), originalCommand, adminUser)
+        finish("error", "Couldn't read the RCON password from windrose_plus.json: " .. tostring(expectedPassword), originalCommand, adminUser)
         return
     end
 
@@ -480,7 +480,7 @@ function Rcon._processFile(filePath, filename)
     end
 
     if password ~= expectedPassword then
-        finish("error", "Authentication failed")
+        finish("error", "Wrong RCON password.")
         Log.warn("RCON", "Auth failed: " .. command)
         return
     end
@@ -488,7 +488,7 @@ function Rcon._processFile(filePath, filename)
     Log.info("RCON", "Executing: " .. command)
 
     if not Rcon._admin then
-        finish("error", "Admin module not loaded", originalCommand, adminUser)
+        finish("error", "Windrose+ hasn't finished loading. Try again in a moment.", originalCommand, adminUser)
         return
     end
     if #args == 0 then
@@ -564,7 +564,7 @@ function Rcon._writeResponse(id, status, message, command, adminUser)
         return false
     end
 
-    if command and message ~= "Authentication failed" then
+    if command and message ~= "Wrong RCON password." then
         pcall(Rcon._appendConsoleHistory, command, status, message, adminUser)
     end
     return true

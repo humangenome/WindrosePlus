@@ -175,7 +175,7 @@ static bool kick_controller(UObject* pc, const std::string& reasonUtf8) {
     UFunction* func = pc->GetFunctionByNameInChain(STR("ClientReturnToMainMenuWithTextReason"));
     if (!func) return false;
     struct Params { FText ReturnReason; };
-    std::wstring reasonW = utf8_to_wide(reasonUtf8.empty() ? "You have been removed from the server." : reasonUtf8);
+    std::wstring reasonW = utf8_to_wide(reasonUtf8.empty() ? "You were kicked from this server." : reasonUtf8);
     Params params{ FText(reasonW.c_str()) };
     try {
         pc->ProcessEvent(func, &params);
@@ -259,7 +259,7 @@ private:
         auto players = collect_players();
         for (auto& p : players) {
             if (is_banned(to_lower(p.name), bans)) {
-                kick_controller(p.controller, "You are banned from this server.");
+                kick_controller(p.controller, "You're banned from this server.");
             }
         }
     }
@@ -346,7 +346,7 @@ private:
         auto players = collect_players();
         std::string nl = to_lower(name);
         for (auto& p : players) {
-            if (to_lower(p.name) == nl) kick_controller(p.controller, reason.empty() ? "You are banned from this server." : reason);
+            if (to_lower(p.name) == nl) kick_controller(p.controller, reason.empty() ? "You're banned from this server." : reason);
         }
         write_result("ok\tbanned " + name);
     }

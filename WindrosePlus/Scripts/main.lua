@@ -332,7 +332,7 @@ if Admin then
             end
             local ok, err = requestTileGeneration()
             if not ok then return "Error: " .. tostring(err) end
-            return "Tile rebuild requested. The dashboard regenerates the Sea Chart in the background (about a minute); refresh the page when windrose_plus_data\\map_generation_status.json says complete."
+            return "Rebuilding the Sea Chart. It takes about a minute: reload the page when windrose_plus_data\\map_generation_status.json says complete."
         end
     }
 
@@ -345,9 +345,9 @@ if Admin then
                 return "No players online. Windrose loads the world when the first player joins, so an export now would come back empty. Run wp.mapexport while someone is on the server."
             end
             if not requestTerrainExport("export") then
-                return "Error: could not write the export trigger"
+                return "Couldn't start the terrain export: Windrose+ couldn't write to its map data folder."
             end
-            return "Terrain export requested. The HeightmapExporter mod picks it up within a few seconds, then the Sea Chart tiles are rebuilt automatically."
+            return "Exporting the terrain now. The Sea Chart rebuilds by itself when it's done."
         end
     }
 
@@ -541,7 +541,7 @@ end
 -- caller (optional): { accountId, name } of an in-game caller, handed to the command handler as its second argument
 -- (handlers can tailor answers or checks); nil = RCON-level access.
 WindrosePlus.API.executeCommand = function(command, args, caller)
-    if not Admin then return "error", "Admin module not loaded" end
+    if not Admin then return "error", "Windrose+ hasn't finished loading. Try again in a moment." end
     if type(args) == "string" then
         local list = {}
         for part in args:gmatch("%S+") do list[#list + 1] = part end
@@ -556,7 +556,7 @@ end
 -- Describe the subcommands of an existing command (e.g. a built-in one) for wp.help, commands.json and in-game
 -- consoles, without replacing its handler: subs = { { name, usage, description }, ... }. Returns true or false, reason.
 WindrosePlus.API.setSubcommands = function(name, subs)
-    if not Admin then return false, "Admin module not loaded" end
+    if not Admin then return false, "Windrose+ hasn't finished loading. Try again in a moment." end
     return Admin.setSubcommands(name, subs)
 end
 

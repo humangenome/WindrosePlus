@@ -166,7 +166,7 @@ function Admin.execute(command, args, caller)
     local name = Admin._commands[command] and command or ("wp." .. command)
     local cmd = Admin._commands[name]
     if not cmd then
-        return "error", "Unknown command: " .. command .. ". Use wp.help for list."
+        return "error", "Unknown command: " .. command .. ". Type wp.help to see all commands."
     end
     args = type(args) == "table" and args or {}
     if cmd.subcommands and cmd.strictSubcommands then
@@ -268,7 +268,7 @@ function Admin._registerCommands()
                 {"admin", "Admin"},
                 {"debug", "Debug"},
             }
-            local lines = {"WindrosePlus Commands:"}
+            local lines = {"Windrose+ commands:"}
             for _, cat in ipairs(categories) do
                 local catId, catLabel = cat[1], cat[2]
                 local cmds = {}
@@ -296,7 +296,7 @@ function Admin._registerCommands()
                 end
             end
             if not showAll then
-                table.insert(lines, "\nwp.help <command> for details. wp.help all for debug commands.")
+                table.insert(lines, "\nType wp.help <command> for details, or wp.help all to include debug commands.")
             end
             return table.concat(lines, "\n")
         end
@@ -318,13 +318,13 @@ function Admin._registerCommands()
                 "Players: " .. playerCount,
                 _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier()),
                 _fmtMultiplierLine("XP", Admin._config.getXpMultiplier()),
-                _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size"),
-                _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier()),
-                _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"),
+                _fmtMultiplierLine("Stack size", Admin._config.getStackSizeMultiplier(), "stack_size"),
+                _fmtMultiplierLine("Craft efficiency", Admin._config.getCraftEfficiencyMultiplier()),
+                _fmtMultiplierLine("Crop speed", Admin._config.getCropSpeedMultiplier(), "crop_speed"),
                 _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight"),
-                _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier()),
-                _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier()),
-                "WindrosePlus v" .. (WindrosePlus and WindrosePlus.VERSION or "?")
+                _fmtMultiplierLine("Cooking speed", Admin._config.getCookingSpeedMultiplier()),
+                _fmtMultiplierLine("Harvest yield", Admin._config.getHarvestYieldMultiplier()),
+                "Windrose+ v" .. (WindrosePlus and WindrosePlus.VERSION or "?")
             }
             return table.concat(lines, "\n")
         end
@@ -371,10 +371,10 @@ function Admin._registerCommands()
     }
 
     Admin._commands["wp.version"] = {
-        description = "Show version",
+        description = "Show the Windrose+ version",
         usage = "wp.version",
         category = "server",
-        handler = function(args) return "WindrosePlus v" .. (WindrosePlus and WindrosePlus.VERSION or "?") end
+        handler = function(args) return "Windrose+ v" .. (WindrosePlus and WindrosePlus.VERSION or "?") end
     }
 
     Admin._commands["wp.perf"] = {
@@ -382,7 +382,7 @@ function Admin._registerCommands()
         usage = "wp.perf",
         category = "diagnostics",
         handler = function(args)
-            local lines = {"Server Performance:"}
+            local lines = {"Server performance:"}
 
             -- Player count (filtered for active connections)
             pcall(function()
@@ -397,7 +397,7 @@ function Admin._registerCommands()
             end)
 
             -- Memory: not available without wmic (would flash CMD window)
-            table.insert(lines, "  Memory: use wp.memory for cached data")
+            table.insert(lines, "  Memory: see wp.memory")
 
             -- Uptime from Lua boot timestamp (no wmic needed)
             pcall(function()
@@ -596,7 +596,7 @@ function Admin._registerCommands()
         if n >= 2 then targetName = table.concat(args, " ", 1, n - 1):lower() end
 
         local pcs = FindAllOf("PlayerController")
-        if not pcs then return "No players found" end
+        if not pcs then return "No players online" end
 
         local count = 0
         for _, pc in ipairs(pcs) do
@@ -658,7 +658,7 @@ function Admin._registerCommands()
     }
 
     Admin._commands["wp.jump"] = {
-        description = "Set player jump height multiplier (JumpZVelocity; 1.0=normal, 2.0=double)",
+        description = "Set a player's jump height multiplier (1.0 is normal, 2.0 is double)",
         usage = "wp.jump [player] <multiplier>",
         category = "admin",
         examples = {"wp.jump 2.0", "wp.jump HumanGenome 3", "wp.jump BP_R5Character_C_2147418445 3"},
@@ -667,7 +667,7 @@ function Admin._registerCommands()
     }
 
     Admin._commands["wp.gravity"] = {
-        description = "Set player gravity multiplier (CharacterMovement.GravityScale; 1.0=normal, 0.3=moon)",
+        description = "Set a player's gravity multiplier (1.0 is normal, 0.3 is moon gravity)",
         usage = "wp.gravity [player] <multiplier>",
         category = "admin",
         examples = {"wp.gravity 0.3", "wp.gravity HumanGenome 2", "wp.gravity BP_R5Character_C_2147418445 0.3"},
@@ -712,7 +712,7 @@ function Admin._registerCommands()
                     local maxStr = maxHp and tostring(math.floor(maxHp + 0.5)) or "?"
                     table.insert(lines, p.name .. ": " .. hpStr .. "/" .. maxStr .. " HP")
                 else
-                    table.insert(lines, p.name .. ": No AttributeSet")
+                    table.insert(lines, p.name .. ": no health data")
                 end
             end
             return #lines > 0 and table.concat(lines, "\n") or "No health data"
@@ -746,7 +746,7 @@ function Admin._registerCommands()
     -- short hops; for cross-map jumps the SEA CHART click-to-teleport in the
     -- dashboard supplies a heightmap-derived Z so the player lands above terrain).
     Admin._commands["wp.tp"] = {
-        description = "Teleport player to absolute world coordinates (X, Y, optional Z)",
+        description = "Teleport a player to map coordinates (X, Y, optional Z)",
         usage = "wp.tp [player|all] <x> <y> [z]",
         category = "admin",
         examples = {"wp.tp HumanGenome 100000 200000 5000", "wp.tp 100000 200000", "wp.tp all 100000 200000"},
@@ -768,14 +768,14 @@ function Admin._registerCommands()
                 x, y = last2, last1
                 nameEnd = n - 2
             else
-                return "Need 2 or 3 trailing numeric coords (x y [z])"
+                return "Give 2 or 3 numbers for the position: wp.tp [player|all] <x> <y> [z]"
             end
             local targetName = nameEnd > 0 and table.concat(args, " ", 1, nameEnd):lower() or nil
             local everyone = (targetName == "all")
             if everyone then targetName = nil end
 
             local pcs = FindAllOf("PlayerController")
-            if not pcs then return "No players found" end
+            if not pcs then return "No players online" end
 
             -- No name moves the only player online. With more than one online it
             -- refuses (up to v1.3.24 it moved everyone); "all" moves everyone.
@@ -800,7 +800,7 @@ function Admin._registerCommands()
                         matched = matched + 1
                         pcall(function()
                             if not (pawn and pawn:IsValid()) then
-                                table.insert(results, (pName or pawnName or "?") .. ": no pawn")
+                                table.insert(results, (pName or pawnName or "?") .. ": no character in the world right now")
                                 return
                             end
 
@@ -820,7 +820,7 @@ function Admin._registerCommands()
                                 return pawn:K2_SetActorLocation(newLoc, false, {}, true)
                             end)
                             if not callOk then
-                                table.insert(results, string.format("%s: ERR %s", pName or pawnName or "?", tostring(ret)))
+                                table.insert(results, string.format("%s: couldn't teleport (%s)", pName or pawnName or "?", tostring(ret)))
                                 return
                             end
                             anyTeleported = true
@@ -844,7 +844,7 @@ function Admin._registerCommands()
                 end
             end
 
-            if matched == 0 then return "No matching player" end
+            if matched == 0 then return "No online player has that name." end
             return table.concat(results, "\n")
         end,
     }
@@ -882,7 +882,7 @@ function Admin._registerCommands()
     }
 
     Admin._commands["wp.stamina"] = {
-        description = "Read stamina/hunger/thirst for players",
+        description = "Read players' stamina, hunger and thirst",
         usage = "wp.stamina [player]",
         category = "players",
         playerArg = true,
@@ -1345,7 +1345,7 @@ function Admin._registerCommands()
         description = "Trigger read-only native UObject reflection dump",
         usage = "wp.nativeprobe",
         handler = function(args)
-            if not Admin._gameDir then return "Game directory not initialized" end
+            if not Admin._gameDir then return "Windrose+ hasn't found the game folder yet. Try again in a moment." end
             local dataDir = Admin._gameDir .. "windrose_plus_data"
             local triggerPath = dataDir .. "\\native_probe_trigger"
             local donePath = dataDir .. "\\native_probe_done"
@@ -1449,15 +1449,15 @@ function Admin._registerCommands()
         category = "server",
         examples = {"wp.config"},
         handler = function(args)
-            local lines = {"WindrosePlus Config:"}
+            local lines = {"Windrose+ config:"}
             table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier(), nil, "  "))
             table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
-            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
+            table.insert(lines, _fmtMultiplierLine("Stack size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
+            table.insert(lines, _fmtMultiplierLine("Craft efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Crop speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
             table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
-            table.insert(lines, _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Cooking speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Harvest yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
             table.insert(lines, "  RCON: " .. (Admin._config.isRconEnabled() and "enabled" or "disabled"))
             local mods = WindrosePlus._modules.Mods
             if mods then
@@ -1476,12 +1476,12 @@ function Admin._registerCommands()
             local lines = {"Multipliers:"}
             table.insert(lines, _fmtMultiplierLine("Loot", Admin._config.getLootMultiplier(), nil, "  "))
             table.insert(lines, _fmtMultiplierLine("XP", Admin._config.getXpMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Stack Size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
-            table.insert(lines, _fmtMultiplierLine("Craft Efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Crop Speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
+            table.insert(lines, _fmtMultiplierLine("Stack size", Admin._config.getStackSizeMultiplier(), "stack_size", "  "))
+            table.insert(lines, _fmtMultiplierLine("Craft efficiency", Admin._config.getCraftEfficiencyMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Crop speed", Admin._config.getCropSpeedMultiplier(), "crop_speed", "  "))
             table.insert(lines, _fmtMultiplierLine("Weight", Admin._config.getWeightMultiplier(), "weight", "  "))
-            table.insert(lines, _fmtMultiplierLine("Cooking Speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
-            table.insert(lines, _fmtMultiplierLine("Harvest Yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Cooking speed", Admin._config.getCookingSpeedMultiplier(), nil, "  "))
+            table.insert(lines, _fmtMultiplierLine("Harvest yield", Admin._config.getHarvestYieldMultiplier(), nil, "  "))
             return table.concat(lines, "\n")
         end
     }
@@ -1510,7 +1510,7 @@ function Admin._registerCommands()
     -- =========================================
 
     Admin._commands["wp.playerinfo"] = {
-        description = "Show consolidated player info (identity, vitals, stats, combat, progression)",
+        description = "Show a player's details: identity, vitals, stats, combat and progression",
         usage = "wp.playerinfo [player]",
         category = "players",
         playerArg = true,
@@ -1767,7 +1767,7 @@ function Admin._registerCommands()
                     if not fn:find("R5Character") and not fn:find("PlayerController") then
                         local name = "Unknown"
                         pcall(function()
-                            name = fn:match("BP_[^_]+_([^_]+)") or fn:match("BP_([^_]+)") or "Mob"
+                            name = fn:match("BP_[^_]+_([^_]+)") or fn:match("BP_([^_]+)") or "Creature"
                         end)
                         counts[name] = (counts[name] or 0) + 1
                         total = total + 1
@@ -1792,7 +1792,7 @@ function Admin._registerCommands()
         examples = {"wp.entities"},
         handler = function(args)
             local types = {"Pawn", "R5Character", "R5MineralNode", "PlayerController", "GameState"}
-            local lines = {"Entity Counts:"}
+            local lines = {"Entity counts:"}
             for _, t in ipairs(types) do
                 local objs = FindAllOf(t)
                 local count = 0
@@ -1863,7 +1863,7 @@ function Admin._registerCommands()
                 return string.format("%dh %dm", hours, mins)
             end
 
-            local lines = {"WindrosePlus Doctor:"}
+            local lines = {"Windrose+ doctor:"}
             local warnings = {}
             local state = WindrosePlus and WindrosePlus.state or {}
             local cfg = Admin._config
@@ -1894,7 +1894,7 @@ function Admin._registerCommands()
                 table.insert(lines, "  Last Player: never seen")
             end
             if state.mode == "degraded" then
-                table.insert(warnings, "WindrosePlus is in degraded mode; game-thread dispatch may be starved")
+                table.insert(warnings, "Windrose+ is in degraded mode. Game-thread dispatch may be starved.")
             end
 
             table.insert(lines, "")
@@ -1931,15 +1931,15 @@ function Admin._registerCommands()
             if mods and mods.getLoadedCount then
                 table.insert(lines, "  Mods loaded: " .. tostring(mods.getLoadedCount()))
             end
-            if cfg and cfg.isQueryEnabled and not cfg.isQueryEnabled() then table.insert(warnings, "Query writer is disabled; dashboard/server-status data may not update") end
-            if cfg and cfg.isLiveMapEnabled and not cfg.isLiveMapEnabled() then table.insert(warnings, "LiveMap writer is disabled; Sea Chart data may not update") end
+            if cfg and cfg.isQueryEnabled and not cfg.isQueryEnabled() then table.insert(warnings, "query.enabled is off, so the dashboard's player list and server status may not update.") end
+            if cfg and cfg.isLiveMapEnabled and not cfg.isLiveMapEnabled() then table.insert(warnings, "livemap.enabled is off, so the Sea Chart may not update.") end
 
             local disabledMultipliers = {"points_per_level", "stack_size", "weight", "inventory_size", "crop_speed"}
             for _, key in ipairs(disabledMultipliers) do
                 local raw = cfg and cfg.get and cfg.get("multipliers", key) or nil
                 local n = tonumber(tostring(raw))
                 if n and n ~= 1.0 then
-                    table.insert(warnings, key .. " is configured as " .. tostring(raw) .. "x but is disabled/no-op in current PAK builds")
+                    table.insert(warnings, key .. " is set to " .. tostring(raw) .. "x, but Windrose+ doesn't apply it in this version.")
                 end
             end
 
@@ -1965,10 +1965,10 @@ function Admin._registerCommands()
         handler = function(args)
             -- Memory metrics require wmic which flashes a CMD window on desktop
             -- Lua collectgarbage reports only Lua heap, not the full process
-            local lines = {"Memory Usage:"}
+            local lines = {"Memory usage:"}
             local luaKB = math.floor(collectgarbage("count"))
-            table.insert(lines, "  Lua Heap: " .. luaKB .. " KB")
-            table.insert(lines, "  Process memory: not available (use Task Manager or perfpoll)")
+            table.insert(lines, "  Lua memory: " .. luaKB .. " KB")
+            table.insert(lines, "  Server memory: not shown here. Check Task Manager.")
             return table.concat(lines, "\n")
         end
     }
@@ -2018,7 +2018,7 @@ function Admin._registerCommands()
     -- this command only records an auditable note.
     -- Issue: HumanGenome/WindrosePlus#4
     Admin._commands["wp.givestats"] = {
-        description = "Record stat/talent point compensation note (audit only)",
+        description = "Write a note that a player is owed stat or talent points (changes nothing in game)",
         usage = "wp.givestats <player> <stat_count> [talent_count]",
         category = "players",
         examples = {"wp.givestats Alice 3", "wp.givestats Bob 5 2"},
@@ -2044,10 +2044,10 @@ function Admin._registerCommands()
             end
             if target == "" then return "Player name required" end
             if not statCount or statCount < 1 or statCount > 100 then
-                return "stat_count must be 1-100"
+                return "stat_count must be 1 to 100"
             end
             if talentCount < 0 or talentCount > 100 then
-                return "talent_count must be 0-100"
+                return "talent_count must be 0 to 100"
             end
 
             local matched = Admin._findPlayersByName(target)
@@ -2064,16 +2064,16 @@ function Admin._registerCommands()
             local ok, line = pcall(json.encode, entry)
             if not ok then return "Failed to encode audit note" end
 
-            if not Admin._gameDir then return "Game directory not initialized" end
+            if not Admin._gameDir then return "Windrose+ hasn't found the game folder yet. Try again in a moment." end
             local queuePath = Admin._gameDir .. "windrose_plus_data\\stat_grants_queue.log"
             local f = io.open(queuePath, "a")
-            if not f then return "Failed to write audit note at " .. queuePath end
+            if not f then return "Couldn't write the note to " .. queuePath end
             f:write(line .. "\n")
             f:close()
 
             local msg = "Recorded audit note: " .. target .. " +" .. statCount .. " stat"
             if talentCount > 0 then msg = msg .. " +" .. talentCount .. " talent" end
-            msg = msg .. ". This does not change the character in-game."
+            msg = msg .. ". This doesn't change the character in game."
             if not connected then msg = msg .. " Player was offline when recorded." end
             return msg
         end
@@ -2130,7 +2130,7 @@ function Admin._registerCommands()
     }
 
     Admin._commands["wp.ban"] = {
-        description = "Ban a player by name (adds to ban list and kicks if present)",
+        description = "Ban a player by name and kick them if they're online",
         usage = "wp.ban <player> [reason]",
         category = "players",
         examples = {"wp.ban Alice", "wp.ban Bob Repeated griefing"},
@@ -2367,7 +2367,7 @@ end
 -- mod isn't deployed / game dir unknown). When UE4SS will not load the native
 -- mod, nothing would ever read the request, so say so and queue nothing.
 function Admin._wpnSend(verb, arg1, arg2, okMsg)
-    if not Admin._gameDir then return "Game directory not initialized" end
+    if not Admin._gameDir then return "Windrose+ hasn't found the game folder yet. Try again in a moment." end
     local dataDir = Admin._gameDir .. "windrose_plus_data"
     local cmdPath = dataDir .. "\\wpn_command.txt"
     if not Admin._wpnLoaded() then
@@ -2376,13 +2376,13 @@ function Admin._wpnSend(verb, arg1, arg2, okMsg)
         os.remove(cmdPath)
         Log.info("Admin", "WPN command refused, WindrosePlusNative not loaded: " .. verb .. " " .. (arg1 or ""))
         local done = ({ kick = "kicked", ban = "banned", unban = "unbanned" })[verb] or "changed"
-        return "Kick and ban are not available on this server, so " .. (arg1 or "nobody") .. " was not " .. done .. "."
+        return "Kick and ban aren't available on this server, so " .. (arg1 or "nobody") .. " wasn't " .. done .. "."
     end
     local parts = { verb }
     if arg1 ~= nil and arg1 ~= "" then parts[#parts + 1] = arg1 end
     if arg2 ~= nil and arg2 ~= "" then parts[#parts + 1] = arg2 end
     local f = io.open(cmdPath, "w")
-    if not f then return "Failed to write command at " .. cmdPath .. " (is the WindrosePlusNative mod deployed?)" end
+    if not f then return "Couldn't write " .. cmdPath .. ", so nothing was sent." end
     f:write(table.concat(parts, "\t"))
     f:close()
     Log.info("Admin", "WPN command queued: " .. verb .. " " .. (arg1 or ""))

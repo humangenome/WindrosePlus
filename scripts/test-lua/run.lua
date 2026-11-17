@@ -156,19 +156,19 @@ case("wp.status lists cooking speed and harvest yield", function()
     Admin._config = cfg
     local _, msg = Admin.execute("wp.status", {})
     Admin._config = saved
-    check(tostring(msg):find("Cooking Speed: 2x", 1, true) and tostring(msg):find("Harvest Yield: 2x", 1, true), tostring(msg))
+    check(tostring(msg):find("Cooking speed: 2x", 1, true) and tostring(msg):find("Harvest yield: 2x", 1, true), tostring(msg))
 end)
 
 case("wp.kick finds a player name with spaces", function()
     online = { player("Some Player", 7) }
     local status, msg = Admin.execute("wp.kick", { "Some", "Player", "griefing", "the", "dock" })
-    check(tostring(msg):find("Some Player was not kicked", 1, true), tostring(msg))
+    check(tostring(msg):find("Some Player wasn't kicked", 1, true), tostring(msg))
 end)
 
 case("wp.kick takes a quoted name when nobody online matches", function()
     online = {}
     local _, msg = Admin.execute("wp.kick", { '"Gone', 'Player"', "reason" })
-    check(tostring(msg):find("Gone Player was not kicked", 1, true), tostring(msg))
+    check(tostring(msg):find("Gone Player wasn't kicked", 1, true), tostring(msg))
 end)
 
 -- ---------------------------------------------------------------- json
@@ -242,7 +242,7 @@ case("rcon: wp.peek and wp.probe_player in a command file with the dashboard's i
         Rcon._processCommands()
         local res = readFile(spool .. "\\res_" .. id .. ".json") or ""
         check(#ran == 0, c .. ": the command ran")
-        check(res:find('"status":"error"', 1, true) and res:find("not available from the web dashboard", 1, true), c .. ": " .. res)
+        check(res:find('"status":"error"', 1, true) and res:find("isn't available in the dashboard", 1, true), c .. ": " .. res)
     end
 end)
 
@@ -433,7 +433,7 @@ local function rconStatus(id, password)
     Rcon._admin = savedAdmin
     local res = readFile(spool .. "\\res_" .. id .. ".json") or ""
     if res:find('"status":"ok"', 1, true) then return "ok" end
-    if res:find("Authentication failed", 1, true) then return "refused" end
+    if res:find("Wrong RCON password.", 1, true) then return "refused" end
     if res:find("RCON is off", 1, true) then return "off" end
     return "other: " .. res
 end
