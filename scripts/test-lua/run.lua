@@ -721,6 +721,24 @@ case("terrain: main.lua keeps the good copy before every export and puts it back
     check(not src:find('raw:find%(\'"h":1\''), "main.lua still has its own copy of the terrain check")
 end)
 
+-- HeightmapExporter 17.1 (cpp-mods/HeightmapExporter/terrain_commit.hpp, tested in tests/terrain_commit_test.cpp)
+-- leaves terrain_v17.json as it was when an export finds no heights and writes "empty" in the done marker.
+case("terrain: main.lua drops the old world's terrain file on a world change and builds no tiles after an 'empty' export", function()
+    local src = assert(readFile("WindrosePlus/Scripts/main.lua"))
+    local fn = assert(src:match("local function requestTerrainExport%(reason%)(.-)\nend\n"), "requestTerrainExport not found")
+    local branch = fn:match('if reason == "world%-changed" then(.-)else')
+    check(branch and branch:find("os.remove%(Terrain.path%(dir%)%)"), "a world change keeps the old world's terrain file, which a 17.1 empty export would leave in place")
+    local gen = assert(src:match("local function checkAndTriggerTileGen%(%)(.-)\nend\n"), "checkAndTriggerTileGen not found")
+    local pending = gen:match("if _pendingTileGenAfterExport then(.-)\n    end\n")
+    check(pending, "the after-export branch not found")
+    local empty = pending:find('readFirstLine%(dir .. "\\\\export_heightmap_done"%) == "empty"')
+    local valid = pending:find("terrainLooksValid")
+    local build = pending:find("requestTileGeneration")
+    check(empty and valid and build and empty < valid and empty < build, "an 'empty' export is not checked before the terrain file and the tile build")
+    local after = pending:sub(empty, valid)
+    check(after:find("return"), "an 'empty' export goes on to the tile build")
+end)
+
 -- ---------------------------------------------------------------- players' addresses and account IDs
 -- wp.probe_player, wp.peek and wp.gm leave them out unless debug.show_player_ids is true.
 do

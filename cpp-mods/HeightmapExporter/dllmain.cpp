@@ -1,5 +1,7 @@
 #define NOMINMAX
-// v17.0 — Variable heightfield resolution: 256x256, 160x160, etc.
+// v17.1 — Variable heightfield resolution: 256x256, 160x160, etc.
+// v17.1 — An export with no height data (the lobby map, nobody online) no longer replaces terrain_v17.json
+//         (terrain_commit.hpp).
 
 #include <Mod/CppUserModBase.hpp>
 #include <DynamicOutput/DynamicOutput.hpp>
@@ -16,6 +18,8 @@
 #include <map>
 #include <set>
 #include <cmath>
+#include <sstream>
+#include "terrain_commit.hpp"
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -25,9 +29,9 @@ static bool vp(uint64_t v){return v>0x10000ULL&&v<0x7FFFFFFFFFFFULL;}
 
 class HeightmapExporter : public CppUserModBase {
 public:
-    HeightmapExporter():CppUserModBase(){ModName=STR("HeightmapExporter");ModVersion=STR("17.0.0");}
+    HeightmapExporter():CppUserModBase(){ModName=STR("HeightmapExporter");ModVersion=STR("17.1.0");}
     ~HeightmapExporter() override{}
-    auto on_unreal_init()->void override{Output::send<LogLevel::Verbose>(STR("[HME] v17.0 variable resolution\n"));}
+    auto on_unreal_init()->void override{Output::send<LogLevel::Verbose>(STR("[HME] v17.1 variable resolution\n"));}
     auto on_update()->void override{
         m_frameCount++;if(m_frameCount%300!=0)return;
         std::filesystem::path tr[]={"../../../windrose_plus_data/export_heightmap_trigger","windrose_plus_data/export_heightmap_trigger"};
@@ -66,7 +70,7 @@ private:
         std::filesystem::create_directories(hdir);
 
         int total=0,withH=0;
-        std::ofstream json(outDir/"terrain_v17.json");
+        std::ostringstream json;  // written to disk only if it has heights (hme::commitTerrain)
         json<<"{\"version\":17,\"landscapes\":[\n";
         for(size_t i=0;i<lands.size();i++){
             json<<"{\"x\":"<<(int64_t)lands[i].x<<",\"y\":"<<(int64_t)lands[i].y<<",\"sx\":"<<lands[i].sx<<"}";
@@ -132,9 +136,12 @@ private:
             total++;
             return RC::LoopAction::Continue;});
 
-        json<<"]}\n";json.close();
+        json<<"]}\n";
+        auto result=hme::commitTerrain(outDir,json.str(),withH);
         Output::send<LogLevel::Verbose>(STR("[HME] Done: {}/{} with heights\n"),withH,total);
-        std::ofstream mk(outDir/"export_heightmap_done");mk<<"ok";mk.close();
+        if(result==hme::Commit::Empty)Output::send<LogLevel::Verbose>(STR("[HME] No height data (world not loaded?): terrain_v17.json left as it was\n"));
+        if(result==hme::Commit::Failed)Output::send<LogLevel::Verbose>(STR("[HME] Could not write terrain_v17.json: left as it was\n"));
+        hme::writeDone(outDir,result);
     }
 };
 

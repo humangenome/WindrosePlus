@@ -280,9 +280,12 @@ local function requestTerrainExport(reason)
     local dir = mapDataDir()
     -- Keep the current terrain if it is good: an export that comes back empty is
     -- replaced by it (checkAndTriggerTileGen). Not when the world changed: the old
-    -- world's islands are not a good copy for the new one.
+    -- world's islands are not a good copy for the new one, and the old terrain file
+    -- goes too, because HeightmapExporter 17.1 leaves the file as it was when an export
+    -- finds no heights (it would otherwise pass for this world's terrain from then on).
     if reason == "world-changed" then
         os.remove(Terrain.goodPath(dir))
+        os.remove(Terrain.path(dir))
     else
         Terrain.keepGood(dir)
     end
@@ -408,6 +411,12 @@ local function checkAndTriggerTileGen()
     if _pendingTileGenAfterExport then
         _pendingTileGenAfterExport = false
         _initialTileCheckDone = true
+        -- HeightmapExporter 17.1 marks an export that found no heights "empty" and leaves the
+        -- terrain file alone, so there is nothing new to build tiles from (17.0 wrote "ok").
+        if readFirstLine(dir .. "\\export_heightmap_done") == "empty" then
+            Log.warn("Core", "Heightmap export found no terrain (world not loaded yet?); the terrain file and Sea Chart tiles were left as they were")
+            return
+        end
         if not terrainLooksValid(dir .. "\\terrain_v17.json") then
             if Terrain.restoreGood(dir) then
                 Log.warn("Core", "Heightmap export came back empty (world not loaded yet?); the previous terrain was put back and the Sea Chart tiles left as they were")

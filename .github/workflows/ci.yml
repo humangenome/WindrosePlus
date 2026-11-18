@@ -73,6 +73,32 @@ jobs:
       - name: Offline Lua tests
         run: lua5.4 scripts/test-lua/run.lua
 
+  heightmap-exporter-files:
+    name: C++ exporter file handling (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: terrain_commit.hpp with g++
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Werror -I cpp-mods/HeightmapExporter \
+            cpp-mods/HeightmapExporter/tests/terrain_commit_test.cpp -o "$RUNNER_TEMP/hme-test"
+          "$RUNNER_TEMP/hme-test" scripts/contract/samples
+      - name: terrain_commit.hpp with MSVC (the compiler that builds HeightmapExporter.dll)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          cl /nologo /std:c++17 /EHsc /W4 /I cpp-mods\HeightmapExporter cpp-mods\HeightmapExporter\tests\terrain_commit_test.cpp /Fe:"%RUNNER_TEMP%\hme-test.exe" || exit /b 1
+          "%RUNNER_TEMP%\hme-test.exe" scripts\contract\samples
+
   data-file-contract:
     name: Data file contract
     runs-on: ubuntu-latest

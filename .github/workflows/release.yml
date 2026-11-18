@@ -250,6 +250,8 @@ jobs:
             --exclude='cpp-mods/*.md' \
             --exclude='cpp-mods/**/*.cpp' \
             --exclude='cpp-mods/**/*.h' \
+            --exclude='cpp-mods/**/*.hpp' \
+            --exclude='cpp-mods/**/tests' \
             --exclude='CMakeLists.txt' \
             ./ staging/
           # Pictures, research notes and source stay in the repository; a server
@@ -258,7 +260,8 @@ jobs:
           for p in docs/brand docs/screenshots docs/research tools/windrose-heal/src cpp-mods/MapMaterializerExporter cpp-mods/WindroseNativeProbe; do
             if [ -e "staging/$p" ]; then echo "staging still has $p"; exit 1; fi
           done
-          if find staging -name '*.cpp' -o -name 'CMakeLists.txt' | grep -q .; then echo "staging still has C++ source"; exit 1; fi
+          if find staging -name '*.cpp' -o -name '*.hpp' -o -name 'CMakeLists.txt' | grep -q .; then echo "staging still has C++ source"; exit 1; fi
+          if [ -e staging/cpp-mods/HeightmapExporter/tests ]; then echo "staging still has the exporter's tests"; exit 1; fi
           for f in WindrosePlus/Scripts/main.lua server/windrose_plus_server.ps1 server/routes.json tools/generateTiles.ps1 install.ps1 cpp-mods/HeightmapExporter/HeightmapExporter.dll; do
             if [ ! -e "staging/$f" ]; then echo "staging is missing $f"; exit 1; fi
           done
