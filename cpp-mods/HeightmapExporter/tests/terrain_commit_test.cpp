@@ -35,6 +35,21 @@ static std::string readAll(const fs::path& p) {
     return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
+// What a text-mode write puts on disk: the exporter has always written CRLF line ends on Windows (the 74-byte
+// lobby file was 71 bytes of text plus three CRs) and LF elsewhere.
+static std::string onDisk(const std::string& text) {
+#ifdef _WIN32
+    std::string out;
+    for (char c : text) {
+        if (c == '\n') out += '\r';
+        out += c;
+    }
+    return out;
+#else
+    return text;
+#endif
+}
+
 static void writeAll(const fs::path& p, const std::string& text) {
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     out << text;
@@ -73,7 +88,7 @@ int main(int argc, char** argv) {
         auto r = hme::commitTerrain(d, good2, 3);
         hme::writeDone(d, r);
         CHECK(r == hme::Commit::Written, "result is not Written");
-        CHECK(readAll(d / hme::TerrainFile) == good2, "terrain file is not the new export");
+        CHECK(readAll(d / hme::TerrainFile) == onDisk(good2), "terrain file is not the new export");
         CHECK(!fs::exists(d / hme::TerrainTemp), "a .tmp file was left");
         CHECK(readAll(d / hme::DoneMarker) == "ok", "done marker is not ok");
         dropDir(d);
@@ -108,7 +123,7 @@ int main(int argc, char** argv) {
         fs::path d = freshDir("first");
         auto r = hme::commitTerrain(d, good, 5);
         CHECK(r == hme::Commit::Written, "result is not Written");
-        CHECK(readAll(d / hme::TerrainFile) == good, "terrain file is not the export");
+        CHECK(readAll(d / hme::TerrainFile) == onDisk(good), "terrain file is not the export");
         dropDir(d);
     }
     {
