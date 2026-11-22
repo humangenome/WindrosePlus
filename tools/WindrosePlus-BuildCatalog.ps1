@@ -80,6 +80,51 @@ trap {
     Stop-Build ("{0} (line {1})" -f $_.Exception.Message, $_.InvocationInfo.ScriptLineNumber) 1
 }
 
+# Delete a folder or file without following links. A junction or symbolic link at the path, or anywhere inside it,
+# is removed as a link and what it points to is left alone (Windows PowerShell 5.1's recursive delete follows a
+# junction and deletes the folder it points to). With -Root, when the path is inside -Root, every folder between
+# -Root and the path must be a plain folder, or nothing is deleted. Nothing to delete is not an error.
+function Remove-TreeNoFollow {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath, [string]$Root = "")
+    # Relative paths count from PowerShell's current folder, as Remove-Item's do.
+    $full = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LiteralPath)).TrimEnd('\', '/')
+    if ($full.Length -le [System.IO.Path]::GetPathRoot($full + '\').TrimEnd('\', '/').Length) { throw "Not deleting ${full}: it is a drive or share root" }
+    if ($Root) {
+        $rootFull = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root)).TrimEnd('\', '/')
+        if ($full.StartsWith($rootFull + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $parent = [System.IO.Path]::GetDirectoryName($full)
+            while ($parent -and $parent.Length -gt $rootFull.Length) {
+                $parentInfo = New-Object System.IO.DirectoryInfo $parent
+                if ($parentInfo.Exists -and (($parentInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                    throw "Not deleting ${full}: $parent is a link, not a plain folder"
+                }
+                $parent = [System.IO.Path]::GetDirectoryName($parent)
+            }
+        }
+    }
+    try { $attributes = [System.IO.File]::GetAttributes($full) }
+    catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] { return }
+    Remove-TreeNoFollowEntry $full $attributes
+}
+function Remove-TreeNoFollowEntry([string]$Path, [System.IO.FileAttributes]$Attributes) {
+    $isLink = ($Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+    $isDirectory = ($Attributes -band [System.IO.FileAttributes]::Directory) -ne 0
+    $readOnly = ($Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0
+    if ($isDirectory -and -not $isLink) {
+        foreach ($child in (New-Object System.IO.DirectoryInfo $Path).GetFileSystemInfos()) {
+            Remove-TreeNoFollowEntry $child.FullName $child.Attributes
+        }
+        if ($readOnly) { [System.IO.File]::SetAttributes($Path, [System.IO.FileAttributes]::Normal) }
+        [System.IO.Directory]::Delete($Path, $false)
+    } elseif ($isDirectory) {
+        # A junction or folder link: this removes the link only.
+        [System.IO.Directory]::Delete($Path, $false)
+    } else {
+        if ($readOnly -and -not $isLink) { [System.IO.File]::SetAttributes($Path, [System.IO.FileAttributes]::Normal) }
+        [System.IO.File]::Delete($Path)
+    }
+}
+
 # --- Locate the game folder ---------------------------------------------------
 if (-not $GameDir) {
     $probe = $PSScriptRoot
@@ -160,7 +205,7 @@ if ($SourceDir) {
     $aesKey = $script:WindroseAesKey
     if (-not $WorkDir) { $WorkDir = Join-Path (Split-Path -Parent $OutputDir) "build_tmp" }
     $WorkDir = [System.IO.Path]::GetFullPath($WorkDir)
-    if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
+    Remove-TreeNoFollow -LiteralPath $WorkDir -Root $GameDir
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     $cleanupWork = -not $KeepWork
     $repakArgs = @("--aes-key", $aesKey, "unpack", "-q", "-f", "-o", $WorkDir)
@@ -967,8 +1012,8 @@ Write-JsonAtomic $summaryPath ([ordered]@{
     not_in_game_data = @("item art (the icons are Windrose+'s own)", "resource-zone map hints")
 })
 
-if ($cleanupWork -and $WorkDir -and (Test-Path -LiteralPath $WorkDir)) {
-    Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+if ($cleanupWork -and $WorkDir) {
+    try { Remove-TreeNoFollow -LiteralPath $WorkDir -Root $GameDir } catch {}
 }
 Write-Step "Catalog written to $OutputDir ($($itemList.Count) items, $withDrops with drop records, $($usageOut.Count) with recipes or trades)."
 exit 0

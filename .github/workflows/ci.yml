@@ -224,6 +224,14 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-TileBuild.ps1
 
+      - name: Deletes that do not follow links (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./scripts/Test-NoFollowDelete.ps1
+
+      - name: Deletes that do not follow links (PowerShell 7)
+        shell: pwsh
+        run: ./scripts/Test-NoFollowDelete.ps1
+
       - name: Installer (Windows PowerShell 5.1)
         shell: powershell
         run: ./scripts/Test-Installer.ps1

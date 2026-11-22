@@ -89,6 +89,21 @@ try {
         Assert (@(Get-ChildItem -LiteralPath $tiles -Recurse -File).Count -eq 85) 'wrong tile count'
         Assert ((Get-Coords).tileset_id -ne $idBefore) 'the tile set id did not change'
     }
+    Case 'junctions planted as the build folders or inside the old tiles go as links; what they point to stays' {
+        # Windows PowerShell 5.1's recursive delete follows a junction and deletes the folder it points to.
+        $keep = Join-Path $game 'keep_outside'
+        New-Item -ItemType Directory -Path $keep -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $keep 'keep.txt'), 'keep')
+        New-Item -ItemType Junction -Path "$tiles.building" -Value $keep | Out-Null
+        New-Item -ItemType Junction -Path "$tiles.old" -Value $keep | Out-Null
+        New-Item -ItemType Junction -Path (Join-Path $tiles 'planted') -Value $keep | Out-Null
+        $r = Invoke-Generator
+        Assert ($r.Code -eq 0) "exit $($r.Code): $($r.Output)"
+        Assert (Test-Path -LiteralPath (Join-Path $keep 'keep.txt')) 'a file a junction pointed to was deleted'
+        Assert (-not (Test-Path -LiteralPath "$tiles.building") -and -not (Test-Path -LiteralPath "$tiles.old")) 'a build folder was left behind'
+        Assert (-not (Test-Path -LiteralPath (Join-Path $tiles 'planted'))) 'the planted junction is in the new tiles'
+        Assert (@(Get-ChildItem -LiteralPath $tiles -Recurse -File).Count -eq 85) 'wrong tile count'
+    }
 } finally {
     try { Remove-Item -LiteralPath $game -Recurse -Force } catch {}
 }

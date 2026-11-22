@@ -398,13 +398,58 @@ for ($i = 0; $i -lt $compIndex.Count; $i++) {
     $csharpComps[$i] = $cd
 }
 
+# Delete a folder or file without following links. A junction or symbolic link at the path, or anywhere inside it,
+# is removed as a link and what it points to is left alone (Windows PowerShell 5.1's recursive delete follows a
+# junction and deletes the folder it points to). With -Root, when the path is inside -Root, every folder between
+# -Root and the path must be a plain folder, or nothing is deleted. Nothing to delete is not an error.
+function Remove-TreeNoFollow {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath, [string]$Root = "")
+    # Relative paths count from PowerShell's current folder, as Remove-Item's do.
+    $full = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($LiteralPath)).TrimEnd('\', '/')
+    if ($full.Length -le [System.IO.Path]::GetPathRoot($full + '\').TrimEnd('\', '/').Length) { throw "Not deleting ${full}: it is a drive or share root" }
+    if ($Root) {
+        $rootFull = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root)).TrimEnd('\', '/')
+        if ($full.StartsWith($rootFull + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $parent = [System.IO.Path]::GetDirectoryName($full)
+            while ($parent -and $parent.Length -gt $rootFull.Length) {
+                $parentInfo = New-Object System.IO.DirectoryInfo $parent
+                if ($parentInfo.Exists -and (($parentInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                    throw "Not deleting ${full}: $parent is a link, not a plain folder"
+                }
+                $parent = [System.IO.Path]::GetDirectoryName($parent)
+            }
+        }
+    }
+    try { $attributes = [System.IO.File]::GetAttributes($full) }
+    catch [System.IO.FileNotFoundException], [System.IO.DirectoryNotFoundException] { return }
+    Remove-TreeNoFollowEntry $full $attributes
+}
+function Remove-TreeNoFollowEntry([string]$Path, [System.IO.FileAttributes]$Attributes) {
+    $isLink = ($Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+    $isDirectory = ($Attributes -band [System.IO.FileAttributes]::Directory) -ne 0
+    $readOnly = ($Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0
+    if ($isDirectory -and -not $isLink) {
+        foreach ($child in (New-Object System.IO.DirectoryInfo $Path).GetFileSystemInfos()) {
+            Remove-TreeNoFollowEntry $child.FullName $child.Attributes
+        }
+        if ($readOnly) { [System.IO.File]::SetAttributes($Path, [System.IO.FileAttributes]::Normal) }
+        [System.IO.Directory]::Delete($Path, $false)
+    } elseif ($isDirectory) {
+        # A junction or folder link: this removes the link only.
+        [System.IO.Directory]::Delete($Path, $false)
+    } else {
+        if ($readOnly -and -not $isLink) { [System.IO.File]::SetAttributes($Path, [System.IO.FileAttributes]::Normal) }
+        [System.IO.File]::Delete($Path)
+    }
+}
+
 # Build into a sibling folder and swap it in at the end. Up to v1.3.24 the old
 # tiles were deleted first, so the map was blank while this ran and stayed broken
 # if it failed half way; now the old tiles stay in place until the new set is done.
 $buildDir = "$OutputDir.building"
 $oldDir = "$OutputDir.old"
 foreach ($leftover in @($buildDir, $oldDir)) {
-    if (Test-Path -LiteralPath $leftover) { Remove-Item -LiteralPath $leftover -Recurse -Force }
+    Remove-TreeNoFollow -LiteralPath $leftover -Root $GameDir
 }
 
 # Every ocean tile is the same picture: render it once and write its bytes.
@@ -469,7 +514,7 @@ try {
     if (Test-Path -LiteralPath $oldDir) { try { Move-DirWithRetry $oldDir $OutputDir } catch {} }
     throw
 }
-if (Test-Path -LiteralPath $oldDir) { Remove-Item -LiteralPath $oldDir -Recurse -Force -ErrorAction SilentlyContinue }
+try { Remove-TreeNoFollow -LiteralPath $oldDir -Root $GameDir } catch {}
 
 # Calculate island bounds (only components with significant terrain)
 $aboveSeaComps = @($landComps | Where-Object { $_.maxZ -gt 100 })
