@@ -57,7 +57,8 @@ function Invoke-Catalog([string]$GameDir, [string]$Repak) {
     # Windows PowerShell 5.1 turns a child's stderr into error records; do not stop on them.
     $ErrorActionPreference = 'Continue'
     $out = & $exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $catalog -GameDir $GameDir -Repak $Repak -Force 2>&1 | Out-String
-    return @{ Code = $LASTEXITCODE; Output = $out }
+    # Windows PowerShell 5.1 wraps a child's stderr text at the console width: join it back into one line.
+    return @{ Code = $LASTEXITCODE; Output = ($out -replace '\s+', ' ') }
 }
 
 try {
