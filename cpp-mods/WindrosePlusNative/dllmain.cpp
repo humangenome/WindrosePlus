@@ -2,8 +2,13 @@
 // WindrosePlus native server helper.
 //
 // Provides server-authoritative admin actions that have no safe Lua path on
-// Windrose (the UE4SS Lua game-thread bridge is unavailable on this build, so
-// these run from a C++ on_update tick instead).
+// Windrose (the UE4SS Lua game-thread bridge is unavailable on this build).
+//
+// Threads: on_update runs on a UE4SS thread of its own, not the game thread, so it
+// only does file I/O (command file, ban list, result file). Everything that touches
+// UObjects is queued and runs from UE4SS's ProcessInternal pre-callback, which fires
+// on the game thread while the game runs script code (i.e. while a player is online).
+// On an empty server queued jobs wait for the next player.
 //
 // Command IPC (all under <gameRoot>/windrose_plus_data):
 //   wpn_command.txt   - one command, tab-separated: <verb>\t<arg1>\t<arg2>...
@@ -29,10 +34,13 @@
 #include <Unreal/FString.hpp>
 #include <Unreal/FText.hpp>
 #include <Unreal/NameTypes.hpp>
+#include <Unreal/Hooks/Hooks.hpp>
 #include <windows.h>
 
 #include <cstdint>
 #include <algorithm>
+#include <atomic>
+#include <mutex>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -189,37 +197,125 @@ class WindrosePlusNative : public CppUserModBase {
 public:
     WindrosePlusNative() : CppUserModBase() {
         ModName = STR("WindrosePlusNative");
-        ModVersion = STR("0.2.0");
+        ModVersion = STR("0.3.0");
         m_startedMs = GetTickCount64();
     }
-    ~WindrosePlusNative() override {}
+    ~WindrosePlusNative() override {
+        if (m_gameThreadCallback != Hook::ERROR_ID) Hook::UnregisterCallback(m_gameThreadCallback);
+    }
 
     auto on_unreal_init() -> void override {
+        // UE4SS's ProcessInternal callback runs on the game thread (it fires whenever the
+        // game runs script code, i.e. continuously while a player is online). Everything
+        // that touches UObjects runs from here.
+        Hook::FCallbackOptions options{};
+        options.bReadonly = true;
+        options.OwnerModName = STR("WindrosePlusNative");
+        options.HookName = STR("GameThreadJobs");
+        m_gameThreadCallback = Hook::RegisterProcessInternalPreCallback(
+            [this](Hook::TCallbackIterationData<void>&, UObject*, FFrame&, void*) { run_game_jobs(); },
+            options);
         Output::send<LogLevel::Verbose>(STR("[WPN] native helper ready\n"));
     }
 
+    // on_update runs on a UE4SS thread of its own, not the game thread: file I/O only here.
     auto on_update() -> void override {
-        m_frameCount++;
+        ULONGLONG now = GetTickCount64();
         // settle before touching UObjects
-        if (GetTickCount64() - m_startedMs < 10000) return;
+        if (now - m_startedMs < 10000) return;
 
-        // poll command file every ~30 frames
-        if (m_frameCount % 30 == 0) {
+        // poll the command file every 250 ms
+        if (now - m_lastPollMs >= 250) {
+            m_lastPollMs = now;
             poll_command();
         }
-        // enforce ban list every ~600 frames (~10s) - kick any banned player present
-        if (m_frameCount % 600 == 0) {
-            enforce_bans();
+        // enforce the ban list every 10 s - kick any banned player present
+        if (now - m_lastBanCheckMs >= 10000) {
+            m_lastBanCheckMs = now;
+            auto bans = load_bans();
+            if (!bans.empty()) {
+                bans.insert(bans.begin(), "enforce");
+                queue_game_job(std::move(bans));
+            }
         }
+        flush_result();
     }
 
 private:
-    int m_frameCount = 0;
+    Hook::GlobalCallbackId m_gameThreadCallback = Hook::ERROR_ID;
     ULONGLONG m_startedMs = 0;
+    ULONGLONG m_lastPollMs = 0;
+    ULONGLONG m_lastBanCheckMs = 0;
+
+    // Hand-off between on_update (files) and the game thread (UObjects).
+    std::mutex m_lock;
+    std::vector<std::vector<std::string>> m_jobs;  // verb + args, run on the game thread
+    std::atomic<bool> m_jobsPending{false};
+    std::string m_result;                          // last result, written to disk by on_update
+    bool m_hasResult = false;
 
     std::filesystem::path data_dir() { return resolve_data_dir(); }
 
+    void queue_game_job(std::vector<std::string> job) {
+        std::lock_guard<std::mutex> guard(m_lock);
+        // jobs wait while the server is empty: keep only the newest ban sweep
+        if (job[0] == "enforce") {
+            m_jobs.erase(std::remove_if(m_jobs.begin(), m_jobs.end(),
+                [](const std::vector<std::string>& j) { return j[0] == "enforce"; }), m_jobs.end());
+        }
+        m_jobs.push_back(std::move(job));
+        m_jobsPending.store(true);
+    }
+
+    // Game thread. Cheap when idle: one atomic load per script call.
+    void run_game_jobs() {
+        if (!m_jobsPending.load(std::memory_order_relaxed)) return;
+        std::vector<std::vector<std::string>> jobs;
+        {
+            std::lock_guard<std::mutex> guard(m_lock);
+            jobs.swap(m_jobs);
+            m_jobsPending.store(false);
+        }
+        for (auto& parts : jobs) {
+            const std::string& verb = parts[0];
+            try {
+                if (verb == "players") {
+                    cmd_players();
+                } else if (verb == "kick") {
+                    cmd_kick(parts[1], parts.size() >= 3 ? parts[2] : "");
+                } else if (verb == "ban") {
+                    kick_by_name(parts[1], parts.size() >= 3 && !parts[2].empty() ? parts[2] : "You are banned from this server.");
+                } else if (verb == "enforce") {
+                    std::vector<std::string> bans(parts.begin() + 1, parts.end());
+                    for (auto& p : collect_players()) {
+                        if (is_banned(to_lower(p.name), bans)) kick_controller(p.controller, "You are banned from this server.");
+                    }
+                } else if (verb == "wds") {
+                    cmd_wds();
+                } else if (verb == "setwds") {
+                    cmd_setwds(parts[1], parts[2]);
+                }
+            } catch (...) {
+                write_result("error\texception while executing: " + verb);
+            }
+        }
+    }
+
+    // Any thread: keeps the result for on_update to write.
     void write_result(const std::string& body) {
+        std::lock_guard<std::mutex> guard(m_lock);
+        m_result = body;
+        m_hasResult = true;
+    }
+
+    void flush_result() {
+        std::string body;
+        {
+            std::lock_guard<std::mutex> guard(m_lock);
+            if (!m_hasResult) return;
+            body.swap(m_result);
+            m_hasResult = false;
+        }
         try {
             std::ofstream f(data_dir() / "wpn_result.txt", std::ios::trunc);
             f << body;
@@ -253,17 +349,6 @@ private:
         return false;
     }
 
-    void enforce_bans() {
-        auto bans = load_bans();
-        if (bans.empty()) return;
-        auto players = collect_players();
-        for (auto& p : players) {
-            if (is_banned(to_lower(p.name), bans)) {
-                kick_controller(p.controller, "You are banned from this server.");
-            }
-        }
-    }
-
     void poll_command() {
         auto dir = data_dir();
         auto cmdPath = dir / "wpn_command.txt";
@@ -291,21 +376,22 @@ private:
         if (parts.empty()) return;
         std::string verb = to_lower(parts[0]);
 
+        parts[0] = verb;
+
+        // Ban list verbs are file-only and run here; anything that touches UObjects
+        // is queued for the game thread (run_game_jobs).
         try {
-            if (verb == "players") {
-                cmd_players();
-            } else if (verb == "kick" && parts.size() >= 2) {
-                cmd_kick(parts[1], parts.size() >= 3 ? parts[2] : "");
-            } else if (verb == "ban" && parts.size() >= 2) {
-                cmd_ban(parts[1], parts.size() >= 3 ? parts[2] : "");
+            if (verb == "ban" && parts.size() >= 2) {
+                cmd_ban(parts[1]);
+                queue_game_job(std::move(parts));
             } else if (verb == "unban" && parts.size() >= 2) {
                 cmd_unban(parts[1]);
             } else if (verb == "listbans") {
                 cmd_listbans();
-            } else if (verb == "wds") {
-                cmd_wds();
-            } else if (verb == "setwds" && parts.size() >= 3) {
-                cmd_setwds(parts[1], parts[2]);
+            } else if (verb == "players" || verb == "wds"
+                       || (verb == "kick" && parts.size() >= 2)
+                       || (verb == "setwds" && parts.size() >= 3)) {
+                queue_game_job(std::move(parts));
             } else {
                 write_result("error\tunknown or malformed command: " + verb);
             }
@@ -324,29 +410,28 @@ private:
         write_result(o.str());
     }
 
-    void cmd_kick(const std::string& name, const std::string& reason) {
+    int kick_by_name(const std::string& name, const std::string& reason) {
         std::string nl = to_lower(name);
-        auto players = collect_players();
         int kicked = 0;
-        for (auto& p : players) {
+        for (auto& p : collect_players()) {
             if (to_lower(p.name) == nl) {
                 if (kick_controller(p.controller, reason)) kicked++;
             }
         }
+        return kicked;
+    }
+
+    void cmd_kick(const std::string& name, const std::string& reason) {
+        int kicked = kick_by_name(name, reason);
         write_result(kicked > 0 ? ("ok\tkicked " + name) : ("error\tplayer not found: " + name));
     }
 
-    void cmd_ban(const std::string& name, const std::string& reason) {
+    // Adds the name to the ban list; the kick (if present) follows on the game thread.
+    void cmd_ban(const std::string& name) {
         auto bans = load_bans();
         if (!is_banned(to_lower(name), bans)) {
             bans.push_back(name);
             save_bans(bans);
-        }
-        // kick if currently present
-        auto players = collect_players();
-        std::string nl = to_lower(name);
-        for (auto& p : players) {
-            if (to_lower(p.name) == nl) kick_controller(p.controller, reason.empty() ? "You are banned from this server." : reason);
         }
         write_result("ok\tbanned " + name);
     }
