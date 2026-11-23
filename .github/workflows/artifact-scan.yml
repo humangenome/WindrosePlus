@@ -37,21 +37,41 @@ jobs:
       - name: Scan published release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          # The tag reaches the script below only through these two, never pasted into its text:
+          # a tag name may hold $( ; and quote marks.
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -uo pipefail
-          if [ -n "${{ github.event.release.tag_name }}" ]; then
-            TAGS="${{ github.event.release.tag_name }}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            TAGS="${{ inputs.tag }}"
-          else
-            TAGS=$(gh release list --limit 200 --json tagName --jq '.[].tagName')
+          TAG="${RELEASE_TAG:-}"
+          if [ -z "$TAG" ]; then
+            TAG="${INPUT_TAG:-}"
           fi
-          if [ -z "$TAGS" ]; then
+          if [ -n "$TAG" ]; then
+            # an optional name prefix (cppmods-v1.3.11), then v and a digit; no shell characters, never a leading dash
+            version_tag='^([A-Za-z][A-Za-z0-9-]*-)?v[0-9][0-9A-Za-z.+-]*$'
+            if ! [[ "$TAG" =~ $version_tag ]]; then
+              echo "::error::The tag is not a release tag of the expected shape (an optional name and dash, then v and a digit), so nothing was scanned."
+              exit 1
+            fi
+            TAGS=("$TAG")
+          else
+            # a listing that fails is a failed scan; only an empty answer means there is nothing to scan
+            list=$(gh release list --limit 200 --json tagName --jq '.[].tagName') || {
+              echo "::error::Could not list this repository's releases, so nothing was scanned."
+              exit 1
+            }
+            TAGS=()
+            if [ -n "$list" ]; then
+              mapfile -t TAGS <<< "$list"
+            fi
+          fi
+          if [ "${#TAGS[@]}" -eq 0 ]; then
             echo "no releases to scan"
             exit 0
           fi
           rc=0
-          for tag in $TAGS; do
+          for tag in "${TAGS[@]}"; do
             echo "::group::$tag"
             python scripts/verify-published-artifacts.py --release "$tag" || rc=1
             echo "::endgroup::"
