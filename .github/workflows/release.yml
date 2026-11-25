@@ -8,8 +8,9 @@ on:
     tags:
       - 'v*'
 
+# Read-only by default; only the job that touches this repo's release may write contents.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windrose-heal:
@@ -62,6 +63,8 @@ jobs:
   build-and-release:
     needs: build-windrose-heal
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     env:
       # Pinned tool versions. Bump here (and rerun the release tag) to upgrade.
@@ -71,8 +74,23 @@ jobs:
       HEIGHTMAP_EXPORTER_SHA256: "238fc6e44955d1467cf03d91897135a2bb17a6cfff7231ca3c14232357f77d54"
       WINDROSE_NATIVE_PROBE_SHA256: "1b90bf01425d43252bc27e94f7843b60d3fe59dd486739cb2eda1e5eb7dea072"
       WINDROSE_PLUS_NATIVE_SHA256: "66fb9a72724385a4ba530c5d6c3201db6a5825342b96a677240acbdcff40f6c5"
+      # The tag, checked by the first step below before anything else runs. Later scripts take it from
+      # GITHUB_REF and paste it into a sed program, so only v and three numbers may get that far.
+      TAG: ${{ github.ref_name }}
 
     steps:
+      # First step, before anything else runs: refuse any tag that is not a
+      # release version. Every v tag this repo has published is v and three numbers.
+      - name: Check tag
+        shell: bash
+        run: |
+          pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ ! "${TAG}" =~ ${pattern} ]]; then
+            echo "::error::refusing this tag: a release tag here is v and three numbers, like v1.2.3"
+            exit 1
+          fi
+          echo "tag ${TAG} is a release version"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -187,10 +205,12 @@ jobs:
           # Lua main.lua: VERSION = "X.Y.Z",
           sed -i -E 's/^(\s*VERSION\s*=\s*)"[^"]*"(,)$/\1"'"$TAG"'"\2/' WindrosePlus/Scripts/main.lua
           # PowerShell start script: $Version = "X.Y.Z"
+          # shellcheck disable=SC2016 # $Version is the PowerShell variable's literal name, not a shell expansion
           sed -i -E 's/^\$Version\s*=\s*"[^"]*"$/$Version = "'"$TAG"'"/' server/windrose_plus_server.ps1
           echo "--- main.lua VERSION line ---"
           grep -n 'VERSION = ' WindrosePlus/Scripts/main.lua | head -1
           echo "--- windrose_plus_server.ps1 \$Version line ---"
+          # shellcheck disable=SC2016 # the same literal $Version
           grep -n '^\$Version = ' server/windrose_plus_server.ps1 | head -1
           # Hard-fail if either file did not end up with the expected tag,
           # so a future refactor that renames the constant is caught here
@@ -287,17 +307,35 @@ jobs:
 
       - name: Create release
         env:
-          GH_TOKEN: ${{ secrets.HUMANGENOME_PAT || secrets.GITHUB_TOKEN }}
+          # The workflow's own token (Security 2026-11-25). A draft this step
+          # creates is authored github-actions[bot]; to keep humangenome as the
+          # author, make the draft by hand as humangenome before the tag, and
+          # this step only attaches the files to it.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          # Created as a draft: the zip is scanned before the release is published by hand
-          # (gh release edit "$TAG" --draft=false).
-          gh release create "$TAG" \
-            --draft \
-            --title "Windrose+ $TAG" \
-            --notes-file release_notes.md \
-            WindrosePlus.zip \
-            cpp-mods/HeightmapExporter/HeightmapExporter.dll \
-            cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll \
-            cpp-mods/WindrosePlusNative/WindrosePlusNative.dll \
+          files=(
+            WindrosePlus.zip
+            cpp-mods/HeightmapExporter/HeightmapExporter.dll
+            cpp-mods/WindroseNativeProbe/WindroseNativeProbe.dll
+            cpp-mods/WindrosePlusNative/WindrosePlusNative.dll
             SHA256SUMS.txt
+          )
+          existing_draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ -z "$existing_draft" ]; then
+            # Created as a draft: the zip is scanned before the release is published by hand
+            # (gh release edit "$TAG" --draft=false).
+            gh release create "$TAG" \
+              --draft \
+              --title "Windrose+ $TAG" \
+              --notes-file release_notes.md \
+              "${files[@]}"
+          elif [ "$existing_draft" = "true" ]; then
+            # A draft made by hand as humangenome: keep its notes, attach this build's files.
+            gh release upload "$TAG" "${files[@]}" --clobber
+            echo "Attached this build's files to the existing draft $TAG"
+          else
+            echo "::error::release $TAG already exists and is PUBLISHED; refusing to modify it"
+            exit 1
+          fi
