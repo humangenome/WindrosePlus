@@ -2,11 +2,14 @@ name: Artifact scan
 
 # Refuses to let a published release asset carry never-publish material.
 #
-# Three triggers, because no single one is sufficient:
+# Four triggers, because no single one is sufficient:
 #   release        immediate feedback when a release is published or edited
 #   schedule       catches an asset added to an existing release - GitHub emits NO event
 #                  for an asset upload, so a release trigger alone cannot see one
 #   dispatch       on demand
+#   call           a release workflow's own last job scans the release it just made: a
+#                  release made with the workflow's own token starts no other workflow, so
+#                  the release trigger never fires for it (contents: read, no secrets)
 #
 # Detect only. It never deletes, edits or replaces anything.
 
@@ -20,6 +23,12 @@ on:
       tag:
         description: 'Release tag to scan (blank = every release)'
         required: false
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag the calling release workflow just published'
+        required: true
+        type: string
 
 permissions:
   contents: read
